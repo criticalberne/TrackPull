@@ -9,9 +9,10 @@ def parse_trackman_url(url: str) -> dict:
     """Parse a Trackman URL and extract key parameters.
 
     Supports ?a= (activity), ?r= (report), and ?ReportId= formats.
-    Also extracts mp[] query parameters to define metric column order.
+    Also extracts mp[] query parameters to define metric column order,
+    and sgos[] query parameters for shot-group filtering.
 
-    Returns dict with keys: original_url, base, params, url_type, id, metric_order.
+    Returns dict with keys: original_url, base, params, url_type, id, metric_order, shot_group_ids.
     """
     parsed = urlparse(url)
     params = parse_qs(parsed.query, keep_blank_values=True)
@@ -21,6 +22,7 @@ def parse_trackman_url(url: str) -> dict:
         "base": f"{parsed.scheme}://{parsed.netloc}{parsed.path}",
         "params": params,
         "metric_order": [],
+        "shot_group_ids": [],
     }
 
     if "a" in params:
@@ -36,7 +38,9 @@ def parse_trackman_url(url: str) -> dict:
         raise ValueError("URL must contain an ?a=, ?r=, or ?ReportId= parameter")
 
     metric_order = _extract_metric_order(params)
+    shot_group_ids = _extract_shot_group_ids(params)
     result["metric_order"] = metric_order
+    result["shot_group_ids"] = shot_group_ids
 
     return result
 
@@ -59,12 +63,35 @@ def _extract_metric_order(params: dict) -> list[str]:
     return metric_order
 
 
+def _extract_shot_group_ids(params: dict) -> list[str]:
+    """Extract and deduplicate shot-group IDs from sgos[] query parameters.
+
+    Args:
+        params: Parsed URL query parameters.
+
+    Returns:
+        List of shot-group IDs in the order they appear in sgos[] params,
+        with duplicates removed and empty values skipped.
+    """
+    shot_group_ids = []
+    if "sgos[]" in params:
+        for value in params["sgos[]"]:
+            if value and value not in shot_group_ids:
+                shot_group_ids.append(value)
+    return shot_group_ids
+
+
 def _build_base_params(url_info: dict) -> dict:
-    """Copy params from the original URL, stripping out mp[] entries."""
+    """Copy params from the original URL, stripping out mp[] and sgos[] entries."""
     base = {}
     for key, values in url_info["params"].items():
-        # Skip any metric-parameter keys (mp[], mp[0], mp[1], ...)
-        if key == "mp[]" or key.startswith("mp["):
+        # Skip any metric-parameter or shot-group keys (mp[], sgos[])
+        if (
+            key == "mp[]"
+            or key.startswith("mp[")
+            or key == "sgos[]"
+            or key.startswith("sgos[")
+        ):
             continue
         base[key] = values
     return base
