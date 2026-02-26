@@ -311,5 +311,96 @@ class TestMetricExtraction:
         assert "SpinRate" in shot_metrics
 
 
+class TestHeuristicFallback:
+    """Test cases for heuristic payload detection fallback."""
+
+    @pytest.mark.asyncio
+    async def test_heuristic_detects_ballspeed_and_clubspeed(self):
+        """Test that two speed indicators plus one more trigger detection."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        mock_data = {
+            "data": {
+                "ballspeed": 158.3,
+                "clubspeed": 105.2,
+                "carry": 248.5,
+            }
+        }
+        assert interceptor._looks_like_shot_data(mock_data) is True
+
+    @pytest.mark.asyncio
+    async def test_heuristic_detects_spinrate_and_measurement(self):
+        """Test detection with spin rate and measurement indicators."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        mock_data = {
+            "data": {
+                "spinrate": 2500,
+                "measurement": {"SpinRate": 2500},
+                "carry": 248.5,
+            }
+        }
+        assert interceptor._looks_like_shot_data(mock_data) is True
+
+    @pytest.mark.asyncio
+    async def test_heuristic_fails_with_only_two_indicators(self):
+        """Test that only two indicators do not trigger detection."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        mock_data = {
+            "data": {
+                "ballspeed": 158.3,
+                "clubspeed": 105.2,
+            }
+        }
+        assert interceptor._looks_like_shot_data(mock_data) is False
+
+    @pytest.mark.asyncio
+    async def test_heuristic_fails_with_one_indicator(self):
+        """Test that only one indicator does not trigger detection."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        mock_data = {
+            "data": {
+                "ballspeed": 158.3,
+            }
+        }
+        assert interceptor._looks_like_shot_data(mock_data) is False
+
+    @pytest.mark.asyncio
+    async def test_heuristic_detects_strokes_indicator(self):
+        """Test detection with strokes indicator."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        mock_data = {
+            "data": {
+                "strokes": [1, 2, 3],
+                "measurement": {"Carry": 250.0},
+                "carry": 248.5,
+            }
+        }
+        assert interceptor._looks_like_shot_data(mock_data) is True
+
+    @pytest.mark.asyncio
+    async def test_heuristic_detects_strokegroups_in_nested_data(self):
+        """Test detection when strokegroups appears in nested data."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        mock_data = {
+            "data": {
+                "strokegroups": [],  # lowercase, not a key but in stringified form
+                "measurement": {"Carry": 250.0},
+                "carry": 248.5,
+            }
+        }
+        assert interceptor._looks_like_shot_data(mock_data) is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
