@@ -744,3 +744,57 @@ class TestFullParsingWithMixedTypes:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestParseFailureDebug:
+    """Test cases for raw payload storage when parsing fails."""
+
+    @pytest.mark.asyncio
+    async def test_stores_raw_payload_on_parse_failure(self):
+        """Test that raw API data is stored in captured_responses when parsing fails."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+
+        # Simulate a parse failure scenario
+        response1 = MagicMock()
+        response1.url = "https://api.trackmangolf.com/reports?r=123"
+        response1.headers = {"content-type": "application/json"}
+        response1.status = 200
+        invalid_data = {"invalid": "payload", "no_strokegroups": True}
+        response1.json = AsyncMock(return_value=invalid_data)
+
+        await interceptor.handle_response(response1)
+
+        # Verify the payload is stored in captured_responses for debugging
+        assert len(interceptor.captured_responses) == 1
+        capture = interceptor.captured_responses[0]
+        assert capture["body"] == invalid_data
+        assert capture["is_api"] is True
+
+    @pytest.mark.asyncio
+    async def test_raw_payload_available_after_parse_failure(self):
+        """Test that raw payload remains available for debugging after failed parse."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+
+        # Valid data with StrokeGroups
+        valid_data = {
+            "StrokeGroups": [
+                {"Club": "Driver", "Strokes": [{"Measurement": {"Carry": 250.0}}]}
+            ]
+        }
+
+        response = MagicMock()
+        response.url = "https://api.trackmangolf.com/reports?r=123"
+        response.headers = {"content-type": "application/json"}
+        response.status = 200
+        response.json = AsyncMock(return_value=valid_data)
+
+        await interceptor.handle_response(response)
+
+        # Verify raw payload is stored
+        assert len(interceptor.captured_responses) == 1
+        capture = interceptor.captured_responses[0]
+        assert "StrokeGroups" in capture["body"]

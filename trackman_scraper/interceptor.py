@@ -273,7 +273,10 @@ class APIInterceptor:
                     )
                     return session
             except Exception as exc:
-                logger.debug(f"Parse failed for {resp['url'][:80]}: {exc}")
+                logger.warning(
+                    f"Parse failed for {resp['url'][:80]}: {exc}. "
+                    f"Raw payload stored in captured_responses for debugging."
+                )
 
         return None
 
