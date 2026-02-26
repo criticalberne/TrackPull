@@ -1,0 +1,23 @@
+/* Trackman Scraper Extension - Local CSS Bundle */
+/* CSP Compliant: No external CDN dependencies */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  margin: 0;
+  padding: 16px;
+  min-width: 320px;
+  background-color: #ffffff;
+  color: #333333;
+}
+
+h1 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: #1a1a1a;
+}
+
+p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #666666;
+}

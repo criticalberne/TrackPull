@@ -34,7 +34,7 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [ ] Manifest: point `action.default_popup` to built popup HTML
 - [ ] Permissions: add `https://web-dynamic-reports.trackmangolf.com/*` to `host_permissions`
 - [ ] Content scripts: include `https://web-dynamic-reports.trackmangolf.com/*` in `matches`
-- [ ] CSP: remove Tailwind CDN usage and bundle CSS locally
+- [x] CSP: remove Tailwind CDN usage and bundle CSS locally (using src/shared/styles.css)
 - [ ] Permissions: verify minimal set (`storage`, `downloads`)
 
 ## URL Parsing & Report Context
