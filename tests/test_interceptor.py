@@ -402,5 +402,345 @@ class TestHeuristicFallback:
         assert interceptor._looks_like_shot_data(mock_data) is True
 
 
+class TestParseMeasurement:
+    """Test cases for _parse_measurement method."""
+
+    @pytest.mark.asyncio
+    async def test_prefers_normalized_measurement(self):
+        """Test that NormalizedMeasurement values override Measurement."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        stroke = {
+            "Measurement": {"Carry": 250.0, "BallSpeed": 158.3},
+            "NormalizedMeasurement": {"Carry": 248.5},
+        }
+
+        result = interceptor._parse_measurement(stroke)
+        assert result["Carry"] == 248.5
+        assert result["BallSpeed"] == 158.3
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_measurement_when_normalized_missing(self):
+        """Test fallback to Measurement when NormalizedMeasurement is empty."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        stroke = {
+            "Measurement": {"Carry": 250.0, "BallSpeed": 158.3},
+            "NormalizedMeasurement": {},
+        }
+
+        result = interceptor._parse_measurement(stroke)
+        assert result["Carry"] == 250.0
+        assert result["BallSpeed"] == 158.3
+
+    @pytest.mark.asyncio
+    async def test_empty_stroke_returns_empty_dict(self):
+        """Test that stroke with no measurement data returns empty dict."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        stroke: dict = {}
+
+        result = interceptor._parse_measurement(stroke)
+        assert result == {}
+
+
+class TestExtractScalarMetrics:
+    """Test cases for extract_scalar_metrics function."""
+
+    @pytest.mark.asyncio
+    async def test_extracts_only_known_metric_keys(self):
+        """Test that only metrics in _METRIC_KEYS are extracted."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        measurement = {
+            "ClubSpeed": 105.2,
+            "BallSpeed": 158.3,
+            "SpinRate": 2500,
+            "UnknownMetric": "value",
+            "TrajectoryData": {"x": 1, "y": 2},
+        }
+
+        result = APIInterceptor.extract_scalar_metrics(measurement)
+
+        assert "ClubSpeed" in result
+        assert "BallSpeed" in result
+        assert "SpinRate" in result
+        assert "UnknownMetric" not in result
+        assert "TrajectoryData" not in result
+
+    @pytest.mark.asyncio
+    async def test_returns_float_values(self):
+        """Test that extracted metrics are converted to float."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        measurement = {
+            "Carry": 250,  # int
+            "BallSpeed": "158.3",  # string
+            "SpinRate": 2500.0,  # float
+        }
+
+        result = APIInterceptor.extract_scalar_metrics(measurement)
+
+        assert result["Carry"] == 250.0
+        assert result["BallSpeed"] == 158.3
+        assert result["SpinRate"] == 2500.0
+
+    @pytest.mark.asyncio
+    async def test_handles_string_with_whitespace(self):
+        """Test conversion of string values with whitespace."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        measurement = {
+            "ClubSpeed": " 105.2 ",
+            "BallSpeed": "158.3",
+        }
+
+        result = APIInterceptor.extract_scalar_metrics(measurement)
+
+        assert result["ClubSpeed"] == 105.2
+        assert result["BallSpeed"] == 158.3
+
+    @pytest.mark.asyncio
+    async def test_excludes_invalid_numeric_values(self):
+        """Test that non-numeric values are excluded (return None)."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        measurement = {
+            "Carry": 250.0,
+            "InvalidMetric": "not_a_number",
+            "AnotherInvalid": None,
+        }
+
+        result = APIInterceptor.extract_scalar_metrics(measurement)
+
+        assert "Carry" in result and result["Carry"] == 250.0
+        assert "InvalidMetric" not in result or result["InvalidMetric"] is None
+        assert "AnotherInvalid" not in result or result["AnotherInvalid"] is None
+
+    @pytest.mark.asyncio
+    async def test_uses_custom_metric_keys(self):
+        """Test that custom metric keys can be provided."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        measurement = {
+            "ClubSpeed": 105.2,
+            "BallSpeed": 158.3,
+            "SpinRate": 2500,
+        }
+
+        custom_keys = {"ClubSpeed", "SpinRate"}
+        result = APIInterceptor.extract_scalar_metrics(
+            measurement, metric_keys=custom_keys
+        )
+
+        assert "ClubSpeed" in result
+        assert "SpinRate" in result
+        assert "BallSpeed" not in result
+
+    @pytest.mark.asyncio
+    async def test_empty_measurement_returns_empty_dict(self):
+        """Test that empty measurement returns empty dict."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        result = APIInterceptor.extract_scalar_metrics({})
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_all_known_metrics_extracted(self):
+        """Test extraction of all metrics in _METRIC_KEYS."""
+        from trackman_scraper.interceptor import APIInterceptor, _METRIC_KEYS
+
+        measurement = {key: 100.0 for key in _METRIC_KEYS}
+        result = APIInterceptor.extract_scalar_metrics(measurement)
+
+        assert set(result.keys()) == _METRIC_KEYS
+
+
+class TestExtractNumericValue:
+    """Test cases for _extract_numeric_value helper method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_float_for_int(self):
+        """Test conversion of integer values."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        result = interceptor._extract_numeric_value(105, "ClubSpeed")
+        assert result == 105.0
+
+    @pytest.mark.asyncio
+    async def test_returns_float_for_float(self):
+        """Test that float values are preserved."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        result = interceptor._extract_numeric_value(105.2, "ClubSpeed")
+        assert result == 105.2
+
+    @pytest.mark.asyncio
+    async def test_converts_string_to_float(self):
+        """Test conversion of numeric string values."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        result = interceptor._extract_numeric_value("105.2", "ClubSpeed")
+        assert result == 105.2
+
+    @pytest.mark.asyncio
+    async def test_handles_string_with_whitespace(self):
+        """Test conversion of string with leading/trailing whitespace."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        result = interceptor._extract_numeric_value(" 105.2 ", "ClubSpeed")
+        assert result == 105.2
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_non_numeric_string(self):
+        """Test that non-numeric strings return None."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        result = interceptor._extract_numeric_value("invalid", "ClubSpeed")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_none_input(self):
+        """Test that None input returns None."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        result = interceptor._extract_numeric_value(None, "ClubSpeed")
+        assert result is None
+
+
+class TestExtractMetricsFromMeasurement:
+    """Test cases for _extract_metrics_from_measurement helper method."""
+
+    @pytest.mark.asyncio
+    async def test_extracts_known_metrics(self):
+        """Test extraction of known metric keys."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        measurement = {
+            "ClubSpeed": 105.2,
+            "BallSpeed": 158.3,
+            "SpinRate": 2500,
+            "UnknownMetric": "value",
+        }
+
+        result = interceptor._extract_metrics_from_measurement(measurement)
+        assert "ClubSpeed" in result
+        assert "BallSpeed" in result
+        assert "SpinRate" in result
+        assert "UnknownMetric" not in result
+
+    @pytest.mark.asyncio
+    async def test_handles_string_numeric_values(self):
+        """Test that string numeric values are converted and formatted."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        measurement = {
+            "Carry": "248.5",
+            "BallSpeed": "158.3",
+        }
+
+        result = interceptor._extract_metrics_from_measurement(measurement)
+        assert float(result["Carry"]) == 248.5
+        assert float(result["BallSpeed"]) == 158.3
+
+    @pytest.mark.asyncio
+    async def test_skips_invalid_values(self):
+        """Test that non-numeric values are skipped."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        measurement = {
+            "Carry": 250.0,
+            "InvalidMetric": "not_a_number",
+        }
+
+        result = interceptor._extract_metrics_from_measurement(measurement)
+        assert "Carry" in result
+        assert "InvalidMetric" not in result
+
+
+class TestFullParsingWithMixedTypes:
+    """Test full parsing flow with mixed numeric types."""
+
+    @pytest.mark.asyncio
+    async def test_parses_mixed_int_float_and_string_values(self):
+        """Test parsing when measurements contain int, float, and string values."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        mock_data = {
+            "StrokeGroups": [
+                {
+                    "Club": "Driver",
+                    "Strokes": [
+                        {
+                            "Measurement": {
+                                "Carry": 250,  # int
+                                "BallSpeed": "158.3",  # string
+                                "SpinRate": 2500.0,  # float
+                            },
+                            "NormalizedMeasurement": {"Carry": "248.5"},  # string
+                        }
+                    ],
+                }
+            ]
+        }
+
+        session = interceptor._try_parse(mock_data, {"id": "123", "url_type": "report"})
+
+        assert session is not None
+        assert len(session.club_groups) == 1
+        assert session.club_groups[0].club_name == "Driver"
+        assert len(session.club_groups[0].shots) == 1
+
+        shot = session.club_groups[0].shots[0]
+        # Carry should come from NormalizedMeasurement (248.5)
+        assert float(shot.metrics["Carry"]) == 248.5
+        assert "BallSpeed" in shot.metrics
+        assert "SpinRate" in shot.metrics
+
+    @pytest.mark.asyncio
+    async def test_skips_invalid_measurement_values(self):
+        """Test that invalid measurement values are skipped."""
+        from trackman_scraper.interceptor import APIInterceptor
+
+        interceptor = APIInterceptor()
+        mock_data = {
+            "StrokeGroups": [
+                {
+                    "Club": "Driver",
+                    "Strokes": [
+                        {
+                            "Measurement": {
+                                "Carry": 250.0,
+                                "InvalidMetric": "not_numeric",
+                                "TrajectoryData": {"x": 1, "y": 2},
+                            }
+                        }
+                    ],
+                }
+            ]
+        }
+
+        session = interceptor._try_parse(mock_data, {"id": "123", "url_type": "report"})
+
+        assert session is not None
+        shot = session.club_groups[0].shots[0]
+        assert "Carry" in shot.metrics
+        assert "InvalidMetric" not in shot.metrics
+        assert "TrajectoryData" not in shot.metrics
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

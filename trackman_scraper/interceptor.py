@@ -184,6 +184,70 @@ class APIInterceptor:
         merged.update(normalized)
         return merged
 
+    @staticmethod
+    def _extract_numeric_value(val: Any, key: str) -> Optional[float]:
+        """Safely extract numeric value from measurement data.
+
+        Handles int, float, and string representations of numbers.
+
+        Args:
+            val: Value to convert (can be int, float, or string)
+            key: Metric name for error messages
+
+        Returns:
+            Numeric value as float, or None if conversion fails
+        """
+        if isinstance(val, (int, float)):
+            return float(val)
+        if isinstance(val, str):
+            try:
+                return float(val.strip())
+            except ValueError:
+                logger.debug(f"Cannot convert '{key}={val}' to float")
+                return None
+        return None
+
+    @staticmethod
+    def extract_scalar_metrics(
+        measurement: dict[str, Any], metric_keys: set[str] = _METRIC_KEYS
+    ) -> dict[str, Optional[float]]:
+        """Extract scalar metric fields from measurement data using given keys.
+
+        Filters measurement dictionary to only include known scalar metrics and
+        converts them to float values.
+
+        Args:
+            measurement: Merged measurement dictionary containing metric key-value pairs
+            metric_keys: Set of valid metric key names to extract (defaults to _METRIC_KEYS)
+
+        Returns:
+            Dictionary mapping metric names to their numeric float values, excluding unknown keys
+        """
+        return {
+            key: APIInterceptor._extract_numeric_value(val, key)
+            for key, val in measurement.items()
+            if key in metric_keys
+        }
+
+    @staticmethod
+    def _extract_metrics_from_measurement(
+        measurement: dict,
+    ) -> dict[str, Optional[str]]:
+        """Extract and format metrics from measurement data.
+
+        Args:
+            measurement: Merged measurement dictionary
+
+        Returns:
+            Dictionary of metric names to formatted string values
+        """
+        numeric_metrics = APIInterceptor.extract_scalar_metrics(measurement)
+        return {
+            key: str(round(val, 1))
+            for key, val in numeric_metrics.items()
+            if val is not None
+        }
+
     # ------------------------------------------------------------------
     # Parsing
     # ------------------------------------------------------------------
@@ -266,21 +330,14 @@ class APIInterceptor:
                     continue
 
                 meas = self._parse_measurement(stroke)
-                metrics: dict[str, Optional[str]] = {}
-
-                for key, val in meas.items():
-                    if key in _METRIC_KEYS and isinstance(val, (int, float)):
-                        metrics[key] = str(round(val, 1))
+                metrics = self._extract_metrics_from_measurement(meas)
 
                 all_metric_names.update(metrics.keys())
                 club_group.shots.append(Shot(shot_number=i, metrics=metrics))
 
-                # Collect numeric values for computing averages
-                numeric: dict[str, float] = {}
-                for key, val in meas.items():
-                    if key in _METRIC_KEYS and isinstance(val, (int, float)):
-                        numeric[key] = val
-                shot_values.append(numeric)
+                # Collect numeric values for computing averages using extract_scalar_metrics
+                numeric = APIInterceptor.extract_scalar_metrics(meas)
+                shot_values.append({k: v for k, v in numeric.items() if v is not None})
 
             # Compute averages from the raw data
             if shot_values:
