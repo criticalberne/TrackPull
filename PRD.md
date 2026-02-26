@@ -29,8 +29,8 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Build pipeline: confirm build output is loadable in Chrome (no TS sources)
 
 ## Manifest & MV3 Compliance
-- [ ] Manifest: point `background.service_worker` to built JS
-- [ ] Manifest: point `content_scripts[*].js` to built JS
+- [x] Manifest: point `background.service_worker` to built JS
+- [x] Manifest: point `content_scripts[*].js` to built JS (verified: manifest references interceptor.js which is built by esbuild)
 - [ ] Manifest: point `action.default_popup` to built popup HTML
 - [ ] Permissions: add `https://web-dynamic-reports.trackmangolf.com/*` to `host_permissions`
 - [ ] Content scripts: include `https://web-dynamic-reports.trackmangolf.com/*` in `matches`
