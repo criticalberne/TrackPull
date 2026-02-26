@@ -3,7 +3,7 @@
   "name": "Trackman Scraper",
   "version": "1.0.0",
   "description": "Extract shot data from Trackman reports",
-  "permissions": ["storage", "downloads"],
+  "permissions": ["storage"],
   "host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"],
   "background": {"service_worker": "background.js"},
   "content_scripts": [
