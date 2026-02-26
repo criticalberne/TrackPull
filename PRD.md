@@ -35,16 +35,16 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Permissions: add `https://web-dynamic-reports.trackmangolf.com/*` to `host_permissions`
 - [x] Content scripts: include `https://web-dynamic-reports.trackmangolf.com/*` in `matches`
 - [x] CSP: remove Tailwind CDN usage and bundle CSS locally (using src/shared/styles.css)
-- [ ] Permissions: verify minimal set (`storage`, `downloads`)
+- [x] Permissions: verify minimal set (`storage`, `downloads`)
 
 ## URL Parsing & Report Context
 - [x] Parse report URL to extract `r=`, `a=`, or `ReportId=` identifiers
 - [x] Parse `mp[]` query parameters to define CSV column order
-- [ ] Parse `sgos[]` query parameters for shot-group filtering
-- [ ] Capture report metadata params (`nd_*`, `u`, `v`, `ot`, `ov`, etc.) for CSV metadata/filename
+- [x] Parse `sgos[]` query parameters for shot-group filtering
+- [x] Capture report metadata params (`nd_*`, `u`, `v`, `ot`, `ov`, etc.) for CSV metadata/filename
 
 ## API Interception (Primary Data Source)
-- [ ] Ensure interceptor runs in the page context (main world or injected script)
+- [x] Ensure interceptor runs in the page context (main world or injected script)
 - [ ] Capture JSON responses on report pages
 - [ ] Detect candidate payloads containing `StrokeGroups` (plus heuristic fallback)
 - [ ] Parse `StrokeGroups -> Strokes -> NormalizedMeasurement` (fallback `Measurement`)

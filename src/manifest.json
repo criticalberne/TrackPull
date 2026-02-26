@@ -9,7 +9,10 @@
   "content_scripts": [
     {
       "matches": ["https://web-dynamic-reports.trackmangolf.com/*"],
-      "js": ["interceptor.js"]
+      "js": ["interceptor.js"],
+      "run_at": "document_idle",
+      "all_frames": false,
+      "world": "MAIN"
     }
   ],
   "action": {
