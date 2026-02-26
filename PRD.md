@@ -38,8 +38,8 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [ ] Permissions: verify minimal set (`storage`, `downloads`)
 
 ## URL Parsing & Report Context
-- [ ] Parse report URL to extract `r=`, `a=`, or `ReportId=` identifiers
-- [ ] Parse `mp[]` query parameters to define CSV column order
+- [x] Parse report URL to extract `r=`, `a=`, or `ReportId=` identifiers
+- [x] Parse `mp[]` query parameters to define CSV column order
 - [ ] Parse `sgos[]` query parameters for shot-group filtering
 - [ ] Capture report metadata params (`nd_*`, `u`, `v`, `ot`, `ov`, etc.) for CSV metadata/filename
 
@@ -75,8 +75,8 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [ ] Show toast for capture/export errors
 
 ## Testing & Quality
-- [ ] Unit test: URL parsing for `r`, `a`, `ReportId`
-- [ ] Unit test: `mp[]` ordering preserved
+- [x] Unit test: URL parsing for `r`, `a`, `ReportId`
+- [x] Unit test: `mp[]` ordering preserved
 - [ ] Unit test: `sgos[]` filtering
 - [ ] Unit test: API payload parsing with captured JSON
 - [ ] Unit test: CSV column ordering
