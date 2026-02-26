@@ -20,8 +20,8 @@ else
   "description": "Extract shot data from Trackman reports",
 "permissions": ["storage", "downloads"],
     "host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"],
-    "background": {"service_worker": "./background.js"},
-    "content_scripts": [{"matches": ["https://web-dynamic-reports.trackmangolf.com/*"], "js": ["./interceptor.js"]}],
+    "background": {"service_worker": "background.js"},
+    "content_scripts": [{"matches": ["https://web-dynamic-reports.trackmangolf.com/*"], "js": ["interceptor.js"]}],
   "action": {"default_popup": "popup.html", "default_icon": {"16": "icons/icon16.png"}},
   "icons": {"16": "icons/icon16.png"}
 }
