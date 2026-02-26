@@ -1,0 +1,13 @@
+// src/background/serviceWorker.ts
+chrome.runtime.onInstalled.addListener(() => {
+  console.log("Trackman Scraper extension installed");
+});
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "GET_DATA") {
+    chrome.storage.local.get(["trackmanData"], (result) => {
+      sendResponse(result.trackmanData || null);
+    });
+    return true;
+  }
+});
+//# sourceMappingURL=data:application/json;base64,ewogICJ2ZXJzaW9uIjogMywKICAic291cmNlcyI6IFsiLi4vc3JjL2JhY2tncm91bmQvc2VydmljZVdvcmtlci50cyJdLAogICJzb3VyY2VzQ29udGVudCI6IFsiLyoqXG4gKiBTZXJ2aWNlIFdvcmtlciBmb3IgVHJhY2ttYW4gU2NyYXBlciBDaHJvbWUgRXh0ZW5zaW9uXG4gKi9cblxuY2hyb21lLnJ1bnRpbWUub25JbnN0YWxsZWQuYWRkTGlzdGVuZXIoKCkgPT4ge1xuICBjb25zb2xlLmxvZygnVHJhY2ttYW4gU2NyYXBlciBleHRlbnNpb24gaW5zdGFsbGVkJyk7XG59KTtcblxuY2hyb21lLnJ1bnRpbWUub25NZXNzYWdlLmFkZExpc3RlbmVyKChtZXNzYWdlLCBzZW5kZXIsIHNlbmRSZXNwb25zZSkgPT4ge1xuICBpZiAobWVzc2FnZS50eXBlID09PSAnR0VUX0RBVEEnKSB7XG4gICAgY2hyb21lLnN0b3JhZ2UubG9jYWwuZ2V0KFsndHJhY2ttYW5EYXRhJ10sIChyZXN1bHQpID0+IHtcbiAgICAgIHNlbmRSZXNwb25zZShyZXN1bHQudHJhY2ttYW5EYXRhIHx8IG51bGwpO1xuICAgIH0pO1xuICAgIHJldHVybiB0cnVlO1xuICB9XG59KTtcbiJdLAogICJtYXBwaW5ncyI6ICI7QUFJQSxPQUFPLFFBQVEsWUFBWSxZQUFZLE1BQU07QUFDM0MsVUFBUSxJQUFJLHNDQUFzQztBQUNwRCxDQUFDO0FBRUQsT0FBTyxRQUFRLFVBQVUsWUFBWSxDQUFDLFNBQVMsUUFBUSxpQkFBaUI7QUFDdEUsTUFBSSxRQUFRLFNBQVMsWUFBWTtBQUMvQixXQUFPLFFBQVEsTUFBTSxJQUFJLENBQUMsY0FBYyxHQUFHLENBQUMsV0FBVztBQUNyRCxtQkFBYSxPQUFPLGdCQUFnQixJQUFJO0FBQUEsSUFDMUMsQ0FBQztBQUNELFdBQU87QUFBQSxFQUNUO0FBQ0YsQ0FBQzsiLAogICJuYW1lcyI6IFtdCn0K
