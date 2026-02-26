@@ -32,8 +32,8 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Manifest: point `background.service_worker` to built JS
 - [x] Manifest: point `content_scripts[*].js` to built JS (verified: manifest references interceptor.js which is built by esbuild)
 - [x] Manifest: point `action.default_popup` to built popup HTML (verified: manifest references popup.html which is copied to dist/)
-- [ ] Permissions: add `https://web-dynamic-reports.trackmangolf.com/*` to `host_permissions`
-- [ ] Content scripts: include `https://web-dynamic-reports.trackmangolf.com/*` in `matches`
+- [x] Permissions: add `https://web-dynamic-reports.trackmangolf.com/*` to `host_permissions`
+- [x] Content scripts: include `https://web-dynamic-reports.trackmangolf.com/*` in `matches`
 - [x] CSP: remove Tailwind CDN usage and bundle CSS locally (using src/shared/styles.css)
 - [ ] Permissions: verify minimal set (`storage`, `downloads`)
 
