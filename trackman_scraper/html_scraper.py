@@ -1,13 +1,12 @@
 """HTML table scraping fallback using Playwright DOM queries."""
 
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 from playwright.async_api import Page
 
 from .constants import (
     CSS_AVERAGE_VALUES,
-    CSS_CLUB_TAG,
     CSS_CONSISTENCY_VALUES,
     CSS_DATE,
     CSS_PARAM_NAME,
@@ -18,6 +17,7 @@ from .constants import (
     PAGE_LOAD_TIMEOUT,
 )
 from .models import ClubGroup, SessionData, Shot
+from .table_parser import TableParser
 
 logger = logging.getLogger(__name__)
 
@@ -29,23 +29,11 @@ async def _extract_text(element) -> str:
     return (await element.inner_text()).strip()
 
 
-async def _extract_row_values(
-    row, skip_first_n: int = 4
-) -> list[str]:
-    """Extract text values from table cells, skipping leading non-data columns."""
-    tds = await row.query_selector_all("td")
-    values: list[str] = []
-    for i, td in enumerate(tds):
-        if i >= skip_first_n:
-            values.append((await td.inner_text()).strip())
-    return values
-
-
 async def scrape_page(
     page: Page,
     url: str,
     existing_clubs: Optional[dict[str, ClubGroup]] = None,
-) -> tuple[dict[str, ClubGroup], str]:
+) -> Tuple[dict[str, ClubGroup], str]:
     """Scrape a single page load and return (club_name -> ClubGroup, date_text).
 
     If existing_clubs is provided, new metric columns are merged into existing
@@ -70,57 +58,62 @@ async def scrape_page(
     date_el = await page.query_selector(f".{CSS_DATE}")
     date_text = await _extract_text(date_el) or "Unknown"
 
-    # Find all ResultsTable blocks (one per club)
-    wrapper = await page.query_selector(f".{CSS_RESULTS_WRAPPER}")
-    if wrapper is None:
-        logger.warning("Results wrapper not found")
-        return existing_clubs or {}, date_text
+    parser = TableParser(page)
 
-    tables = await wrapper.query_selector_all(f".{CSS_RESULTS_TABLE}")
+    # Find all ResultsTable blocks (one per club) using CSS selector parsing
+    tables_data = await parser.extract_table_data(
+        wrapper_selector=f".{CSS_RESULTS_WRAPPER}",
+        table_selector=f".{CSS_RESULTS_TABLE}",
+        row_selector=f".{CSS_SHOT_DETAIL_ROW}",
+        cell_selector="td",
+    )
+
     clubs = existing_clubs if existing_clubs is not None else {}
 
-    for table in tables:
-        # Club name
-        club_tag = await table.query_selector(f".{CSS_CLUB_TAG}")
-        club_name = await _extract_text(club_tag) or "Unknown"
+    for table_data in tables_data:
+        # Find club name from rows (first column of first row)
+        club_name = "Unknown"
+        if table_data.rows and len(table_data.rows[0].cells) > 0:
+            club_name = table_data.rows[0].cells[0].text or "Unknown"
 
-        # Metric column headers for this page load
-        param_row = await table.query_selector(f".{CSS_PARAM_NAMES_ROW}")
-        if param_row is None:
+        # Get metric names from the parameter names row
+        param_row = await page.query_selector(f".{CSS_PARAM_NAMES_ROW}")
+        if not param_row:
             continue
-        param_els = await param_row.query_selector_all(f".{CSS_PARAM_NAME}")
-        metric_names = [await _extract_text(el) for el in param_els]
+        metric_names = await parser.extract_metric_names(
+            param_row, name_selector=f".{CSS_PARAM_NAME}"
+        )
 
         # Get or create ClubGroup
         if club_name not in clubs:
             clubs[club_name] = ClubGroup(club_name=club_name)
         club_group = clubs[club_name]
 
-        # Individual shot rows
-        shot_rows = await table.query_selector_all(f".{CSS_SHOT_DETAIL_ROW}")
-        for i, row in enumerate(shot_rows):
-            values = await _extract_row_values(row)
+        # Process shot rows (skip first row which contains club name, skip param names row)
+        for i, row in enumerate(table_data.rows):
+            if i == 0 or i == 1:
+                continue
+
+            values = [cell.text for cell in row.cells[4:]] if len(row.cells) > 4 else []
             shot_data = dict(zip(metric_names, values))
 
-            if i < len(club_group.shots):
-                # Merge new metrics into existing shot (2nd page load)
-                club_group.shots[i].metrics.update(shot_data)
-            else:
-                club_group.shots.append(
-                    Shot(shot_number=i, metrics=shot_data)
-                )
+            shot_idx = i - 2
+            if shot_idx < len(club_group.shots):
+                club_group.shots[shot_idx].metrics.update(shot_data)
+            elif shot_data:
+                club_group.shots.append(Shot(shot_number=shot_idx, metrics=shot_data))
 
-        # Averages row
-        avg_row = await table.query_selector(f".{CSS_AVERAGE_VALUES}")
+        # Averages row - find by looking for rows with metric values only
+        avg_row = await page.query_selector(f".{CSS_AVERAGE_VALUES}")
         if avg_row:
-            avg_values = await _extract_row_values(avg_row, skip_first_n=1)
+            avg_values = await parser.extract_row_values(avg_row, skip_first_n=1)
             avg_data = dict(zip(metric_names, avg_values))
             club_group.averages.update(avg_data)
 
         # Consistency row
-        cons_row = await table.query_selector(f".{CSS_CONSISTENCY_VALUES}")
+        cons_row = await page.query_selector(f".{CSS_CONSISTENCY_VALUES}")
         if cons_row:
-            cons_values = await _extract_row_values(cons_row, skip_first_n=1)
+            cons_values = await parser.extract_row_values(cons_row, skip_first_n=1)
             cons_data = dict(zip(metric_names, cons_values))
             club_group.consistency.update(cons_data)
 
@@ -137,9 +130,7 @@ async def scrape_all_metrics(
     date_text = "Unknown"
 
     for url in urls:
-        all_clubs, date_text = await scrape_page(
-            page, url, existing_clubs=all_clubs
-        )
+        all_clubs, date_text = await scrape_page(page, url, existing_clubs=all_clubs)
 
     session = SessionData(
         date=date_text,

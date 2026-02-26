@@ -45,13 +45,13 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 
 ## API Interception (Primary Data Source)
 - [x] Ensure interceptor runs in the page context (main world or injected script)
-- [ ] Capture JSON responses on report pages
-- [ ] Detect candidate payloads containing `StrokeGroups` (plus heuristic fallback)
-- [ ] Parse `StrokeGroups -> Strokes -> NormalizedMeasurement` (fallback `Measurement`)
-- [ ] Extract scalar metric fields using the Python `_METRIC_KEYS`
-- [ ] Build session data (club groups, shots, averages)
-- [ ] Filter shots by `sgos[]` if payload includes shot-group IDs
-- [ ] Store raw payload for debugging when parsing fails
+- [x] Capture JSON responses on report pages
+- [x] Detect candidate payloads containing `StrokeGroups` (plus heuristic fallback)
+- [x] Parse `StrokeGroups -> Strokes -> NormalizedMeasurement` (fallback `Measurement`)
+- [x] Extract scalar metric fields using the Python `_METRIC_KEYS`
+- [x] Build session data (club groups, shots, averages)
+- [x] Filter shots by `sgos[]` if payload includes shot-group IDs
+- [x] Store raw payload for debugging when parsing fails
 
 ## HTML Scraping (Fallback)
 - [ ] Implement HTML table scraping based on Python CSS selectors
@@ -77,7 +77,7 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 ## Testing & Quality
 - [x] Unit test: URL parsing for `r`, `a`, `ReportId`
 - [x] Unit test: `mp[]` ordering preserved
-- [ ] Unit test: `sgos[]` filtering
+- [x] Unit test: `sgos[]` filtering
 - [ ] Unit test: API payload parsing with captured JSON
 - [ ] Unit test: CSV column ordering
 - [ ] Integration test: mock payload → CSV snapshot
