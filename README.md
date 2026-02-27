@@ -1,5 +1,9 @@
 # TrackPull
 
+<p align="center">
+  <img src="TrackPuller.png" alt="TrackPull" width="300">
+</p>
+
 A Chrome extension that pulls shot data from Trackman web reports and exports it as CSV.
 
 ## Features
