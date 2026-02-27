@@ -8,6 +8,8 @@
 
 export type UnitSystemId = "789012" | "789013" | "789014" | string;
 
+export type UnitPreference = "imperial" | "metric";
+
 /**
  * Trackman unit system definitions.
  * Maps nd_* parameter values to actual units for each metric.
@@ -47,7 +49,7 @@ export interface UnitSystem {
   name: string;
   distanceUnit: "yards" | "meters";
   angleUnit: "degrees" | "radians";
-  speedUnit: "mph" | "km/h";
+  speedUnit: "mph" | "km/h" | "m/s";
 }
 
 /**
@@ -198,8 +200,8 @@ export function convertAngle(
  */
 export function convertSpeed(
   value: number | string | null,
-  fromUnit: "mph" | "km/h",
-  toUnit: "mph" | "km/h"
+  fromUnit: "mph" | "km/h" | "m/s",
+  toUnit: "mph" | "km/h" | "m/s"
 ): number | string | null {
   if (value === null || value === "") return value;
 
@@ -208,51 +210,104 @@ export function convertSpeed(
 
   if (fromUnit === toUnit) return numValue;
 
-  // Convert to mph first, then to target unit
-  const inMph = fromUnit === "mph" ? numValue : numValue / 1.609344;
-  return toUnit === "mph" ? inMph : inMph * 1.609344;
+  // Convert to m/s first, then to target unit
+  const inMs = fromUnit === "m/s" ? numValue
+    : fromUnit === "mph" ? numValue * 0.44704
+    : numValue / 3.6;
+  return toUnit === "m/s" ? inMs
+    : toUnit === "mph" ? inMs / 0.44704
+    : inMs * 3.6;
 }
 
 /**
- * Normalize a metric value based on unit system alignment.
- * 
- * Converts values from the report's native units to standard output units:
- * - Distance: always yards (Imperial)
- * - Angles: always degrees
- * - Speed: always mph
- * 
+ * Target unit systems for each preference.
+ */
+const TARGET_UNITS: Record<UnitPreference, { distance: "yards" | "meters"; speed: "mph" | "km/h" | "m/s"; angle: "degrees" | "radians" }> = {
+  imperial: { distance: "yards", speed: "mph", angle: "degrees" },
+  metric:   { distance: "meters", speed: "m/s", angle: "degrees" },
+};
+
+const UNIT_LABELS: Record<string, string> = {
+  mph: "mph",
+  "km/h": "km/h",
+  "m/s": "m/s",
+  yards: "yds",
+  meters: "m",
+  degrees: "°",
+  radians: "rad",
+};
+
+/**
+ * Get the unit label for a metric under the given unit preference.
+ * Returns empty string for metrics with no unit conversion (e.g. SmashFactor).
+ */
+export function getMetricUnitLabel(
+  metricName: string,
+  unitPref: UnitPreference = "imperial"
+): string {
+  const target = TARGET_UNITS[unitPref];
+  if (DISTANCE_METRICS.has(metricName)) return UNIT_LABELS[target.distance];
+  if (SPEED_METRICS.has(metricName)) return UNIT_LABELS[target.speed];
+  if (ANGLE_METRICS.has(metricName)) return UNIT_LABELS[target.angle];
+  return "";
+}
+
+/**
+ * Build the source unit system for API-intercepted data.
+ *
+ * The Trackman API always returns speeds in m/s and distances in meters,
+ * regardless of the report's display settings. Angles follow the report's
+ * display unit (degrees or radians from nd_* params).
+ */
+export function getApiSourceUnitSystem(
+  metadataParams: Record<string, string>
+): UnitSystem {
+  const reportSystem = getUnitSystem(metadataParams);
+  return {
+    ...reportSystem,
+    speedUnit: "m/s",
+    distanceUnit: "meters",
+  };
+}
+
+/**
+ * Normalize a metric value from the report's native units to the target unit preference.
+ *
  * @param value - The raw metric value
  * @param metricName - The name of the metric being normalized
  * @param reportUnitSystem - The unit system used in the source report
+ * @param unitPref - Target unit preference (default "imperial")
  * @returns Normalized value as number or string (null if invalid)
  */
 export function normalizeMetricValue(
   value: MetricValue,
   metricName: string,
-  reportUnitSystem: UnitSystem
+  reportUnitSystem: UnitSystem,
+  unitPref: UnitPreference = "imperial"
 ): MetricValue {
   const numValue = parseNumericValue(value);
   if (numValue === null) return value;
 
+  const target = TARGET_UNITS[unitPref];
   let converted: number;
 
   if (DISTANCE_METRICS.has(metricName)) {
     converted = convertDistance(
       numValue,
       reportUnitSystem.distanceUnit,
-      "yards"
+      target.distance
     ) as number;
   } else if (ANGLE_METRICS.has(metricName)) {
     converted = convertAngle(
       numValue,
       reportUnitSystem.angleUnit,
-      "degrees"
+      target.angle
     ) as number;
   } else if (SPEED_METRICS.has(metricName)) {
     converted = convertSpeed(
       numValue,
       reportUnitSystem.speedUnit,
-      "mph"
+      target.speed
     ) as number;
   } else {
     // No conversion needed for this metric type

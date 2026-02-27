@@ -5,8 +5,10 @@
 
 import type { SessionData, ClubGroup, Shot } from "../models/types";
 import {
-  getUnitSystem,
+  getApiSourceUnitSystem,
+  getMetricUnitLabel,
   normalizeMetricValue,
+  type UnitPreference,
 } from "./unit_normalization";
 import { METRIC_DISPLAY_NAMES } from "./constants";
 
@@ -31,6 +33,12 @@ const METRIC_COLUMN_ORDER: string[] = [
 
 function getDisplayName(metric: string): string {
   return METRIC_DISPLAY_NAMES[metric] ?? metric;
+}
+
+function getColumnName(metric: string, unitPref: UnitPreference): string {
+  const name = getDisplayName(metric);
+  const unit = getMetricUnitLabel(metric, unitPref);
+  return unit ? `${name} (${unit})` : name;
 }
 
 function generateFilename(session: SessionData): string {
@@ -68,12 +76,10 @@ function hasTags(session: SessionData): boolean {
 
 export function writeCsv(
   session: SessionData,
-  outputFilename?: string,
   includeAverages = true,
-  metricOrder?: string[]
+  metricOrder?: string[],
+  unitPref: UnitPreference = "imperial"
 ): string {
-  const filename = outputFilename ?? generateFilename(session);
-
   const orderedMetrics = orderMetricsByPriority(
     session.metric_names,
     metricOrder ?? METRIC_COLUMN_ORDER
@@ -88,7 +94,7 @@ export function writeCsv(
   headerRow.push("Shot #", "Type");
   
   for (const metric of orderedMetrics) {
-    headerRow.push(getDisplayName(metric));
+    headerRow.push(getColumnName(metric, unitPref));
   }
 
   const rows: Record<string, string>[] = [];
@@ -106,18 +112,18 @@ export function writeCsv(
         row.Tag = shot.tag ?? "";
       }
 
-      // Get unit system for normalization
-      const unitSystem = getUnitSystem(session.metadata_params);
+      // API data arrives in m/s and meters; angles follow the report's display unit
+      const unitSystem = getApiSourceUnitSystem(session.metadata_params);
 
       for (const metric of orderedMetrics) {
-        const displayName = getDisplayName(metric);
+        const colName = getColumnName(metric, unitPref);
         let rawValue = shot.metrics[metric] ?? "";
-        
+
         // Normalize value based on report units/normalization params
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          row[displayName] = String(normalizeMetricValue(rawValue, metric, unitSystem));
+          row[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
         } else {
-          row[displayName] = "";
+          row[colName] = "";
         }
       }
 
@@ -138,13 +144,13 @@ export function writeCsv(
 
       // Normalize average values based on report units/normalization params
       for (const metric of orderedMetrics) {
-        const displayName = getDisplayName(metric);
+        const colName = getColumnName(metric, unitPref);
         let rawValue = club.averages[metric] ?? "";
-        
+
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          avgRow[displayName] = String(normalizeMetricValue(rawValue, metric, unitSystem));
+          avgRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
         } else {
-          avgRow[displayName] = "";
+          avgRow[colName] = "";
         }
       }
 
@@ -165,13 +171,13 @@ export function writeCsv(
 
       // Normalize consistency values based on report units/normalization params
       for (const metric of orderedMetrics) {
-        const displayName = getDisplayName(metric);
+        const colName = getColumnName(metric, unitPref);
         let rawValue = club.consistency[metric] ?? "";
-        
+
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          consRow[displayName] = String(normalizeMetricValue(rawValue, metric, unitSystem));
+          consRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
         } else {
-          consRow[displayName] = "";
+          consRow[colName] = "";
         }
       }
 

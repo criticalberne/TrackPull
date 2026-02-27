@@ -4,6 +4,7 @@
 
 import { STORAGE_KEYS } from "../shared/constants";
 import { writeCsv } from "../shared/csv_writer";
+import type { UnitPreference } from "../shared/unit_normalization";
 import type { SessionData } from "../models/types";
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -34,42 +35,6 @@ function getDownloadErrorMessage(originalError: string): string {
     return "Download blocked by browser settings";
   }
   return originalError;
-}
-
-// Unit conversion constants (metric → imperial)
-const MS_TO_MPH = 2.23694;
-const METERS_TO_YARDS = 1.09361;
-
-const SPEED_METRICS = new Set(["ClubSpeed", "BallSpeed"]);
-const DISTANCE_METRICS = new Set([
-  "Carry", "Total", "Side", "SideTotal", "CarrySide", "TotalSide",
-  "Height", "MaxHeight", "Curve", "LowPointDistance",
-]);
-
-function convertMetric(key: string, value: string): string {
-  const num = parseFloat(value);
-  if (isNaN(num)) return value;
-  if (SPEED_METRICS.has(key)) return `${Math.round(num * MS_TO_MPH * 10) / 10}`;
-  if (DISTANCE_METRICS.has(key)) return `${Math.round(num * METERS_TO_YARDS * 10) / 10}`;
-  return value;
-}
-
-function toImperialSession(session: SessionData): SessionData {
-  const converted: SessionData = JSON.parse(JSON.stringify(session));
-  for (const group of converted.club_groups) {
-    for (const shot of group.shots) {
-      for (const key of Object.keys(shot.metrics)) {
-        shot.metrics[key] = convertMetric(key, shot.metrics[key]);
-      }
-    }
-    for (const key of Object.keys(group.averages)) {
-      group.averages[key] = convertMetric(key, group.averages[key]);
-    }
-    for (const key of Object.keys(group.consistency)) {
-      group.consistency[key] = convertMetric(key, group.consistency[key]);
-    }
-  }
-  return converted;
 }
 
 type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest;
@@ -105,10 +70,9 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
       }
 
       try {
-        const unitPref = (result[STORAGE_KEYS.UNIT_PREF] as string) || "imperial";
-        const exportData = unitPref === "imperial" ? toImperialSession(data) : data;
-        const csvContent = writeCsv(exportData);
-        const filename = `ShotData_${data.date || "unknown"}.csv`;
+        const unitPref = ((result[STORAGE_KEYS.UNIT_PREF] as string) || "imperial") as UnitPreference;
+        const csvContent = writeCsv(data, true, undefined, unitPref);
+        const filename = `ShotData_${data.date || "unknown"}_bhn.csv`;
 
         chrome.downloads.download(
           {
