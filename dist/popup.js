@@ -32,7 +32,7 @@
       }
     } catch (error) {
       console.error("Error loading popup data:", error);
-      showStatusMessage("Error loading shot count", true);
+      showToast("Error loading shot count", "error");
     }
   });
   function updateShotCount(data) {
@@ -74,14 +74,14 @@
       });
       const data = result[STORAGE_KEYS.TRACKMAN_DATA];
       if (!data || typeof data !== "object") {
-        showStatusMessage("No data to export", true);
+        showToast("No data to export", "error");
         exportBtn.disabled = false;
         return;
       }
       const sessionData = data;
       const clubGroups = sessionData["club_groups"];
       if (!clubGroups || !Array.isArray(clubGroups)) {
-        showStatusMessage("No valid data to export", true);
+        showToast("No valid data to export", "error");
         exportBtn.disabled = false;
         return;
       }
@@ -91,17 +91,17 @@
         });
       });
       if (!message || !message.csvContent) {
-        showStatusMessage("Failed to generate CSV", true);
+        showToast("Failed to generate CSV", "error");
         exportBtn.disabled = false;
         return;
       }
       await new Promise((resolve) => {
         chrome.runtime.sendMessage({ type: "EXPORT_CSV", csvContent: message.csvContent, filename: message.filename }, (response) => {
           if (response && response.success) {
-            showStatusMessage(`Exported successfully: ${message.filename}`, false);
+            showToast(`Exported successfully: ${message.filename}`, "success");
           } else {
             const errorMsg = response?.error || "Download failed";
-            showStatusMessage(errorMsg, true);
+            showToast(errorMsg, "error");
           }
           exportBtn.disabled = false;
           resolve();
@@ -109,9 +109,30 @@
       });
     } catch (error) {
       console.error("Error during export:", error);
-      showStatusMessage("Export failed", true);
+      showToast("Export failed", "error");
       exportBtn.disabled = false;
     }
+  }
+  function showToast(message, type) {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+    const existingToast = container.querySelector(".toast");
+    if (existingToast) {
+      existingToast.remove();
+    }
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    toast.setAttribute("role", type === "error" ? "alert" : "status");
+    container.appendChild(toast);
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.classList.add("hiding");
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }
+    }, type === "error" ? 5e3 : 3e3);
   }
   function showStatusMessage(message, isError = false) {
     const statusElement = document.getElementById("status-message");
@@ -136,10 +157,10 @@
       });
       updateShotCount(null);
       updateExportButtonVisibility(null);
-      showStatusMessage("Session data cleared", false);
+      showToast("Session data cleared", "success");
     } catch (error) {
       console.error("Error clearing session data:", error);
-      showStatusMessage("Failed to clear data", true);
+      showToast("Failed to clear data", "error");
     } finally {
       clearBtn.disabled = false;
     }

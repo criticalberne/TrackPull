@@ -18,6 +18,19 @@ interface GetDataRequest {
   type: 'GET_DATA';
 }
 
+function getDownloadErrorMessage(originalError: string): string {
+  if (originalError.includes("invalid")) {
+    return "Invalid download format";
+  }
+  if (originalError.includes("quota") || originalError.includes("space")) {
+    return "Insufficient storage space";
+  }
+  if (originalError.includes("blocked") || originalError.includes("policy")) {
+    return "Download blocked by browser settings";
+  }
+  return originalError;
+}
+
 type RequestMessage = ExportCsvRequest | GetDataRequest;
 
 chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendResponse) => {
@@ -38,7 +51,8 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
       (downloadId) => {
         if (chrome.runtime.lastError) {
           console.error('Trackman Scraper: Download failed:', chrome.runtime.lastError);
-          sendResponse({ success: false, error: chrome.runtime.lastError.message });
+          const errorMessage = getDownloadErrorMessage(chrome.runtime.lastError.message);
+          sendResponse({ success: false, error: errorMessage });
         } else {
           console.log(`Trackman Scraper: CSV exported with download ID ${downloadId}`);
           sendResponse({ success: true, downloadId });
