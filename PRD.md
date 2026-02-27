@@ -54,8 +54,8 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Store raw payload for debugging when parsing fails
 
 ## HTML Scraping (Fallback)
-- [ ] Implement HTML table scraping based on Python CSS selectors
-- [ ] Extract club name, metric headers, and shot rows
+- [x] Implement HTML table scraping based on Python CSS selectors
+- [x] Extract club name, metric headers, and shot rows
 - [x] Extract averages and consistency rows
 - [ ] Merge multi-page metric groups into a single dataset
 
