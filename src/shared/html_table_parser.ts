@@ -11,7 +11,7 @@ import {
   CSS_RESULTS_TABLE,
   CSS_RESULTS_WRAPPER,
   CSS_SHOT_DETAIL_ROW,
-} from "./constants.ts";
+} from "./constants";
 
 interface HTMLElementHandle {
   innerText: string;

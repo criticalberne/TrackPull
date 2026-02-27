@@ -30,15 +30,19 @@ fi
 
 echo "Manifest copied to $DIST_DIR/manifest.json"
 
-npx --yes esbuild src/background/serviceWorker.ts --bundle --outfile="$DIST_DIR/background.js" --format=esm --platform=browser --sourcemap=inline 2>/dev/null || { echo 'Error: Failed to build background.js' >&2; exit 1; }
+npx --yes esbuild src/background/serviceWorker.ts --bundle --outfile="$DIST_DIR/background.js" --format=iife --platform=browser --sourcemap=inline 2>/dev/null || { echo 'Error: Failed to build background.js' >&2; exit 1; }
 
 echo "Background service worker bundled to $DIST_DIR/background.js"
 
-npx --yes esbuild src/content/interceptor.ts --bundle --outfile="$DIST_DIR/interceptor.js" --format=esm --platform=browser || { echo 'Error: Failed to build interceptor.js' >&2; exit 1; }
+npx --yes esbuild src/content/interceptor.ts --bundle --outfile="$DIST_DIR/interceptor.js" --format=iife --platform=browser || { echo 'Error: Failed to build interceptor.js' >&2; exit 1; }
 
 echo "Content script bundled to $DIST_DIR/interceptor.js"
 
-npx --yes esbuild src/content/html_scraping.ts --bundle --outfile="$DIST_DIR/html_scraping.js" --format=esm || { echo 'Error: Failed to build html_scraping.js' >&2; exit 1; }
+npx --yes esbuild src/content/bridge.ts --bundle --outfile="$DIST_DIR/bridge.js" --format=iife --platform=browser || { echo 'Error: Failed to build bridge.js' >&2; exit 1; }
+
+echo "Bridge content script bundled to $DIST_DIR/bridge.js"
+
+npx --yes esbuild src/content/html_scraping.ts --bundle --outfile="$DIST_DIR/html_scraping.js" --format=iife || { echo 'Error: Failed to build html_scraping.js' >&2; exit 1; }
 
 echo "HTML scraping content script bundled to $DIST_DIR/html_scraping.js"
 
