@@ -2,19 +2,32 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import NamedTuple, Optional
+from typing import Optional
 
 from playwright.async_api import ElementHandle, Page
 
 logger = logging.getLogger(__name__)
 
 
-class TableExtractionResult(NamedTuple):
+@dataclass
+class ClubData:
+    """Extracted data for a single club group."""
+
+    name: str
+    shot_rows: list[dict[str, str]] = field(default_factory=list)
+    averages: dict[str, str] = field(default_factory=dict)
+    consistency: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class TableExtractionResult:
     """Structured result of extracting club name, headers, and rows from a table."""
 
     club_name: str
     metric_headers: list[str]
     shot_rows: list[dict[str, str]]
+    averages: dict[str, str] = field(default_factory=dict)
+    consistency: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -223,6 +236,82 @@ class TableParser:
 
         return names
 
+    async def _extract_row_values(
+        self,
+        row_element: ElementHandle,
+        num_columns: int,
+        skip_first: int = 0,
+    ) -> list[str]:
+        """Extract text values from a row's cells.
+
+        Args:
+            row_element: The Playwright ElementHandle for the row.
+            num_columns: Number of columns to extract.
+            skip_first: Number of leading cells to skip.
+
+        Returns:
+            List of cell text values.
+        """
+        tds = await row_element.query_selector_all("td")
+        values: list[str] = []
+
+        for i, td in enumerate(tds):
+            if i >= skip_first and len(values) < num_columns:
+                value = (await td.inner_text()).strip()
+                values.append(value)
+
+        return values
+
+    async def extract_averages(
+        self,
+        row_element: ElementHandle,
+        metric_headers: list[str],
+    ) -> dict[str, str]:
+        """Extract average values from an averages row.
+
+        Args:
+            row_element: The Playwright ElementHandle for the averages row.
+            metric_headers: List of metric headers in order.
+
+        Returns:
+            Dict mapping metric names to their average values.
+        """
+        averages: dict[str, str] = {}
+        values = await self._extract_row_values(
+            row_element, len(metric_headers), skip_first=2
+        )
+
+        for i, header in enumerate(metric_headers):
+            if i < len(values) and values[i]:
+                averages[header] = values[i]
+
+        return averages
+
+    async def extract_consistency(
+        self,
+        row_element: ElementHandle,
+        metric_headers: list[str],
+    ) -> dict[str, str]:
+        """Extract consistency values from a consistency row.
+
+        Args:
+            row_element: The Playwright ElementHandle for the consistency row.
+            metric_headers: List of metric headers in order.
+
+        Returns:
+            Dict mapping metric names to their consistency values.
+        """
+        consistency: dict[str, str] = {}
+        values = await self._extract_row_values(
+            row_element, len(metric_headers), skip_first=2
+        )
+
+        for i, header in enumerate(metric_headers):
+            if i < len(values) and values[i]:
+                consistency[header] = values[i]
+
+        return consistency
+
     async def extract_club_and_metrics(
         self,
         wrapper_selector: str,
@@ -231,6 +320,8 @@ class TableParser:
         cell_selector: str = "td",
         param_names_row_selector: Optional[str] = None,
         param_name_selector: Optional[str] = None,
+        averages_row_selector: Optional[str] = None,
+        consistency_row_selector: Optional[str] = None,
     ) -> TableExtractionResult:
         """Extract club name, metric headers, and shot rows from a table.
 
@@ -241,6 +332,8 @@ class TableParser:
             cell_selector: CSS selector for cells within rows (default: "td").
             param_names_row_selector: Optional CSS selector for metric names header row.
             param_name_selector: CSS selector for metric names.
+            averages_row_selector: Optional CSS selector for averages row label/cell.
+            consistency_row_selector: Optional CSS selector for consistency row label/cell.
 
         Returns:
             TableExtractionResult with club_name, metric_headers, and shot_rows.
@@ -293,6 +386,9 @@ class TableParser:
 
         # Extract shot rows, skip header rows
         shot_rows: list[dict[str, str]] = []
+        averages_row_idx: Optional[int] = None
+        consistency_row_idx: Optional[int] = None
+
         start_row_idx = 1 if metric_headers else 0
 
         for i in range(start_row_idx, len(rows)):
@@ -300,6 +396,25 @@ class TableParser:
             cells = await row.query_selector_all(cell_selector)
 
             if not cells:
+                continue
+
+            # Check if this is an averages or consistency row
+            first_cell_text = (await cells[0].inner_text()).strip() if cells else ""
+
+            if averages_row_selector and first_cell_text:
+                averages_el = await self.find_element_by_css(averages_row_selector)
+                if averages_el and i == start_row_idx:
+                    averages_row_idx = i
+
+            if consistency_row_selector and first_cell_text:
+                consistency_el = await self.find_element_by_css(
+                    consistency_row_selector
+                )
+                if consistency_el and i > (averages_row_idx or 0):
+                    consistency_row_idx = i
+
+            # Skip averages and consistency rows for shot data
+            if i == averages_row_idx or i == consistency_row_idx:
                 continue
 
             # Create dict mapping headers to cell values
@@ -312,10 +427,28 @@ class TableParser:
             if row_data or metric_headers:
                 shot_rows.append(row_data)
 
+        # Extract averages and consistency data if found
+        averages: dict[str, str] = {}
+        consistency: dict[str, str] = {}
+
+        if averages_row_idx is not None and averages_row_selector:
+            avg_row = rows[averages_row_idx] if averages_row_idx < len(rows) else None
+            if avg_row:
+                averages = await self.extract_averages(avg_row, metric_headers)
+
+        if consistency_row_idx is not None and consistency_row_selector:
+            cons_row = (
+                rows[consistency_row_idx] if consistency_row_idx < len(rows) else None
+            )
+            if cons_row:
+                consistency = await self.extract_consistency(cons_row, metric_headers)
+
         return TableExtractionResult(
             club_name=club_name,
             metric_headers=metric_headers,
             shot_rows=shot_rows,
+            averages=averages,
+            consistency=consistency,
         )
 
 

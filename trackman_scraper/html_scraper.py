@@ -6,6 +6,8 @@ from typing import Optional, Tuple
 from playwright.async_api import Page
 
 from .constants import (
+    CSS_AVERAGE_VALUES,
+    CSS_CONSISTENCY_VALUES,
     CSS_DATE,
     CSS_PARAM_NAME,
     CSS_PARAM_NAMES_ROW,
@@ -20,8 +22,15 @@ from .table_parser import TableParser
 logger = logging.getLogger(__name__)
 
 
-async def _extract_text(element) -> str:
-    """Safely extract inner text from an element."""
+async def extract_text(element) -> str:
+    """Safely extract inner text from an element.
+
+    Args:
+        element: The Playwright ElementHandle to extract text from.
+
+    Returns:
+        Stripped text content, or empty string if element is None.
+    """
     if element is None:
         return ""
     return (await element.inner_text()).strip()
@@ -52,7 +61,7 @@ async def scrape_page(
         return existing_clubs or {}, "Unknown"
 
     date_el = await page.query_selector(f".{CSS_DATE}")
-    date_text = await _extract_text(date_el) or "Unknown"
+    date_text = await extract_text(date_el) or "Unknown"
 
     parser = TableParser(page)
 
@@ -64,6 +73,8 @@ async def scrape_page(
         row_selector=f".{CSS_SHOT_DETAIL_ROW}",
         param_names_row_selector=f".{CSS_PARAM_NAMES_ROW}",
         param_name_selector=f".{CSS_PARAM_NAME}",
+        averages_row_selector=f".{CSS_AVERAGE_VALUES}",
+        consistency_row_selector=f".{CSS_CONSISTENCY_VALUES}",
     )
 
     if not extraction_result.metric_headers:
@@ -72,6 +83,8 @@ async def scrape_page(
 
     club_name = extraction_result.club_name
     shot_rows_data = extraction_result.shot_rows
+    averages = extraction_result.averages
+    consistency = extraction_result.consistency
 
     if club_name not in clubs:
         clubs[club_name] = ClubGroup(club_name=club_name)
@@ -83,6 +96,9 @@ async def scrape_page(
             club_group.shots[shot_idx].metrics.update(row_data)
         else:
             club_group.shots.append(Shot(shot_number=shot_idx, metrics=row_data))
+
+    club_group.averages.update(averages)
+    club_group.consistency.update(consistency)
 
     return clubs, date_text
 
