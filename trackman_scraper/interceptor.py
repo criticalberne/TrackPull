@@ -314,7 +314,12 @@ class APIInterceptor:
             date=date_str,
             report_id=url_info["id"],
             url_type=url_info["url_type"],
+            metadata_params={},
         )
+
+        # Store metric order from URL for CSV column ordering
+        if "metric_order" in url_info:
+            session.url_metric_order = url_info["metric_order"]
 
         all_metric_names: set[str] = set()
 

@@ -119,8 +119,13 @@ async def scrape_all_metrics(
         date=date_text,
         report_id=url_info["id"],
         url_type=url_info["url_type"],
+        metadata_params={},
     )
     session.club_groups = list(all_clubs.values())
+
+    # Store metric order from URL for CSV column ordering
+    if "metric_order" in url_info:
+        session.url_metric_order = url_info["metric_order"]
 
     all_metric_names: set[str] = set()
     for club in session.club_groups:

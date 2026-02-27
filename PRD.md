@@ -57,7 +57,7 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Implement HTML table scraping based on Python CSS selectors
 - [x] Extract club name, metric headers, and shot rows
 - [x] Extract averages and consistency rows
-- [ ] Merge multi-page metric groups into a single dataset
+- [x] Merge multi-page metric groups into a single dataset
 
 ## CSV Export
 - [ ] Use `mp[]` to enforce CSV column order

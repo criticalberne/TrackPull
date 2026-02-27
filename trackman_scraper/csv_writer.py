@@ -2,6 +2,7 @@
 
 import csv
 import logging
+import re
 
 from .constants import METRIC_DISPLAY_NAMES
 from .models import SessionData
@@ -12,6 +13,38 @@ logger = logging.getLogger(__name__)
 def _get_display_name(metric: str) -> str:
     """Map a metric key to its human-readable display name."""
     return METRIC_DISPLAY_NAMES.get(metric, metric)
+
+
+def _generate_filename(session: SessionData) -> str:
+    """Generate CSV filename with metadata suffix.
+
+    Args:
+        session: Session data containing report_id and metadata_params.
+
+    Returns:
+        Filename string with metadata suffix if available.
+    """
+    base = f"trackman_{session.report_id}"
+
+    if not session.metadata_params:
+        return f"{base}.csv"
+
+    # Extract nd_* parameters for filename suffix
+    nd_values = []
+    for key, value in session.metadata_params.items():
+        match = re.match(r"^(nd_[a-z0-9]+)$", key)
+        if match:
+            nd_key_num = match.group(1)
+            nd_values.append(nd_key_num + value)
+
+    # Sort to ensure consistent ordering
+    nd_values.sort()
+
+    if nd_values:
+        suffix = "_" + "_".join(nd_values)
+        return f"{base}{suffix}.csv"
+
+    return f"{base}.csv"
 
 
 def write_csv(
@@ -32,7 +65,8 @@ def write_csv(
     Returns:
         Path of the written file.
     """
-    filepath = output_path or f"trackman_{session.report_id}.csv"
+    if output_path is None:
+        output_path = _generate_filename(session)
 
     if metric_order is not None:
         ordered_metrics = _order_metrics_by_priority(session.metric_names, metric_order)
@@ -101,13 +135,13 @@ def write_csv(
                 row[display] = club.consistency.get(metric, "")
             rows.append(row)
 
-    with open(filepath, "w", newline="") as f:
+    with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=headers)
         writer.writeheader()
         writer.writerows(rows)
 
-    logger.info(f"Wrote {len(rows)} rows to {filepath}")
-    return filepath
+    logger.info(f"Wrote {len(rows)} rows to {output_path}")
+    return output_path
 
 
 def _order_metrics_by_priority(

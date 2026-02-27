@@ -66,7 +66,11 @@ def main() -> None:
         if args.tags:
             _apply_tags(session, args.tags)
 
-        metric_order = list(args.metrics) if args.metrics else None
+        # Use URL mp[] param order if available; CLI --metrics overrides it
+        url_metric_order = getattr(session, "url_metric_order", None)
+        metric_order = (
+            list(args.metrics) if args.metrics else (url_metric_order or None)
+        )
 
         filepath = write_csv(
             session=session,

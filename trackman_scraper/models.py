@@ -34,3 +34,4 @@ class SessionData:
     raw_api_data: Optional[dict] = None
     metric_names: list[str] = field(default_factory=list)
     metadata_params: dict[str, str] = field(default_factory=dict)
+    url_metric_order: list[str] = field(default_factory=list)
