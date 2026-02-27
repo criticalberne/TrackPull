@@ -68,6 +68,24 @@ Metrics are grouped by analytical category for quick scanning:
 | Impact | Low Point, Impact Height, Impact Offset |
 | Other | Tempo |
 
+## AI Prompt Templates
+
+The `prompts/` folder contains ready-made prompts you can use with ChatGPT or Claude to get club fitting insights from your exported CSV data. Either drag and drop your CSV file into the chat window or paste the data directly — each prompt handles both. They're organized by skill level:
+
+### Beginner
+- [Understanding Your Numbers](prompts/beginner/understanding-your-numbers.md) — Learn what each metric means and how yours compare to average golfers
+- [Basic Club Recommendations](prompts/beginner/basic-club-recommendations.md) — Find out what category of clubs suits your swing
+
+### Intermediate
+- [Distance Gapping](prompts/intermediate/distance-gapping.md) — Identify carry distance gaps and overlaps in your bag
+- [Shaft Flex Analysis](prompts/intermediate/shaft-flex-analysis.md) — Get shaft flex and weight recommendations based on your speed and launch data
+- [Shot Shape Tendencies](prompts/intermediate/shot-shape-tendencies.md) — Analyze your face angle, club path, and curvature patterns
+
+### Advanced
+- [Launch & Spin Optimization](prompts/advanced/launch-spin-optimization.md) — Compare your launch/spin to optimal windows and suggest loft/shaft changes
+- [Club Delivery Analysis](prompts/advanced/club-delivery-analysis.md) — Evaluate attack angle, dynamic loft, and low point for efficiency
+- [Full Bag Fitting](prompts/advanced/full-bag-fitting.md) — Comprehensive analysis with specific club head, shaft, and setup recommendations
+
 ## Development
 
 ### Build the extension
