@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from trackman_scraper.html_scraper import _extract_text
+from trackman_scraper.table_parser import _extract_text
 from trackman_scraper.table_parser import (
     TableCell,
     TableData,
