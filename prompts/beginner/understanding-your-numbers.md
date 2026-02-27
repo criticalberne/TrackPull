@@ -14,7 +14,7 @@
 ---
 
 ```
-I'm a golfer trying to understand my shot data from a launch monitor session. Below is my data in CSV format. Please:
+I'm a golfer trying to understand my shot data from a launch monitor session. Please:
 
 1. Explain what each column/metric means in plain language
 2. Tell me which numbers are most important to pay attention to
