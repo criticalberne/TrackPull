@@ -3,6 +3,7 @@
  */
 
 import type { Shot, ClubGroup, SessionData, CaptureInfo } from "../models/types";
+import { mergeSessionData } from "../models/types";
 
 type CaptureInfo = {
   url: string;
@@ -201,6 +202,42 @@ class APIInterceptor {
       console.error("Trackman Scraper: Parsing failed:", error);
       return null;
     }
+  }
+
+  /**
+   * Parse and merge multiple API responses into a single session.
+   * Handles multi-page loads where each page provides additional metric groups.
+   */
+  public parseAndMergeSessions(
+    url?: string,
+    existingSession?: SessionData | null
+  ): SessionData {
+    const captures = this.getReportJson(url);
+    
+    if (captures && containsStrokegroups(captures.body)) {
+      const data = captures.body as Record<string, unknown>;
+      
+      try {
+        const parsedUrl = new URL(captures.url);
+        const session = this._parseTrackmanActivity(data, parsedUrl);
+        
+        if (session) {
+          session.raw_api_data = data;
+          
+          // Merge with existing session data
+          if (existingSession && existingSession.club_groups.length > 0) {
+            return mergeSessionData(existingSession, session);
+          }
+          
+          return session;
+        }
+      } catch (error) {
+        console.error("Trackman Scraper: Parsing failed:", error);
+      }
+    }
+
+    // Return existing session if no new data or parsing fails
+    return existingSession || null as unknown as SessionData;
   }
 
   private _parseTrackmanActivity(

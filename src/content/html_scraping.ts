@@ -3,6 +3,7 @@
  */
 
 import { TableParser } from "../shared/html_table_parser";
+import { mergeSessionData, SessionData, ClubGroup, Shot } from "../models/types";
 import {
   CSS_RESULTS_WRAPPER,
   CSS_RESULTS_TABLE,
@@ -104,6 +105,82 @@ async function scrapeAllTables(): Promise<ScrapedData[]> {
   } catch (error) {
     console.error("Error scraping all tables:", error);
     return [];
+  }
+}
+
+/**
+ * Scrape HTML and merge data from multiple pages into a single session.
+ * This handles multi-page metric groups where each page loads additional columns.
+ */
+export async function scrapeAndMergeSessions(
+  baseUrl: string,
+  existingSession?: SessionData | null
+): Promise<SessionData> {
+  const parser = new TableParser(document);
+
+  try {
+    // Extract current page data
+    const result = await parser.extract_club_and_metrics(
+      `.${CSS_RESULTS_WRAPPER}`,
+      `.${CSS_RESULTS_TABLE}`,
+      `.${CSS_SHOT_DETAIL_ROW}`,
+      "td",
+      `.${CSS_PARAM_NAMES_ROW}`,
+      `.${CSS_PARAM_NAME}`,
+      `.${CSS_AVERAGE_VALUES}`,
+      `.${CSS_CONSISTENCY_VALUES}`
+    );
+
+    // Create session from current page data
+    const newSession: SessionData = {
+      date: "Unknown",
+      report_id: "unknown",
+      url_type: "report",
+      club_groups: [],
+      metric_names: result.metric_headers,
+      metadata_params: {},
+    };
+
+    // Convert scraped data to session format
+    for (const shotRow of result.shot_rows) {
+      const metrics: Record<string, string> = {};
+      for (const [key, value] of Object.entries(shotRow)) {
+        if (!result.metric_headers.includes(key)) continue;
+        metrics[key] = value;
+      }
+
+      if (Object.keys(metrics).length > 0) {
+        newSession.club_groups.push({
+          club_name: result.club_name,
+          shots: [{ shot_number: 0, metrics }],
+          averages: {},
+          consistency: {},
+        });
+      }
+    }
+
+    // If we have existing session data, merge them
+    if (existingSession && existingSession.club_groups.length > 0) {
+      return mergeSessionData(existingSession, newSession);
+    }
+
+    return newSession;
+  } catch (error) {
+    console.error("Error in scrapeAndMergeSessions:", error);
+    
+    // Return existing session if scraping fails
+    if (existingSession) {
+      return existingSession;
+    }
+    
+    return {
+      date: "Unknown",
+      report_id: "unknown",
+      url_type: "report",
+      club_groups: [],
+      metric_names: [],
+      metadata_params: {},
+    };
   }
 }
 
