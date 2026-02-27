@@ -5,7 +5,7 @@ set -e
 
 DIST_DIR="dist"
 
-echo "Building Trackman Scraper Chrome Extension..."
+echo "Building TrackPull Chrome Extension..."
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/icons"
 
@@ -15,9 +15,9 @@ else
     cat > "$DIST_DIR/manifest.json" << 'MANIFEST'
 {
   "manifest_version": 3,
-  "name": "Trackman Scraper",
+  "name": "TrackPull",
   "version": "1.0.0",
-  "description": "Extract shot data from Trackman reports",
+  "description": "Pull shot data from Trackman reports",
 "permissions": ["storage", "downloads"],
     "host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"],
     "background": {"service_worker": "background.js"},
