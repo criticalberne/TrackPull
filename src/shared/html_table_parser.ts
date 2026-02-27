@@ -11,7 +11,7 @@ import {
   CSS_RESULTS_TABLE,
   CSS_RESULTS_WRAPPER,
   CSS_SHOT_DETAIL_ROW,
-} from "./constants";
+} from "./constants.ts";
 
 interface HTMLElementHandle {
   innerText: string;
@@ -132,7 +132,10 @@ export class TableParser {
   find_elements_by_css(css_selector: string): HTMLElement[] {
     try {
       const elements = this.document.querySelectorAll(css_selector);
-      return Array.from(elements);
+      if (Array.isArray(elements)) {
+        return elements;
+      }
+      return Array.from(elements as unknown as Iterable<HTMLElement>);
     } catch (e) {
       console.error(`Error finding elements with selector '${css_selector}':`, e);
       return [];
@@ -347,16 +350,29 @@ export class TableParser {
       return new TableExtractionResult("Unknown", [], []);
     }
 
-    const tables = wrapper.querySelectorAll(table_selector);
-    if (tables.length === 0) {
+    const tablesRaw = wrapper.querySelectorAll(table_selector);
+    let tables: HTMLElement[];
+    if (Array.isArray(tablesRaw)) {
+      tables = tablesRaw;
+    } else {
+      tables = Array.from(tablesRaw as unknown as Iterable<HTMLElement>);
+    }
+    
+    if (!tables || tables.length === 0) {
       console.warn(`No tables found in wrapper: ${table_selector}`);
       return new TableExtractionResult("Unknown", [], []);
     }
 
     const table = tables[0];
-    const rows = Array.from(table.querySelectorAll(row_selector)) as HTMLElement[];
+    const rawRows = table.querySelectorAll(row_selector);
+    let rows: HTMLElement[];
+    if (Array.isArray(rawRows)) {
+      rows = rawRows;
+    } else {
+      rows = Array.from(rawRows as unknown as Iterable<HTMLElement>);
+    }
 
-    if (rows.length === 0) {
+    if (!rows || rows.length === 0) {
       console.warn("No rows found in table");
       return new TableExtractionResult("Unknown", [], []);
     }
@@ -390,7 +406,10 @@ export class TableParser {
 
     for (let i = start_row_idx; i < rows.length; i++) {
       const row = rows[i];
-      const cells = Array.from(row.querySelectorAll(cell_selector)) as HTMLElement[];
+      const rawCells = row.querySelectorAll(cell_selector);
+      const cells: HTMLElement[] = Array.isArray(rawCells) 
+        ? rawCells 
+        : Array.from(rawCells as unknown as Iterable<HTMLElement>);
 
       if (cells.length === 0) continue;
 
