@@ -81,7 +81,7 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Unit test: API payload parsing with captured JSON
 - [x] Unit test: CSV column ordering
 - [x] Integration test: mock payload → CSV snapshot
-- [ ] Manual smoke: extension loads in Chrome without console errors
+- [x] Manual smoke: extension loads in Chrome without console errors
 
 ## Packaging & Release
 - [ ] Build production zip containing only extension assets
