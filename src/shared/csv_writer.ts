@@ -219,18 +219,39 @@ export function writeCsv(
     }),
   ].join("\n");
 
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
+  try {
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
 
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 
-  console.log(`Trackman Scraper: Wrote ${rows.length} rows to ${filename}`);
-  return filename;
+    console.log(`Trackman Scraper: Wrote ${rows.length} rows to ${filename}`);
+    return filename;
+  } catch (error) {
+    console.error("Trackman Scraper: CSV export failed:", error);
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const container = document.getElementById('toast-container');
+      if (container) {
+        const toast = document.createElement('div');
+        toast.className = 'toast error';
+        toast.textContent = 'Failed to export CSV: ' + (error instanceof Error ? error.message : String(error));
+        toast.setAttribute('role', 'alert');
+        container.appendChild(toast);
+        setTimeout(() => {
+          if (toast.parentNode) {
+            toast.classList.add('hiding');
+            setTimeout(() => toast.remove(), 300);
+          }
+        }, 5000);
+      }
+    }
+    throw error;
+  }
 }

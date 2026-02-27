@@ -324,6 +324,9 @@ var APIInterceptor = class {
         new Promise((resolve) => setTimeout(resolve, 15e3))
       ]);
       await new Promise((resolve) => setTimeout(resolve, 1e3));
+    } catch (error) {
+      console.error("Trackman Scraper: Capture failed:", error);
+      chrome.runtime?.sendMessage({ type: "CAPTURE_ERROR", message: "Failed to capture data from page" });
     } finally {
       page.off("response", handler);
     }
