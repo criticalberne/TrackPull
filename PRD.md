@@ -68,9 +68,9 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Export via Chrome Downloads API
 
 ## Extension Storage + Popup UX
-- [ ] Align storage keys between background and popup
-- [ ] Update real-time shot count in popup
-- [ ] Export button triggers CSV generation
+- [x] Align storage keys between background and popup
+- [x] Update real-time shot count in popup
+- [x] Export button triggers CSV generation
 - [ ] Clear button clears session data
 - [ ] Show toast for capture/export errors
 

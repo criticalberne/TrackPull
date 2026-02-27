@@ -16,6 +16,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.log("Popup loaded data:", data ? "has data" : "no data");
 
     updateShotCount(data);
+    updateExportButtonVisibility(data);
+
+    chrome.runtime.onMessage.addListener((message: { type: string; data?: unknown }) => {
+      if (message.type === 'DATA_UPDATED') {
+        updateShotCount(message.data);
+        updateExportButtonVisibility(message.data);
+      }
+      return true;
+    });
+
+    const exportBtn = document.getElementById("export-btn");
+    if (exportBtn) {
+      exportBtn.addEventListener("click", handleExportClick);
+    }
   } catch (error) {
     console.error("Error loading popup data:", error);
     showStatusMessage("Error loading shot count", true);
@@ -48,6 +62,77 @@ function updateShotCount(data: unknown): void {
   }
 
   shotCountElement.textContent = totalShots.toString();
+}
+
+function updateExportButtonVisibility(data: unknown): void {
+  const exportBtn = document.getElementById("export-btn");
+  if (!exportBtn) return;
+
+  const hasValidData = data && typeof data === "object" && 
+    (data as Record<string, unknown>)["club_groups"];
+  
+  exportBtn.style.display = hasValidData ? "block" : "none";
+}
+
+async function handleExportClick(): Promise<void> {
+  const exportBtn = document.getElementById("export-btn");
+  if (!exportBtn) return;
+
+  showStatusMessage("Preparing CSV...", false);
+  exportBtn.disabled = true;
+
+  try {
+    const result = await new Promise<Record<string, unknown>>((resolve) => {
+      chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA], resolve);
+    });
+
+    const data = result[STORAGE_KEYS.TRACKMAN_DATA];
+    
+    if (!data || typeof data !== "object") {
+      showStatusMessage("No data to export", true);
+      exportBtn.disabled = false;
+      return;
+    }
+
+    const sessionData = data as Record<string, unknown>;
+    const clubGroups = sessionData["club_groups"] as Array<Record<string, unknown>> | undefined;
+
+    if (!clubGroups || !Array.isArray(clubGroups)) {
+      showStatusMessage("No valid data to export", true);
+      exportBtn.disabled = false;
+      return;
+    }
+
+    const message = await new Promise<{ type: string; csvContent: string; filename: string }>((resolve) => {
+      chrome.runtime.sendMessage({ type: 'EXPORT_CSV_REQUEST' }, (response) => {
+        resolve(response);
+      });
+    });
+
+    if (!message || !message.csvContent) {
+      showStatusMessage("Failed to generate CSV", true);
+      exportBtn.disabled = false;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      chrome.runtime.sendMessage({ type: 'EXPORT_CSV', csvContent: message.csvContent, filename: message.filename }, (response) => {
+        if (response && response.success) {
+          showStatusMessage(`Exported successfully: ${message.filename}`, false);
+        } else {
+          const errorMsg = response?.error || "Download failed";
+          showStatusMessage(errorMsg, true);
+        }
+        exportBtn.disabled = false;
+        resolve();
+      });
+    });
+
+  } catch (error) {
+    console.error("Error during export:", error);
+    showStatusMessage("Export failed", true);
+    exportBtn.disabled = false;
+  }
 }
 
 function showStatusMessage(message: string, isError: boolean = false): void {
