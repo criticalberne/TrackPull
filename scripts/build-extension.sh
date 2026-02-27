@@ -38,6 +38,10 @@ npx --yes esbuild src/content/interceptor.ts --bundle --outfile="$DIST_DIR/inter
 
 echo "Content script bundled to $DIST_DIR/interceptor.js"
 
+npx --yes esbuild src/content/html_scraping.ts --bundle --outfile="$DIST_DIR/html_scraping.js" --format=esm || { echo 'Error: Failed to build html_scraping.js' >&2; exit 1; }
+
+echo "HTML scraping content script bundled to $DIST_DIR/html_scraping.js"
+
 npx --yes esbuild src/popup/popup.ts --bundle --outfile="$DIST_DIR/popup.js" --format=iife || { echo 'Error: Failed to build popup.js' >&2; exit 1; }
 
 echo "Popup script bundled to $DIST_DIR/popup.js"
