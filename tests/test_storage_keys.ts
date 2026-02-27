@@ -4,6 +4,8 @@
 
 import { strict as assert } from "assert";
 import { STORAGE_KEYS } from "../src/shared/constants";
+import * as fs from "fs";
+import * as path from "path";
 
 // Test that storage keys exist and have correct values
 console.log("Testing STORAGE_KEYS constant...\n");
@@ -20,10 +22,6 @@ function testStorageKeysExist() {
 function testStorageKeysUsageInBackground() {
   console.log("Test: Background service worker should use STORAGE_KEYS...");
   
-  // Read the serviceWorker.ts file and verify it uses STORAGE_KEYS
-  const fs = require('fs');
-  const path = require('path');
-  
   const serviceWorkerPath = path.join(__dirname, '../src/background/serviceWorker.ts');
   const content = fs.readFileSync(serviceWorkerPath, 'utf8');
   
@@ -35,9 +33,6 @@ function testStorageKeysUsageInBackground() {
 
 function testStorageKeysUsageInPopup() {
   console.log("Test: Popup should use STORAGE_KEYS...");
-  
-  const fs = require('fs');
-  const path = require('path');
   
   const popupPath = path.join(__dirname, '../src/popup/popup.ts');
   const content = fs.readFileSync(popupPath, 'utf8');
@@ -51,18 +46,11 @@ function testStorageKeysUsageInPopup() {
 function testStorageKeysConsistency() {
   console.log("Test: Storage key consistency between components...");
   
-  const fs = require('fs');
-  const path = require('path');
-  
-  // Read both files
   const serviceWorkerPath = path.join(__dirname, '../src/background/serviceWorker.ts');
   const popupPath = path.join(__dirname, '../src/popup/popup.ts');
   
   const serviceWorkerContent = fs.readFileSync(serviceWorkerPath, 'utf8');
   const popupContent = fs.readFileSync(popupPath, 'utf8');
-  
-// Both should reference the constant (which resolves to 'trackmanData')
-  // We check for STORAGE_KEYS usage which is the aligned approach
   
   assert(
     serviceWorkerContent.includes('STORAGE_KEYS'),
@@ -86,7 +74,8 @@ try {
   console.log("\n=========================================");
   console.log("All storage key alignment tests passed! ✓");
   console.log("=========================================\n");
-} catch (error) {
-  console.error("\n❌ Test failed:", error.message);
+} catch (error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  console.error("\n❌ Test failed:", errorMessage);
   process.exit(1);
 }
