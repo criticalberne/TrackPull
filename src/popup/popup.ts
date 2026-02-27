@@ -18,6 +18,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateShotCount(data);
     updateExportButtonVisibility(data);
 
+    // Unit toggle: read saved preference (default imperial)
+    const prefResult = await new Promise<Record<string, unknown>>((resolve) => {
+      chrome.storage.local.get([STORAGE_KEYS.UNIT_PREF], resolve);
+    });
+    const savedPref = (prefResult[STORAGE_KEYS.UNIT_PREF] as string) || "imperial";
+
+    const unitToggle = document.getElementById("unit-toggle") as HTMLInputElement | null;
+    if (unitToggle) {
+      unitToggle.checked = savedPref === "imperial";
+      updateToggleLabels(unitToggle.checked);
+
+      unitToggle.addEventListener("change", () => {
+        const pref = unitToggle.checked ? "imperial" : "metric";
+        chrome.storage.local.set({ [STORAGE_KEYS.UNIT_PREF]: pref });
+        updateToggleLabels(unitToggle.checked);
+      });
+    }
+
     chrome.runtime.onMessage.addListener((message: { type: string; data?: unknown }) => {
       if (message.type === 'DATA_UPDATED') {
         updateShotCount(message.data);
@@ -80,62 +98,28 @@ function updateExportButtonVisibility(data: unknown): void {
 }
 
 async function handleExportClick(): Promise<void> {
-  const exportBtn = document.getElementById("export-btn");
+  const exportBtn = document.getElementById("export-btn") as HTMLButtonElement | null;
   if (!exportBtn) return;
 
   showStatusMessage("Preparing CSV...", false);
   exportBtn.disabled = true;
 
   try {
-    const result = await new Promise<Record<string, unknown>>((resolve) => {
-      chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA], resolve);
-    });
-
-    const data = result[STORAGE_KEYS.TRACKMAN_DATA];
-    
-    if (!data || typeof data !== "object") {
-      showToast("No data to export", "error");
-      exportBtn.disabled = false;
-      return;
-    }
-
-    const sessionData = data as Record<string, unknown>;
-    const clubGroups = sessionData["club_groups"] as Array<Record<string, unknown>> | undefined;
-
-    if (!clubGroups || !Array.isArray(clubGroups)) {
-      showToast("No valid data to export", "error");
-      exportBtn.disabled = false;
-      return;
-    }
-
-    const message = await new Promise<{ type: string; csvContent: string; filename: string }>((resolve) => {
-      chrome.runtime.sendMessage({ type: 'EXPORT_CSV_REQUEST' }, (response) => {
-        resolve(response);
+    const response = await new Promise<{ success: boolean; error?: string; filename?: string }>((resolve) => {
+      chrome.runtime.sendMessage({ type: "EXPORT_CSV_REQUEST" }, (resp) => {
+        resolve(resp || { success: false, error: "No response from service worker" });
       });
     });
 
-    if (!message || !message.csvContent) {
-      showToast("Failed to generate CSV", "error");
-      exportBtn.disabled = false;
-      return;
+    if (response.success) {
+      showToast(`Exported successfully: ${response.filename || "trackman.csv"}`, "success");
+    } else {
+      showToast(response.error || "Export failed", "error");
     }
-
-    await new Promise<void>((resolve) => {
-      chrome.runtime.sendMessage({ type: 'EXPORT_CSV', csvContent: message.csvContent, filename: message.filename }, (response) => {
-        if (response && response.success) {
-          showToast(`Exported successfully: ${message.filename}`, "success");
-        } else {
-          const errorMsg = response?.error || "Download failed";
-          showToast(errorMsg, "error");
-        }
-        exportBtn.disabled = false;
-        resolve();
-      });
-    });
-
   } catch (error) {
     console.error("Error during export:", error);
     showToast("Export failed", "error");
+  } finally {
     exportBtn.disabled = false;
   }
 }
@@ -174,8 +158,15 @@ function showStatusMessage(message: string, isError: boolean = false): void {
   statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
 }
 
+function updateToggleLabels(isImperial: boolean): void {
+  const metricLabel = document.getElementById("label-metric");
+  const imperialLabel = document.getElementById("label-imperial");
+  if (metricLabel) metricLabel.classList.toggle("active", !isImperial);
+  if (imperialLabel) imperialLabel.classList.toggle("active", isImperial);
+}
+
 async function handleClearClick(): Promise<void> {
-  const clearBtn = document.getElementById("clear-btn");
+  const clearBtn = document.getElementById("clear-btn") as HTMLButtonElement | null;
   if (!clearBtn) return;
 
   showStatusMessage("Clearing session data...", false);
