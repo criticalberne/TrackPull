@@ -62,9 +62,9 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 ## CSV Export
 - [x] Use `mp[]` to enforce CSV column order
 - [x] Map metric names to display labels (Python `METRIC_DISPLAY_NAMES`)
-- [ ] Include core columns: Date, Report ID, Club, Shot #, Type
-- [ ] Include Tag column if present in payload
-- [ ] Ensure values align with report units/normalization params
+- [x] Include core columns: Date, Report ID, Club, Shot #, Type
+- [x] Include Tag column if present in payload
+- [x] Ensure values align with report units/normalization params
 - [ ] Export via Chrome Downloads API
 
 ## Extension Storage + Popup UX

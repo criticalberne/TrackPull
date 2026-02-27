@@ -2,7 +2,7 @@
  * Data models for Trackman session data.
  */
 
-export type MetricValue = string | number | null;
+import { type MetricValue } from "../shared/unit_normalization";
 
 export interface Shot {
   shot_number: number;
