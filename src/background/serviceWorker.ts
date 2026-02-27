@@ -108,7 +108,7 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         const unitPref = (result[STORAGE_KEYS.UNIT_PREF] as string) || "imperial";
         const exportData = unitPref === "imperial" ? toImperialSession(data) : data;
         const csvContent = writeCsv(exportData);
-        const filename = `trackman_${data.report_id || "export"}.csv`;
+        const filename = `${data.date || "unknown"}_TrackmanData.csv`;
 
         chrome.downloads.download(
           {

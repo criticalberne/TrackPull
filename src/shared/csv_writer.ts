@@ -1,6 +1,6 @@
 /**
  * CSV writer for Trackman session data.
- * Implements core columns: Date, Report ID, Club, Shot #, Type
+ * Implements core columns: Date, Club, Shot #, Type
  */
 
 import type { SessionData, ClubGroup, Shot } from "../models/types";
@@ -8,56 +8,33 @@ import {
   getUnitSystem,
   normalizeMetricValue,
 } from "./unit_normalization";
+import { METRIC_DISPLAY_NAMES } from "./constants";
 
-export const METRIC_DISPLAY_NAMES: Record<string, string> = {
-  ClubSpeed: "Club Speed",
-  BallSpeed: "Ball Speed",
-  SmashFactor: "Smash Factor",
-  AttackAngle: "Attack Angle",
-  ClubPath: "Club Path",
-  FaceAngle: "Face Angle",
-  FaceToPath: "Face To Path",
-  SwingDirection: "Swing Direction",
-  DynamicLoft: "Dynamic Loft",
-  SpinRate: "Spin Rate",
-  SpinAxis: "Spin Axis",
-  Carry: "Carry",
-  Total: "Total",
-  Side: "Side",
-  SideTotal: "Side Total",
-  Height: "Height",
-  LowPointDistance: "Low Point",
-  ImpactHeight: "Impact Height",
-  ImpactOffset: "Impact Offset",
-  Tempo: "Tempo",
-};
+const METRIC_COLUMN_ORDER: string[] = [
+  // Speed & Efficiency
+  "ClubSpeed", "BallSpeed", "SmashFactor",
+  // Club Delivery
+  "AttackAngle", "ClubPath", "FaceAngle", "FaceToPath", "SwingDirection", "DynamicLoft",
+  // Launch & Spin
+  "LaunchAngle", "LaunchDirection", "SpinRate", "SpinAxis", "SpinLoft",
+  // Distance
+  "Carry", "Total",
+  // Dispersion
+  "Side", "SideTotal", "CarrySide", "TotalSide", "Curve",
+  // Ball Flight
+  "Height", "MaxHeight", "LandingAngle", "HangTime",
+  // Impact
+  "LowPointDistance", "ImpactHeight", "ImpactOffset",
+  // Other
+  "Tempo",
+];
 
 function getDisplayName(metric: string): string {
   return METRIC_DISPLAY_NAMES[metric] ?? metric;
 }
 
 function generateFilename(session: SessionData): string {
-  const base = `trackman_${session.report_id}`;
-
-  if (!Object.keys(session.metadata_params).length) {
-    return `${base}.csv`;
-  }
-
-  const ndValues: string[] = [];
-  for (const [key, value] of Object.entries(session.metadata_params)) {
-    const match = key.match(/^nd_([a-z0-9]+)$/);
-    if (match) {
-      ndValues.push(`nd${match[1]}${value}`);
-    }
-  }
-
-  ndValues.sort();
-
-  if (ndValues.length > 0) {
-    return `${base}_${ndValues.join("_")}.csv`;
-  }
-
-  return `${base}.csv`;
+  return `${session.date}_TrackmanData.csv`;
 }
 
 function orderMetricsByPriority(
@@ -97,11 +74,12 @@ export function writeCsv(
 ): string {
   const filename = outputFilename ?? generateFilename(session);
 
-  const orderedMetrics = metricOrder
-    ? orderMetricsByPriority(session.metric_names, metricOrder)
-    : session.metric_names;
+  const orderedMetrics = orderMetricsByPriority(
+    session.metric_names,
+    metricOrder ?? METRIC_COLUMN_ORDER
+  );
 
-  const headerRow: string[] = ["Date", "Report ID", "Club"];
+  const headerRow: string[] = ["Date", "Club"];
   
   if (hasTags(session)) {
     headerRow.push("Tag");
@@ -119,7 +97,6 @@ export function writeCsv(
     for (const shot of club.shots) {
       const row: Record<string, string> = {
         Date: session.date,
-        "Report ID": session.report_id,
         Club: club.club_name,
         "Shot #": String(shot.shot_number + 1),
         Type: "Shot",
@@ -150,7 +127,6 @@ export function writeCsv(
     if (includeAverages && Object.keys(club.averages).length > 0) {
       const avgRow: Record<string, string> = {
         Date: session.date,
-        "Report ID": session.report_id,
         Club: club.club_name,
         "Shot #": "",
         Type: "Average",
@@ -178,7 +154,6 @@ export function writeCsv(
     if (includeAverages && Object.keys(club.consistency).length > 0) {
       const consRow: Record<string, string> = {
         Date: session.date,
-        "Report ID": session.report_id,
         Club: club.club_name,
         "Shot #": "",
         Type: "Consistency",
@@ -219,39 +194,5 @@ export function writeCsv(
     }),
   ].join("\n");
 
-  try {
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    console.log(`Trackman Scraper: Wrote ${rows.length} rows to ${filename}`);
-    return filename;
-  } catch (error) {
-    console.error("Trackman Scraper: CSV export failed:", error);
-    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-      const container = document.getElementById('toast-container');
-      if (container) {
-        const toast = document.createElement('div');
-        toast.className = 'toast error';
-        toast.textContent = 'Failed to export CSV: ' + (error instanceof Error ? error.message : String(error));
-        toast.setAttribute('role', 'alert');
-        container.appendChild(toast);
-        setTimeout(() => {
-          if (toast.parentNode) {
-            toast.classList.add('hiding');
-            setTimeout(() => toast.remove(), 300);
-          }
-        }, 5000);
-      }
-    }
-    throw error;
-  }
+  return csvContent;
 }
