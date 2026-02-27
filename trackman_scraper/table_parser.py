@@ -2,11 +2,19 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from playwright.async_api import ElementHandle, Page
 
 logger = logging.getLogger(__name__)
+
+
+class TableExtractionResult(NamedTuple):
+    """Structured result of extracting club name, headers, and rows from a table."""
+
+    club_name: str
+    metric_headers: list[str]
+    shot_rows: list[dict[str, str]]
 
 
 @dataclass
@@ -214,6 +222,101 @@ class TableParser:
                 names.append(name)
 
         return names
+
+    async def extract_club_and_metrics(
+        self,
+        wrapper_selector: str,
+        table_selector: str,
+        row_selector: str,
+        cell_selector: str = "td",
+        param_names_row_selector: Optional[str] = None,
+        param_name_selector: Optional[str] = None,
+    ) -> TableExtractionResult:
+        """Extract club name, metric headers, and shot rows from a table.
+
+        Args:
+            wrapper_selector: CSS selector for the table container/wrapper element.
+            table_selector: CSS selector for individual table elements within wrapper.
+            row_selector: CSS selector for rows within each table.
+            cell_selector: CSS selector for cells within rows (default: "td").
+            param_names_row_selector: Optional CSS selector for metric names header row.
+            param_name_selector: CSS selector for metric names.
+
+        Returns:
+            TableExtractionResult with club_name, metric_headers, and shot_rows.
+        """
+        wrapper = await self.find_element_by_css(wrapper_selector)
+        if not wrapper:
+            logger.warning(f"Wrapper element not found: {wrapper_selector}")
+            return TableExtractionResult(
+                club_name="Unknown",
+                metric_headers=[],
+                shot_rows=[],
+            )
+
+        tables = await wrapper.query_selector_all(table_selector)
+        if not tables:
+            logger.warning(f"No tables found in wrapper: {table_selector}")
+            return TableExtractionResult(
+                club_name="Unknown",
+                metric_headers=[],
+                shot_rows=[],
+            )
+
+        table = tables[0]
+        rows = await table.query_selector_all(row_selector)
+
+        if not rows:
+            logger.warning("No rows found in table")
+            return TableExtractionResult(
+                club_name="Unknown",
+                metric_headers=[],
+                shot_rows=[],
+            )
+
+        # Extract club name from first cell of first row
+        first_row_cells = await rows[0].query_selector_all(cell_selector)
+        club_name = (
+            (await first_row_cells[0].inner_text()).strip()
+            if first_row_cells
+            else "Unknown"
+        )
+
+        # Extract metric headers from parameter names row if provided
+        metric_headers: list[str] = []
+        if param_names_row_selector and param_name_selector:
+            param_row = await self.find_element_by_css(param_names_row_selector)
+            if param_row:
+                metric_headers = await self.extract_metric_names(
+                    param_row, name_selector=param_name_selector
+                )
+
+        # Extract shot rows, skip header rows
+        shot_rows: list[dict[str, str]] = []
+        start_row_idx = 1 if metric_headers else 0
+
+        for i in range(start_row_idx, len(rows)):
+            row = rows[i]
+            cells = await row.query_selector_all(cell_selector)
+
+            if not cells:
+                continue
+
+            # Create dict mapping headers to cell values
+            row_data: dict[str, str] = {}
+            for j, header in enumerate(metric_headers):
+                if j < len(cells):
+                    value = (await cells[j].inner_text()).strip()
+                    row_data[header] = value
+
+            if row_data or metric_headers:
+                shot_rows.append(row_data)
+
+        return TableExtractionResult(
+            club_name=club_name,
+            metric_headers=metric_headers,
+            shot_rows=shot_rows,
+        )
 
 
 async def _extract_text(element: Optional[ElementHandle]) -> str:
