@@ -84,7 +84,7 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Manual smoke: extension loads in Chrome without console errors
 
 ## Packaging & Release
-- [ ] Build production zip containing only extension assets
+- [x] Build production zip containing only extension assets
 - [ ] Update README with unpacked install steps and report URL usage
 - [ ] Add screenshots for release readiness
 
