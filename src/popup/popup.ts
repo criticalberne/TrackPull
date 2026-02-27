@@ -112,7 +112,7 @@ async function handleExportClick(): Promise<void> {
     });
 
     if (response.success) {
-      showToast(`Exported successfully: ${response.filename || "trackman.csv"}`, "success");
+      showToast(`Exported successfully: ${response.filename || "ShotData.csv"}`, "success");
     } else {
       showToast(response.error || "Export failed", "error");
     }
