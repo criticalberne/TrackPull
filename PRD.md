@@ -85,6 +85,6 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 
 ## Packaging & Release
 - [x] Build production zip containing only extension assets
-- [ ] Update README with unpacked install steps and report URL usage
-- [ ] Add screenshots for release readiness
+- [x] Update README with unpacked install steps and report URL usage
+- [x] Add screenshots for release readiness (scripts/capture-screenshots.sh)
 
