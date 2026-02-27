@@ -1,5 +1,5 @@
 /**
- * CSV writer for Trackman session data.
+ * CSV writer for TrackPull session data.
  * Implements core columns: Date, Club, Shot #, Type
  */
 
@@ -34,7 +34,7 @@ function getDisplayName(metric: string): string {
 }
 
 function generateFilename(session: SessionData): string {
-  return `${session.date}_TrackmanData.csv`;
+  return `ShotData_${session.date}.csv`;
 }
 
 function orderMetricsByPriority(

@@ -1,18 +1,25 @@
 {
   "manifest_version": 3,
-  "name": "Trackman Scraper",
+  "name": "TrackPull",
   "version": "1.0.0",
-  "description": "Extract shot data from Trackman reports",
-  "permissions": ["storage"],
+  "description": "Pull shot data from Trackman reports",
+  "permissions": ["storage", "downloads"],
   "host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"],
   "background": {"service_worker": "background.js"},
   "content_scripts": [
     {
       "matches": ["https://web-dynamic-reports.trackmangolf.com/*"],
       "js": ["interceptor.js"],
-      "run_at": "document_idle",
+      "run_at": "document_start",
       "all_frames": false,
       "world": "MAIN"
+    },
+    {
+      "matches": ["https://web-dynamic-reports.trackmangolf.com/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false,
+      "world": "ISOLATED"
     }
   ],
   "action": {

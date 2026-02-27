@@ -1,5 +1,5 @@
 /**
- * Service Worker for Trackman Scraper Chrome Extension
+ * Service Worker for TrackPull Chrome Extension
  */
 
 import { STORAGE_KEYS } from "../shared/constants";
@@ -7,7 +7,7 @@ import { writeCsv } from "../shared/csv_writer";
 import type { SessionData } from "../models/types";
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("Trackman Scraper extension installed");
+  console.log("TrackPull extension installed");
 });
 
 interface SaveDataRequest {
@@ -86,10 +86,10 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
     const sessionData = (message as SaveDataRequest).data;
     chrome.storage.local.set({ [STORAGE_KEYS.TRACKMAN_DATA]: sessionData }, () => {
       if (chrome.runtime.lastError) {
-        console.error("Trackman Scraper: Failed to save data:", chrome.runtime.lastError);
+        console.error("TrackPull: Failed to save data:", chrome.runtime.lastError);
         sendResponse({ success: false, error: chrome.runtime.lastError.message });
       } else {
-        console.log("Trackman Scraper: Session data saved to storage");
+        console.log("TrackPull: Session data saved to storage");
         sendResponse({ success: true });
       }
     });
@@ -108,7 +108,7 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         const unitPref = (result[STORAGE_KEYS.UNIT_PREF] as string) || "imperial";
         const exportData = unitPref === "imperial" ? toImperialSession(data) : data;
         const csvContent = writeCsv(exportData);
-        const filename = `${data.date || "unknown"}_TrackmanData.csv`;
+        const filename = `ShotData_${data.date || "unknown"}.csv`;
 
         chrome.downloads.download(
           {
@@ -118,17 +118,17 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
           },
           (downloadId) => {
             if (chrome.runtime.lastError) {
-              console.error("Trackman Scraper: Download failed:", chrome.runtime.lastError);
+              console.error("TrackPull: Download failed:", chrome.runtime.lastError);
               const errorMessage = getDownloadErrorMessage(chrome.runtime.lastError.message);
               sendResponse({ success: false, error: errorMessage });
             } else {
-              console.log(`Trackman Scraper: CSV exported with download ID ${downloadId}`);
+              console.log(`TrackPull: CSV exported with download ID ${downloadId}`);
               sendResponse({ success: true, downloadId, filename });
             }
           }
         );
       } catch (error) {
-        console.error("Trackman Scraper: CSV generation failed:", error);
+        console.error("TrackPull: CSV generation failed:", error);
         sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
       }
     });

@@ -168,7 +168,7 @@ function parseSessionData(data: Record<string, unknown>, sourceUrl: string): Ses
     session.metric_names = Array.from(allMetricNames).sort();
     return session.club_groups.length > 0 ? session : null;
   } catch (error) {
-    console.error("Trackman Scraper: Parsing failed:", error);
+    console.error("TrackPull: Parsing failed:", error);
     return null;
   }
 }
@@ -206,7 +206,7 @@ function postSession(session: SessionData): void {
   window.postMessage(
     {
       type: "TRACKMAN_SHOT_DATA",
-      source: "trackman-scraper-interceptor",
+      source: "trackpull-interceptor",
       data: session,
     },
     "*"
@@ -215,7 +215,7 @@ function postSession(session: SessionData): void {
   const taggedShots = session.club_groups.reduce(
     (n, g) => n + g.shots.filter(s => s.tag).length, 0
   );
-  console.log("Trackman Scraper: SessionData posted to bridge", {
+  console.log("TrackPull: SessionData posted to bridge", {
     clubs: session.club_groups.length,
     metrics: session.metric_names.length,
     shots: totalShots,
@@ -235,9 +235,9 @@ function waitForTagsThenPost(session: SessionData): void {
     if (tags.length >= expectedCount || elapsed >= MAX_WAIT) {
       if (tags.length > 0) {
         applyGroupTags(session, tags);
-        console.log("Trackman Scraper: Applied DOM group tags:", tags);
+        console.log("TrackPull: Applied DOM group tags:", tags);
       } else {
-        console.log("Trackman Scraper: No .group-tag elements found in DOM, posting without tags");
+        console.log("TrackPull: No .group-tag elements found in DOM, posting without tags");
       }
       postSession(session);
       return;
@@ -257,7 +257,7 @@ function waitForTagsThenPost(session: SessionData): void {
 function handleCapturedJson(body: unknown, url: string): void {
   if (!containsStrokegroups(body)) return;
 
-  console.log("Trackman Scraper: Shot data detected in:", url);
+  console.log("TrackPull: Shot data detected in:", url);
   const data = body as Record<string, unknown>;
   const session = parseSessionData(data, url);
   if (session) {
@@ -312,6 +312,6 @@ function handleCapturedJson(body: unknown, url: string): void {
     return (originalSend as any).apply(this, args);
   };
 
-  console.log("Trackman Scraper: fetch interceptor active");
-  console.log("Trackman Scraper: XHR interceptor active");
+  console.log("TrackPull: fetch interceptor active");
+  console.log("TrackPull: XHR interceptor active");
 })();

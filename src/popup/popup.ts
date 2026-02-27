@@ -1,11 +1,11 @@
 /**
- * Popup UI logic for Trackman Scraper Extension
+ * Popup UI logic for TrackPull Extension
  */
 
 import { STORAGE_KEYS } from "../shared/constants";
 
 document.addEventListener("DOMContentLoaded", async () => {
-  console.log("Trackman Scraper popup initialized");
+  console.log("TrackPull popup initialized");
 
   try {
     const result = await new Promise<Record<string, unknown>>((resolve) => {
