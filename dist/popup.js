@@ -26,6 +26,10 @@
       if (exportBtn) {
         exportBtn.addEventListener("click", handleExportClick);
       }
+      const clearBtn = document.getElementById("clear-btn");
+      if (clearBtn) {
+        clearBtn.addEventListener("click", handleClearClick);
+      }
     } catch (error) {
       console.error("Error loading popup data:", error);
       showStatusMessage("Error loading shot count", true);
@@ -114,5 +118,30 @@
     if (!statusElement) return;
     statusElement.textContent = message;
     statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
+  }
+  async function handleClearClick() {
+    const clearBtn = document.getElementById("clear-btn");
+    if (!clearBtn) return;
+    showStatusMessage("Clearing session data...", false);
+    clearBtn.disabled = true;
+    try {
+      await new Promise((resolve, reject) => {
+        chrome.storage.local.remove(STORAGE_KEYS.TRACKMAN_DATA, () => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve();
+          }
+        });
+      });
+      updateShotCount(null);
+      updateExportButtonVisibility(null);
+      showStatusMessage("Session data cleared", false);
+    } catch (error) {
+      console.error("Error clearing session data:", error);
+      showStatusMessage("Failed to clear data", true);
+    } finally {
+      clearBtn.disabled = false;
+    }
   }
 })();
