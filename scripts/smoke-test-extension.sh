@@ -6,7 +6,7 @@ set -e
 DIST_DIR="dist"
 EXTENSION_PATH="$(cd "$DIST_DIR" && pwd)"
 
-echo "=== Trackman Scraper Extension Smoke Test ==="
+echo "=== TrackPull Extension Smoke Test ==="
 echo ""
 echo "Extension path: $EXTENSION_PATH"
 echo ""
