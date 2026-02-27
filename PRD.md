@@ -72,15 +72,15 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Update real-time shot count in popup
 - [x] Export button triggers CSV generation
 - [x] Clear button clears session data
-- [ ] Show toast for capture/export errors
+- [x] Show toast for capture/export errors
 
 ## Testing & Quality
 - [x] Unit test: URL parsing for `r`, `a`, `ReportId`
 - [x] Unit test: `mp[]` ordering preserved
 - [x] Unit test: `sgos[]` filtering
-- [ ] Unit test: API payload parsing with captured JSON
-- [ ] Unit test: CSV column ordering
-- [ ] Integration test: mock payload → CSV snapshot
+- [x] Unit test: API payload parsing with captured JSON
+- [x] Unit test: CSV column ordering
+- [x] Integration test: mock payload → CSV snapshot
 - [ ] Manual smoke: extension loads in Chrome without console errors
 
 ## Packaging & Release
