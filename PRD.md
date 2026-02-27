@@ -65,7 +65,7 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Include core columns: Date, Report ID, Club, Shot #, Type
 - [x] Include Tag column if present in payload
 - [x] Ensure values align with report units/normalization params
-- [ ] Export via Chrome Downloads API
+- [x] Export via Chrome Downloads API
 
 ## Extension Storage + Popup UX
 - [ ] Align storage keys between background and popup

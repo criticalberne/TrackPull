@@ -107,3 +107,8 @@ export const DATA_LOAD_TIMEOUT = 15_000;
 
 // Trackman base URL
 export const BASE_URL = "https://web-dynamic-reports.trackmangolf.com/";
+
+// Storage keys for Chrome extension (aligned between background and popup)
+export const STORAGE_KEYS = {
+  TRACKMAN_DATA: "trackmanData",
+} as const;
