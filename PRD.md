@@ -60,8 +60,8 @@ Break large tasks into micro-tasks. Smaller tasks = better code quality.
 - [x] Merge multi-page metric groups into a single dataset
 
 ## CSV Export
-- [ ] Use `mp[]` to enforce CSV column order
-- [ ] Map metric names to display labels (Python `METRIC_DISPLAY_NAMES`)
+- [x] Use `mp[]` to enforce CSV column order
+- [x] Map metric names to display labels (Python `METRIC_DISPLAY_NAMES`)
 - [ ] Include core columns: Date, Report ID, Club, Shot #, Type
 - [ ] Include Tag column if present in payload
 - [ ] Ensure values align with report units/normalization params
