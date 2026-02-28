@@ -5,7 +5,7 @@
 import { STORAGE_KEYS } from "../shared/constants";
 import { writeCsv } from "../shared/csv_writer";
 import type { SessionData } from "../models/types";
-import type { UnitPreference } from "../shared/unit_normalization";
+import { migrateLegacyPref, DEFAULT_UNIT_CHOICE, type UnitChoice, type SpeedUnit, type DistanceUnit } from "../shared/unit_normalization";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("TrackPull extension installed");
@@ -62,7 +62,7 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
   }
 
   if (message.type === "EXPORT_CSV_REQUEST") {
-    chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA, STORAGE_KEYS.UNIT_PREF], (result) => {
+    chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA, STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, "unitPreference"], (result) => {
       const data = result[STORAGE_KEYS.TRACKMAN_DATA] as SessionData | undefined;
       if (!data || !data.club_groups || data.club_groups.length === 0) {
         sendResponse({ success: false, error: "No data to export" });
@@ -70,8 +70,16 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
       }
 
       try {
-        const unitPref = ((result[STORAGE_KEYS.UNIT_PREF] as string) || "imperial") as UnitPreference;
-        const csvContent = writeCsv(data, true, undefined, unitPref);
+        let unitChoice: UnitChoice;
+        if (result[STORAGE_KEYS.SPEED_UNIT] && result[STORAGE_KEYS.DISTANCE_UNIT]) {
+          unitChoice = {
+            speed: result[STORAGE_KEYS.SPEED_UNIT] as SpeedUnit,
+            distance: result[STORAGE_KEYS.DISTANCE_UNIT] as DistanceUnit,
+          };
+        } else {
+          unitChoice = migrateLegacyPref(result["unitPreference"] as string | undefined);
+        }
+        const csvContent = writeCsv(data, true, undefined, unitChoice);
         const filename = `ShotData_${data.date || "unknown"}.csv`;
 
         chrome.downloads.download(

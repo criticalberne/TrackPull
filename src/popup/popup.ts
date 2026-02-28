@@ -3,6 +3,7 @@
  */
 
 import { STORAGE_KEYS } from "../shared/constants";
+import { migrateLegacyPref } from "../shared/unit_normalization";
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("TrackPull popup initialized");
@@ -18,21 +19,39 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateShotCount(data);
     updateExportButtonVisibility(data);
 
-    // Unit toggle: read saved preference (default imperial)
-    const prefResult = await new Promise<Record<string, unknown>>((resolve) => {
-      chrome.storage.local.get([STORAGE_KEYS.UNIT_PREF], resolve);
+    // Unit dropdowns: read saved values, migrate from legacy key if needed
+    const unitResult = await new Promise<Record<string, unknown>>((resolve) => {
+      chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, "unitPreference"], resolve);
     });
-    const savedPref = (prefResult[STORAGE_KEYS.UNIT_PREF] as string) || "imperial";
 
-    const unitToggle = document.getElementById("unit-toggle") as HTMLInputElement | null;
-    if (unitToggle) {
-      unitToggle.checked = savedPref === "imperial";
-      updateToggleLabels(unitToggle.checked);
+    let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT] as string | undefined;
+    let distanceUnit = unitResult[STORAGE_KEYS.DISTANCE_UNIT] as string | undefined;
 
-      unitToggle.addEventListener("change", () => {
-        const pref = unitToggle.checked ? "imperial" : "metric";
-        chrome.storage.local.set({ [STORAGE_KEYS.UNIT_PREF]: pref });
-        updateToggleLabels(unitToggle.checked);
+    if (!speedUnit || !distanceUnit) {
+      const migrated = migrateLegacyPref(unitResult["unitPreference"] as string | undefined);
+      speedUnit = migrated.speed;
+      distanceUnit = migrated.distance;
+      chrome.storage.local.set({
+        [STORAGE_KEYS.SPEED_UNIT]: speedUnit,
+        [STORAGE_KEYS.DISTANCE_UNIT]: distanceUnit,
+      });
+      chrome.storage.local.remove("unitPreference");
+    }
+
+    const speedSelect = document.getElementById("speed-unit") as HTMLSelectElement | null;
+    const distanceSelect = document.getElementById("distance-unit") as HTMLSelectElement | null;
+
+    if (speedSelect) {
+      speedSelect.value = speedUnit;
+      speedSelect.addEventListener("change", () => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SPEED_UNIT]: speedSelect.value });
+      });
+    }
+
+    if (distanceSelect) {
+      distanceSelect.value = distanceUnit;
+      distanceSelect.addEventListener("change", () => {
+        chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
       });
     }
 
@@ -156,13 +175,6 @@ function showStatusMessage(message: string, isError: boolean = false): void {
 
   statusElement.textContent = message;
   statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
-}
-
-function updateToggleLabels(isImperial: boolean): void {
-  const metricLabel = document.getElementById("label-metric");
-  const imperialLabel = document.getElementById("label-imperial");
-  if (metricLabel) metricLabel.classList.toggle("active", !isImperial);
-  if (imperialLabel) imperialLabel.classList.toggle("active", isImperial);
 }
 
 async function handleClearClick(): Promise<void> {

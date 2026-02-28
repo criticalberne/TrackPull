@@ -127,66 +127,39 @@
       background-color: #d32f2f;
     }
 
-    /* Unit toggle */
-    .unit-toggle-row {
+    /* Unit selector dropdowns */
+    .unit-selectors {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
+      gap: 12px;
       margin: 16px 0;
     }
 
-    .unit-toggle-row .label {
-      font-size: 14px;
-      font-weight: 500;
-      color: #666;
-      transition: color 0.2s;
+    .unit-selectors .unit-group {
+      flex: 1;
     }
 
-    .unit-toggle-row .label.active {
-      color: #1976d2;
+    .unit-selectors label {
+      display: block;
+      font-size: 12px;
       font-weight: 600;
+      color: #666;
+      margin-bottom: 4px;
     }
 
-    .toggle-switch {
-      position: relative;
-      width: 44px;
-      height: 24px;
-    }
-
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-
-    .toggle-slider {
-      position: absolute;
+    .unit-selectors select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #1976d2;
+      border-radius: 6px;
+      background: #fff;
+      color: #333;
+      font-size: 13px;
       cursor: pointer;
-      inset: 0;
-      background-color: #1976d2;
-      border-radius: 24px;
-      transition: background-color 0.2s;
     }
 
-    .toggle-slider::before {
-      content: "";
-      position: absolute;
-      height: 18px;
-      width: 18px;
-      left: 3px;
-      bottom: 3px;
-      background-color: #fff;
-      border-radius: 50%;
-      transition: transform 0.2s;
-    }
-
-    .toggle-switch input:checked + .toggle-slider {
-      background-color: #1976d2;
-    }
-
-    .toggle-switch input:checked + .toggle-slider::before {
-      transform: translateX(20px);
+    .unit-selectors select:focus {
+      outline: 2px solid #1976d2;
+      outline-offset: -1px;
     }
   </style>
   <script src="./popup.js"></script>
@@ -197,13 +170,21 @@
     <h2>Shot Count</h2>
     <div id="shot-count" class="shot-count">Loading...</div>
   </div>
-  <div class="unit-toggle-row">
-    <span class="label" id="label-metric">Metric</span>
-    <label class="toggle-switch">
-      <input type="checkbox" id="unit-toggle" checked>
-      <span class="toggle-slider"></span>
-    </label>
-    <span class="label active" id="label-imperial">Imperial</span>
+  <div class="unit-selectors">
+    <div class="unit-group">
+      <label for="speed-unit">Speed</label>
+      <select id="speed-unit">
+        <option value="mph">mph</option>
+        <option value="m/s">m/s</option>
+      </select>
+    </div>
+    <div class="unit-group">
+      <label for="distance-unit">Distance</label>
+      <select id="distance-unit">
+        <option value="yards">yards</option>
+        <option value="meters">meters</option>
+      </select>
+    </div>
   </div>
   <button id="export-btn" style="display:none;">Export CSV</button>
   <button id="clear-btn">Clear Session Data</button>

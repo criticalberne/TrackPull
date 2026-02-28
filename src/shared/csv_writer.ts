@@ -8,7 +8,8 @@ import {
   getApiSourceUnitSystem,
   getMetricUnitLabel,
   normalizeMetricValue,
-  type UnitPreference,
+  DEFAULT_UNIT_CHOICE,
+  type UnitChoice,
 } from "./unit_normalization";
 import { METRIC_DISPLAY_NAMES } from "./constants";
 
@@ -35,9 +36,9 @@ function getDisplayName(metric: string): string {
   return METRIC_DISPLAY_NAMES[metric] ?? metric;
 }
 
-function getColumnName(metric: string, unitPref: UnitPreference): string {
+function getColumnName(metric: string, unitChoice: UnitChoice): string {
   const displayName = getDisplayName(metric);
-  const unitLabel = getMetricUnitLabel(metric, unitPref);
+  const unitLabel = getMetricUnitLabel(metric, unitChoice);
   return unitLabel ? `${displayName} (${unitLabel})` : displayName;
 }
 
@@ -78,7 +79,7 @@ export function writeCsv(
   session: SessionData,
   includeAverages = true,
   metricOrder?: string[],
-  unitPref: UnitPreference = "imperial"
+  unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE
 ): string {
   const orderedMetrics = orderMetricsByPriority(
     session.metric_names,
@@ -94,7 +95,7 @@ export function writeCsv(
   headerRow.push("Shot #", "Type");
 
   for (const metric of orderedMetrics) {
-    headerRow.push(getColumnName(metric, unitPref));
+    headerRow.push(getColumnName(metric, unitChoice));
   }
 
   const rows: Record<string, string>[] = [];
@@ -116,11 +117,11 @@ export function writeCsv(
       }
 
       for (const metric of orderedMetrics) {
-        const colName = getColumnName(metric, unitPref);
+        const colName = getColumnName(metric, unitChoice);
         const rawValue = shot.metrics[metric] ?? "";
 
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          row[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
+          row[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitChoice));
         } else {
           row[colName] = "";
         }
@@ -142,11 +143,11 @@ export function writeCsv(
       }
 
       for (const metric of orderedMetrics) {
-        const colName = getColumnName(metric, unitPref);
+        const colName = getColumnName(metric, unitChoice);
         const rawValue = club.averages[metric] ?? "";
 
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          avgRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
+          avgRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitChoice));
         } else {
           avgRow[colName] = "";
         }
@@ -168,11 +169,11 @@ export function writeCsv(
       }
 
       for (const metric of orderedMetrics) {
-        const colName = getColumnName(metric, unitPref);
+        const colName = getColumnName(metric, unitChoice);
         const rawValue = club.consistency[metric] ?? "";
 
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          consRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
+          consRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitChoice));
         } else {
           consRow[colName] = "";
         }
