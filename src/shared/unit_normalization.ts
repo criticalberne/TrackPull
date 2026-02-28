@@ -8,7 +8,7 @@
 
 export type UnitSystemId = "789012" | "789013" | "789014" | string;
 
-export type UnitPreference = "imperial" | "metric";
+export type UnitPreference = "imperial" | "metric" | "hybrid";
 
 /**
  * Trackman unit system definitions.
@@ -101,6 +101,7 @@ export const DEFAULT_UNIT_SYSTEM: UnitSystem = UNIT_SYSTEMS["789012"];
  */
 export const TARGET_UNITS: Record<UnitPreference, { speed: "mph" | "km/h" | "m/s"; distance: "yards" | "meters" }> = {
   imperial: { speed: "mph", distance: "yards" },
+  hybrid: { speed: "mph", distance: "meters" },
   metric: { speed: "m/s", distance: "meters" },
 };
 
@@ -109,6 +110,7 @@ export const TARGET_UNITS: Record<UnitPreference, { speed: "mph" | "km/h" | "m/s
  */
 export const UNIT_LABELS: Record<UnitPreference, { speed: string; distance: string; angle: string }> = {
   imperial: { speed: "mph", distance: "yds", angle: "°" },
+  hybrid: { speed: "mph", distance: "m", angle: "°" },
   metric: { speed: "m/s", distance: "m", angle: "°" },
 };
 

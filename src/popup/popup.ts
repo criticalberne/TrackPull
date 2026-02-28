@@ -18,21 +18,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateShotCount(data);
     updateExportButtonVisibility(data);
 
-    // Unit toggle: read saved preference (default imperial)
+    // Unit segmented control: read saved preference (default imperial)
     const prefResult = await new Promise<Record<string, unknown>>((resolve) => {
       chrome.storage.local.get([STORAGE_KEYS.UNIT_PREF], resolve);
     });
     const savedPref = (prefResult[STORAGE_KEYS.UNIT_PREF] as string) || "imperial";
 
-    const unitToggle = document.getElementById("unit-toggle") as HTMLInputElement | null;
-    if (unitToggle) {
-      unitToggle.checked = savedPref === "imperial";
-      updateToggleLabels(unitToggle.checked);
+    const segmented = document.getElementById("unit-segmented");
+    if (segmented) {
+      updateActiveSegment(segmented, savedPref);
 
-      unitToggle.addEventListener("change", () => {
-        const pref = unitToggle.checked ? "imperial" : "metric";
+      segmented.addEventListener("click", (e) => {
+        const btn = (e.target as HTMLElement).closest("button[data-unit]") as HTMLElement | null;
+        if (!btn) return;
+        const pref = btn.dataset.unit!;
         chrome.storage.local.set({ [STORAGE_KEYS.UNIT_PREF]: pref });
-        updateToggleLabels(unitToggle.checked);
+        updateActiveSegment(segmented, pref);
       });
     }
 
@@ -158,11 +159,10 @@ function showStatusMessage(message: string, isError: boolean = false): void {
   statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
 }
 
-function updateToggleLabels(isImperial: boolean): void {
-  const metricLabel = document.getElementById("label-metric");
-  const imperialLabel = document.getElementById("label-imperial");
-  if (metricLabel) metricLabel.classList.toggle("active", !isImperial);
-  if (imperialLabel) imperialLabel.classList.toggle("active", isImperial);
+function updateActiveSegment(container: HTMLElement, pref: string): void {
+  for (const btn of container.querySelectorAll("button[data-unit]")) {
+    btn.classList.toggle("active", (btn as HTMLElement).dataset.unit === pref);
+  }
 }
 
 async function handleClearClick(): Promise<void> {
