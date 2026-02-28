@@ -1,0 +1,28 @@
+{
+  "name": "trackv3",
+  "version": "1.0.0",
+  "description": "<p align=\"center\">   <img src=\"TrackPuller.png\" alt=\"TrackPull\" width=\"300\"> </p>",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/criticalberne/TrackPull.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/criticalberne/TrackPull/issues"
+  },
+  "homepage": "https://github.com/criticalberne/TrackPull#readme",
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

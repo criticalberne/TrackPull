@@ -8,6 +8,8 @@
 
 export type UnitSystemId = "789012" | "789013" | "789014" | string;
 
+export type UnitPreference = "imperial" | "metric";
+
 /**
  * Trackman unit system definitions.
  * Maps nd_* parameter values to actual units for each metric.
@@ -47,7 +49,7 @@ export interface UnitSystem {
   name: string;
   distanceUnit: "yards" | "meters";
   angleUnit: "degrees" | "radians";
-  speedUnit: "mph" | "km/h";
+  speedUnit: "mph" | "km/h" | "m/s";
 }
 
 /**
@@ -58,7 +60,11 @@ export const DISTANCE_METRICS = new Set([
   "Total",
   "Side",
   "SideTotal",
+  "CarrySide",
+  "TotalSide",
   "Height",
+  "MaxHeight",
+  "Curve",
   "LowPointDistance",
 ]);
 
@@ -73,6 +79,7 @@ export const ANGLE_METRICS = new Set([
   "DynamicLoft",
   "LaunchAngle",
   "LaunchDirection",
+  "LandingAngle",
 ]);
 
 /**
@@ -88,6 +95,30 @@ export const SPEED_METRICS = new Set([
  * Default unit system (Imperial - yards/degrees).
  */
 export const DEFAULT_UNIT_SYSTEM: UnitSystem = UNIT_SYSTEMS["789012"];
+
+/**
+ * Target units for each user preference.
+ */
+export const TARGET_UNITS: Record<UnitPreference, { speed: "mph" | "km/h" | "m/s"; distance: "yards" | "meters" }> = {
+  imperial: { speed: "mph", distance: "yards" },
+  metric: { speed: "m/s", distance: "meters" },
+};
+
+/**
+ * Unit labels for CSV headers, keyed by metric category and preference.
+ */
+export const UNIT_LABELS: Record<UnitPreference, { speed: string; distance: string; angle: string }> = {
+  imperial: { speed: "mph", distance: "yds", angle: "°" },
+  metric: { speed: "m/s", distance: "m", angle: "°" },
+};
+
+/**
+ * Fixed unit labels for metrics whose units don't vary by preference.
+ */
+export const FIXED_UNIT_LABELS: Record<string, string> = {
+  SpinRate: "rpm",
+  HangTime: "s",
+};
 
 /**
  * Extract nd_* parameters from metadata_params.
@@ -136,6 +167,40 @@ export function getUnitSystem(
 ): UnitSystem {
   const id = getUnitSystemId(metadataParams);
   return UNIT_SYSTEMS[id] || DEFAULT_UNIT_SYSTEM;
+}
+
+/**
+ * Get the unit system representing what the API actually returns.
+ * The API always returns speed in m/s and distance in meters,
+ * but the angle unit depends on the report's nd_001 parameter.
+ */
+export function getApiSourceUnitSystem(
+  metadataParams: Record<string, string>
+): UnitSystem {
+  const reportSystem = getUnitSystem(metadataParams);
+  return {
+    id: "api" as UnitSystemId,
+    name: "API Source",
+    distanceUnit: "meters",
+    angleUnit: reportSystem.angleUnit,
+    speedUnit: "m/s",
+  };
+}
+
+/**
+ * Get the unit label for a metric based on user preference.
+ * Returns empty string for dimensionless metrics (e.g. SmashFactor, SpinRate).
+ */
+export function getMetricUnitLabel(
+  metricName: string,
+  unitPref: UnitPreference = "imperial"
+): string {
+  if (metricName in FIXED_UNIT_LABELS) return FIXED_UNIT_LABELS[metricName];
+  const labels = UNIT_LABELS[unitPref];
+  if (SPEED_METRICS.has(metricName)) return labels.speed;
+  if (DISTANCE_METRICS.has(metricName)) return labels.distance;
+  if (ANGLE_METRICS.has(metricName)) return labels.angle;
+  return "";
 }
 
 /**
@@ -190,16 +255,16 @@ export function convertAngle(
 
 /**
  * Convert a speed value between units.
- * 
+ *
  * @param value - The value to convert
- * @param fromUnit - Source unit ("mph" or "km/h")
- * @param toUnit - Target unit ("mph" or "km/h")
+ * @param fromUnit - Source unit ("mph", "km/h", or "m/s")
+ * @param toUnit - Target unit ("mph", "km/h", or "m/s")
  * @returns Converted value, or original if units match
  */
 export function convertSpeed(
   value: number | string | null,
-  fromUnit: "mph" | "km/h",
-  toUnit: "mph" | "km/h"
+  fromUnit: "mph" | "km/h" | "m/s",
+  toUnit: "mph" | "km/h" | "m/s"
 ): number | string | null {
   if (value === null || value === "") return value;
 
@@ -209,38 +274,47 @@ export function convertSpeed(
   if (fromUnit === toUnit) return numValue;
 
   // Convert to mph first, then to target unit
-  const inMph = fromUnit === "mph" ? numValue : numValue / 1.609344;
-  return toUnit === "mph" ? inMph : inMph * 1.609344;
+  let inMph: number;
+  if (fromUnit === "mph") inMph = numValue;
+  else if (fromUnit === "km/h") inMph = numValue / 1.609344;
+  else inMph = numValue * 2.23694; // m/s to mph
+
+  if (toUnit === "mph") return inMph;
+  if (toUnit === "km/h") return inMph * 1.609344;
+  return inMph / 2.23694; // mph to m/s
 }
 
 /**
- * Normalize a metric value based on unit system alignment.
- * 
- * Converts values from the report's native units to standard output units:
- * - Distance: always yards (Imperial)
+ * Normalize a metric value based on unit system alignment and user preference.
+ *
+ * Converts values from the source units to target output units:
+ * - Distance: yards (imperial) or meters (metric)
  * - Angles: always degrees
- * - Speed: always mph
- * 
+ * - Speed: mph (imperial) or m/s (metric)
+ *
  * @param value - The raw metric value
  * @param metricName - The name of the metric being normalized
- * @param reportUnitSystem - The unit system used in the source report
+ * @param reportUnitSystem - The unit system used in the source data
+ * @param unitPref - User's unit preference (defaults to "imperial")
  * @returns Normalized value as number or string (null if invalid)
  */
 export function normalizeMetricValue(
   value: MetricValue,
   metricName: string,
-  reportUnitSystem: UnitSystem
+  reportUnitSystem: UnitSystem,
+  unitPref: UnitPreference = "imperial"
 ): MetricValue {
   const numValue = parseNumericValue(value);
   if (numValue === null) return value;
 
   let converted: number;
+  const target = TARGET_UNITS[unitPref];
 
   if (DISTANCE_METRICS.has(metricName)) {
     converted = convertDistance(
       numValue,
       reportUnitSystem.distanceUnit,
-      "yards"
+      target.distance
     ) as number;
   } else if (ANGLE_METRICS.has(metricName)) {
     converted = convertAngle(
@@ -252,7 +326,7 @@ export function normalizeMetricValue(
     converted = convertSpeed(
       numValue,
       reportUnitSystem.speedUnit,
-      "mph"
+      target.speed
     ) as number;
   } else {
     // No conversion needed for this metric type

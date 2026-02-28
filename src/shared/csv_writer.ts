@@ -5,8 +5,10 @@
 
 import type { SessionData, ClubGroup, Shot } from "../models/types";
 import {
-  getUnitSystem,
+  getApiSourceUnitSystem,
+  getMetricUnitLabel,
   normalizeMetricValue,
+  type UnitPreference,
 } from "./unit_normalization";
 import { METRIC_DISPLAY_NAMES } from "./constants";
 
@@ -31,6 +33,12 @@ const METRIC_COLUMN_ORDER: string[] = [
 
 function getDisplayName(metric: string): string {
   return METRIC_DISPLAY_NAMES[metric] ?? metric;
+}
+
+function getColumnName(metric: string, unitPref: UnitPreference): string {
+  const displayName = getDisplayName(metric);
+  const unitLabel = getMetricUnitLabel(metric, unitPref);
+  return unitLabel ? `${displayName} (${unitLabel})` : displayName;
 }
 
 function generateFilename(session: SessionData): string {
@@ -68,30 +76,31 @@ function hasTags(session: SessionData): boolean {
 
 export function writeCsv(
   session: SessionData,
-  outputFilename?: string,
   includeAverages = true,
-  metricOrder?: string[]
+  metricOrder?: string[],
+  unitPref: UnitPreference = "imperial"
 ): string {
-  const filename = outputFilename ?? generateFilename(session);
-
   const orderedMetrics = orderMetricsByPriority(
     session.metric_names,
     metricOrder ?? METRIC_COLUMN_ORDER
   );
 
   const headerRow: string[] = ["Date", "Club"];
-  
+
   if (hasTags(session)) {
     headerRow.push("Tag");
   }
-  
+
   headerRow.push("Shot #", "Type");
-  
+
   for (const metric of orderedMetrics) {
-    headerRow.push(getDisplayName(metric));
+    headerRow.push(getColumnName(metric, unitPref));
   }
 
   const rows: Record<string, string>[] = [];
+
+  // Source unit system: API always returns m/s + meters, angle unit from report
+  const unitSystem = getApiSourceUnitSystem(session.metadata_params);
 
   for (const club of session.club_groups) {
     for (const shot of club.shots) {
@@ -106,18 +115,14 @@ export function writeCsv(
         row.Tag = shot.tag ?? "";
       }
 
-      // Get unit system for normalization
-      const unitSystem = getUnitSystem(session.metadata_params);
-
       for (const metric of orderedMetrics) {
-        const displayName = getDisplayName(metric);
-        let rawValue = shot.metrics[metric] ?? "";
-        
-        // Normalize value based on report units/normalization params
+        const colName = getColumnName(metric, unitPref);
+        const rawValue = shot.metrics[metric] ?? "";
+
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          row[displayName] = String(normalizeMetricValue(rawValue, metric, unitSystem));
+          row[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
         } else {
-          row[displayName] = "";
+          row[colName] = "";
         }
       }
 
@@ -136,15 +141,14 @@ export function writeCsv(
         avgRow.Tag = "";
       }
 
-      // Normalize average values based on report units/normalization params
       for (const metric of orderedMetrics) {
-        const displayName = getDisplayName(metric);
-        let rawValue = club.averages[metric] ?? "";
-        
+        const colName = getColumnName(metric, unitPref);
+        const rawValue = club.averages[metric] ?? "";
+
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          avgRow[displayName] = String(normalizeMetricValue(rawValue, metric, unitSystem));
+          avgRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
         } else {
-          avgRow[displayName] = "";
+          avgRow[colName] = "";
         }
       }
 
@@ -163,15 +167,14 @@ export function writeCsv(
         consRow.Tag = "";
       }
 
-      // Normalize consistency values based on report units/normalization params
       for (const metric of orderedMetrics) {
-        const displayName = getDisplayName(metric);
-        let rawValue = club.consistency[metric] ?? "";
-        
+        const colName = getColumnName(metric, unitPref);
+        const rawValue = club.consistency[metric] ?? "";
+
         if (typeof rawValue === "string" || typeof rawValue === "number") {
-          consRow[displayName] = String(normalizeMetricValue(rawValue, metric, unitSystem));
+          consRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitPref));
         } else {
-          consRow[displayName] = "";
+          consRow[colName] = "";
         }
       }
 
