@@ -10,7 +10,7 @@ A Chrome extension that pulls shot data from Trackman web reports and exports it
 
 - Automatically captures shot data when you open a Trackman report
 - Exports to CSV with metrics grouped by category (speed, launch, spin, distance, etc.)
-- Imperial/metric unit toggle
+- Independent speed (mph / m/s) and distance (yards / meters) unit selectors
 - Files named `ShotData_YYYY-MM-DD.csv` for easy organization
 
 ## Install
@@ -42,7 +42,7 @@ A Chrome extension that pulls shot data from Trackman web reports and exports it
 1. Open a Trackman report URL (`web-dynamic-reports.trackmangolf.com`)
 2. The extension automatically captures shot data
 3. Click the TrackPull icon in your toolbar to see the shot count
-4. Toggle between imperial and metric units
+4. Choose your preferred speed and distance units
 5. Click **Export CSV** to download your data
 
 ### Supported URL formats
