@@ -13,8 +13,54 @@
     "src/shared/constants.ts"() {
       STORAGE_KEYS = {
         TRACKMAN_DATA: "trackmanData",
-        UNIT_PREF: "unitPreference"
+        SPEED_UNIT: "speedUnit",
+        DISTANCE_UNIT: "distanceUnit"
       };
+    }
+  });
+
+  // src/shared/unit_normalization.ts
+  function migrateLegacyPref(stored) {
+    switch (stored) {
+      case "metric":
+        return { speed: "m/s", distance: "meters" };
+      case "hybrid":
+        return { speed: "mph", distance: "meters" };
+      case "imperial":
+      default:
+        return { speed: "mph", distance: "yards" };
+    }
+  }
+  var UNIT_SYSTEMS, DEFAULT_UNIT_SYSTEM;
+  var init_unit_normalization = __esm({
+    "src/shared/unit_normalization.ts"() {
+      UNIT_SYSTEMS = {
+        // Imperial (yards, degrees) - most common
+        "789012": {
+          id: "789012",
+          name: "Imperial",
+          distanceUnit: "yards",
+          angleUnit: "degrees",
+          speedUnit: "mph"
+        },
+        // Metric (meters, radians)
+        "789013": {
+          id: "789013",
+          name: "Metric (rad)",
+          distanceUnit: "meters",
+          angleUnit: "radians",
+          speedUnit: "km/h"
+        },
+        // Metric (meters, degrees) - less common
+        "789014": {
+          id: "789014",
+          name: "Metric (deg)",
+          distanceUnit: "meters",
+          angleUnit: "degrees",
+          speedUnit: "km/h"
+        }
+      };
+      DEFAULT_UNIT_SYSTEM = UNIT_SYSTEMS["789012"];
     }
   });
 
@@ -22,6 +68,7 @@
   var require_popup = __commonJS({
     "src/popup/popup.ts"() {
       init_constants();
+      init_unit_normalization();
       document.addEventListener("DOMContentLoaded", async () => {
         console.log("TrackPull popup initialized");
         try {
@@ -32,18 +79,33 @@
           console.log("Popup loaded data:", data ? "has data" : "no data");
           updateShotCount(data);
           updateExportButtonVisibility(data);
-          const prefResult = await new Promise((resolve) => {
-            chrome.storage.local.get([STORAGE_KEYS.UNIT_PREF], resolve);
+          const unitResult = await new Promise((resolve) => {
+            chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, "unitPreference"], resolve);
           });
-          const savedPref = prefResult[STORAGE_KEYS.UNIT_PREF] || "imperial";
-          const unitToggle = document.getElementById("unit-toggle");
-          if (unitToggle) {
-            unitToggle.checked = savedPref === "imperial";
-            updateToggleLabels(unitToggle.checked);
-            unitToggle.addEventListener("change", () => {
-              const pref = unitToggle.checked ? "imperial" : "metric";
-              chrome.storage.local.set({ [STORAGE_KEYS.UNIT_PREF]: pref });
-              updateToggleLabels(unitToggle.checked);
+          let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT];
+          let distanceUnit = unitResult[STORAGE_KEYS.DISTANCE_UNIT];
+          if (!speedUnit || !distanceUnit) {
+            const migrated = migrateLegacyPref(unitResult["unitPreference"]);
+            speedUnit = migrated.speed;
+            distanceUnit = migrated.distance;
+            chrome.storage.local.set({
+              [STORAGE_KEYS.SPEED_UNIT]: speedUnit,
+              [STORAGE_KEYS.DISTANCE_UNIT]: distanceUnit
+            });
+            chrome.storage.local.remove("unitPreference");
+          }
+          const speedSelect = document.getElementById("speed-unit");
+          const distanceSelect = document.getElementById("distance-unit");
+          if (speedSelect) {
+            speedSelect.value = speedUnit;
+            speedSelect.addEventListener("change", () => {
+              chrome.storage.local.set({ [STORAGE_KEYS.SPEED_UNIT]: speedSelect.value });
+            });
+          }
+          if (distanceSelect) {
+            distanceSelect.value = distanceUnit;
+            distanceSelect.addEventListener("change", () => {
+              chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
             });
           }
           chrome.runtime.onMessage.addListener((message) => {
@@ -143,12 +205,6 @@
         if (!statusElement) return;
         statusElement.textContent = message;
         statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
-      }
-      function updateToggleLabels(isImperial) {
-        const metricLabel = document.getElementById("label-metric");
-        const imperialLabel = document.getElementById("label-imperial");
-        if (metricLabel) metricLabel.classList.toggle("active", !isImperial);
-        if (imperialLabel) imperialLabel.classList.toggle("active", isImperial);
       }
       async function handleClearClick() {
         const clearBtn = document.getElementById("clear-btn");

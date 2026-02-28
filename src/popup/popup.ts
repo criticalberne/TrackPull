@@ -3,6 +3,7 @@
  */
 
 import { STORAGE_KEYS } from "../shared/constants";
+import { migrateLegacyPref } from "../shared/unit_normalization";
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("TrackPull popup initialized");
@@ -18,22 +19,39 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateShotCount(data);
     updateExportButtonVisibility(data);
 
-    // Unit segmented control: read saved preference (default imperial)
-    const prefResult = await new Promise<Record<string, unknown>>((resolve) => {
-      chrome.storage.local.get([STORAGE_KEYS.UNIT_PREF], resolve);
+    // Unit dropdowns: read saved values, migrate from legacy key if needed
+    const unitResult = await new Promise<Record<string, unknown>>((resolve) => {
+      chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, "unitPreference"], resolve);
     });
-    const savedPref = (prefResult[STORAGE_KEYS.UNIT_PREF] as string) || "imperial";
 
-    const segmented = document.getElementById("unit-segmented");
-    if (segmented) {
-      updateActiveSegment(segmented, savedPref);
+    let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT] as string | undefined;
+    let distanceUnit = unitResult[STORAGE_KEYS.DISTANCE_UNIT] as string | undefined;
 
-      segmented.addEventListener("click", (e) => {
-        const btn = (e.target as HTMLElement).closest("button[data-unit]") as HTMLElement | null;
-        if (!btn) return;
-        const pref = btn.dataset.unit!;
-        chrome.storage.local.set({ [STORAGE_KEYS.UNIT_PREF]: pref });
-        updateActiveSegment(segmented, pref);
+    if (!speedUnit || !distanceUnit) {
+      const migrated = migrateLegacyPref(unitResult["unitPreference"] as string | undefined);
+      speedUnit = migrated.speed;
+      distanceUnit = migrated.distance;
+      chrome.storage.local.set({
+        [STORAGE_KEYS.SPEED_UNIT]: speedUnit,
+        [STORAGE_KEYS.DISTANCE_UNIT]: distanceUnit,
+      });
+      chrome.storage.local.remove("unitPreference");
+    }
+
+    const speedSelect = document.getElementById("speed-unit") as HTMLSelectElement | null;
+    const distanceSelect = document.getElementById("distance-unit") as HTMLSelectElement | null;
+
+    if (speedSelect) {
+      speedSelect.value = speedUnit;
+      speedSelect.addEventListener("change", () => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SPEED_UNIT]: speedSelect.value });
+      });
+    }
+
+    if (distanceSelect) {
+      distanceSelect.value = distanceUnit;
+      distanceSelect.addEventListener("change", () => {
+        chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
       });
     }
 
@@ -157,12 +175,6 @@ function showStatusMessage(message: string, isError: boolean = false): void {
 
   statusElement.textContent = message;
   statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
-}
-
-function updateActiveSegment(container: HTMLElement, pref: string): void {
-  for (const btn of container.querySelectorAll("button[data-unit]")) {
-    btn.classList.toggle("active", (btn as HTMLElement).dataset.unit === pref);
-  }
 }
 
 async function handleClearClick(): Promise<void> {

@@ -138,5 +138,6 @@ export const BASE_URL = "https://web-dynamic-reports.trackmangolf.com/";
 // Storage keys for Chrome extension (aligned between background and popup)
 export const STORAGE_KEYS = {
   TRACKMAN_DATA: "trackmanData",
-  UNIT_PREF: "unitPreference",
+  SPEED_UNIT: "speedUnit",
+  DISTANCE_UNIT: "distanceUnit",
 } as const;

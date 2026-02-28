@@ -8,7 +8,10 @@
 
 export type UnitSystemId = "789012" | "789013" | "789014" | string;
 
-export type UnitPreference = "imperial" | "metric" | "hybrid";
+export type SpeedUnit = "mph" | "m/s";
+export type DistanceUnit = "yards" | "meters";
+export interface UnitChoice { speed: SpeedUnit; distance: DistanceUnit }
+export const DEFAULT_UNIT_CHOICE: UnitChoice = { speed: "mph", distance: "yards" };
 
 /**
  * Trackman unit system definitions.
@@ -97,22 +100,35 @@ export const SPEED_METRICS = new Set([
 export const DEFAULT_UNIT_SYSTEM: UnitSystem = UNIT_SYSTEMS["789012"];
 
 /**
- * Target units for each user preference.
+ * Speed unit display labels for CSV headers.
  */
-export const TARGET_UNITS: Record<UnitPreference, { speed: "mph" | "km/h" | "m/s"; distance: "yards" | "meters" }> = {
-  imperial: { speed: "mph", distance: "yards" },
-  hybrid: { speed: "mph", distance: "meters" },
-  metric: { speed: "m/s", distance: "meters" },
+export const SPEED_LABELS: Record<SpeedUnit, string> = {
+  "mph": "mph",
+  "m/s": "m/s",
 };
 
 /**
- * Unit labels for CSV headers, keyed by metric category and preference.
+ * Distance unit display labels for CSV headers.
  */
-export const UNIT_LABELS: Record<UnitPreference, { speed: string; distance: string; angle: string }> = {
-  imperial: { speed: "mph", distance: "yds", angle: "°" },
-  hybrid: { speed: "mph", distance: "m", angle: "°" },
-  metric: { speed: "m/s", distance: "m", angle: "°" },
+export const DISTANCE_LABELS: Record<DistanceUnit, string> = {
+  "yards": "yds",
+  "meters": "m",
 };
+
+/**
+ * Migrate a legacy unitPreference string to a UnitChoice object.
+ */
+export function migrateLegacyPref(stored: string | undefined): UnitChoice {
+  switch (stored) {
+    case "metric":
+      return { speed: "m/s", distance: "meters" };
+    case "hybrid":
+      return { speed: "mph", distance: "meters" };
+    case "imperial":
+    default:
+      return { speed: "mph", distance: "yards" };
+  }
+}
 
 /**
  * Fixed unit labels for metrics whose units don't vary by preference.
@@ -190,18 +206,17 @@ export function getApiSourceUnitSystem(
 }
 
 /**
- * Get the unit label for a metric based on user preference.
+ * Get the unit label for a metric based on user's unit choice.
  * Returns empty string for dimensionless metrics (e.g. SmashFactor, SpinRate).
  */
 export function getMetricUnitLabel(
   metricName: string,
-  unitPref: UnitPreference = "imperial"
+  unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE
 ): string {
   if (metricName in FIXED_UNIT_LABELS) return FIXED_UNIT_LABELS[metricName];
-  const labels = UNIT_LABELS[unitPref];
-  if (SPEED_METRICS.has(metricName)) return labels.speed;
-  if (DISTANCE_METRICS.has(metricName)) return labels.distance;
-  if (ANGLE_METRICS.has(metricName)) return labels.angle;
+  if (SPEED_METRICS.has(metricName)) return SPEED_LABELS[unitChoice.speed];
+  if (DISTANCE_METRICS.has(metricName)) return DISTANCE_LABELS[unitChoice.distance];
+  if (ANGLE_METRICS.has(metricName)) return "°";
   return "";
 }
 
@@ -287,36 +302,35 @@ export function convertSpeed(
 }
 
 /**
- * Normalize a metric value based on unit system alignment and user preference.
+ * Normalize a metric value based on unit system alignment and user's unit choice.
  *
  * Converts values from the source units to target output units:
- * - Distance: yards (imperial) or meters (metric)
+ * - Distance: yards or meters (per unitChoice.distance)
  * - Angles: always degrees
- * - Speed: mph (imperial) or m/s (metric)
+ * - Speed: mph or m/s (per unitChoice.speed)
  *
  * @param value - The raw metric value
  * @param metricName - The name of the metric being normalized
  * @param reportUnitSystem - The unit system used in the source data
- * @param unitPref - User's unit preference (defaults to "imperial")
+ * @param unitChoice - User's unit choice (defaults to mph + yards)
  * @returns Normalized value as number or string (null if invalid)
  */
 export function normalizeMetricValue(
   value: MetricValue,
   metricName: string,
   reportUnitSystem: UnitSystem,
-  unitPref: UnitPreference = "imperial"
+  unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE
 ): MetricValue {
   const numValue = parseNumericValue(value);
   if (numValue === null) return value;
 
   let converted: number;
-  const target = TARGET_UNITS[unitPref];
 
   if (DISTANCE_METRICS.has(metricName)) {
     converted = convertDistance(
       numValue,
       reportUnitSystem.distanceUnit,
-      target.distance
+      unitChoice.distance
     ) as number;
   } else if (ANGLE_METRICS.has(metricName)) {
     converted = convertAngle(
@@ -328,7 +342,7 @@ export function normalizeMetricValue(
     converted = convertSpeed(
       numValue,
       reportUnitSystem.speedUnit,
-      target.speed
+      unitChoice.speed
     ) as number;
   } else {
     // No conversion needed for this metric type
