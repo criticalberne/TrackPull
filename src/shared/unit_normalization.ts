@@ -10,6 +10,7 @@ export type UnitSystemId = "789012" | "789013" | "789014" | string;
 
 export type SpeedUnit = "mph" | "m/s";
 export type DistanceUnit = "yards" | "meters";
+export type SmallDistanceUnit = "inches" | "cm";
 export interface UnitChoice { speed: SpeedUnit; distance: DistanceUnit }
 export const DEFAULT_UNIT_CHOICE: UnitChoice = { speed: "mph", distance: "yards" };
 
@@ -68,6 +69,13 @@ export const DISTANCE_METRICS = new Set([
   "Height",
   "MaxHeight",
   "Curve",
+]);
+
+/**
+ * Metrics that use small distance units (inches/cm).
+ * These values come from the API in meters but are too small for yards/meters.
+ */
+export const SMALL_DISTANCE_METRICS = new Set([
   "LowPointDistance",
 ]);
 
@@ -113,6 +121,14 @@ export const SPEED_LABELS: Record<SpeedUnit, string> = {
 export const DISTANCE_LABELS: Record<DistanceUnit, string> = {
   "yards": "yds",
   "meters": "m",
+};
+
+/**
+ * Small distance unit display labels for CSV headers.
+ */
+export const SMALL_DISTANCE_LABELS: Record<SmallDistanceUnit, string> = {
+  "inches": "in",
+  "cm": "cm",
 };
 
 /**
@@ -215,6 +231,7 @@ export function getMetricUnitLabel(
 ): string {
   if (metricName in FIXED_UNIT_LABELS) return FIXED_UNIT_LABELS[metricName];
   if (SPEED_METRICS.has(metricName)) return SPEED_LABELS[unitChoice.speed];
+  if (SMALL_DISTANCE_METRICS.has(metricName)) return SMALL_DISTANCE_LABELS[getSmallDistanceUnit(unitChoice)];
   if (DISTANCE_METRICS.has(metricName)) return DISTANCE_LABELS[unitChoice.distance];
   if (ANGLE_METRICS.has(metricName)) return "°";
   return "";
@@ -302,6 +319,29 @@ export function convertSpeed(
 }
 
 /**
+ * Get the small distance unit based on the user's distance choice.
+ * Yards users see inches; meters users see cm.
+ */
+export function getSmallDistanceUnit(unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE): SmallDistanceUnit {
+  return unitChoice.distance === "yards" ? "inches" : "cm";
+}
+
+/**
+ * Convert a distance value from meters to a small distance unit (inches or cm).
+ */
+export function convertSmallDistance(
+  value: number | string | null,
+  toSmallUnit: SmallDistanceUnit
+): number | string | null {
+  if (value === null || value === "") return value;
+
+  const numValue = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(numValue)) return value;
+
+  return toSmallUnit === "inches" ? numValue * 39.3701 : numValue * 100;
+}
+
+/**
  * Normalize a metric value based on unit system alignment and user's unit choice.
  *
  * Converts values from the source units to target output units:
@@ -326,7 +366,12 @@ export function normalizeMetricValue(
 
   let converted: number;
 
-  if (DISTANCE_METRICS.has(metricName)) {
+  if (SMALL_DISTANCE_METRICS.has(metricName)) {
+    converted = convertSmallDistance(
+      numValue,
+      getSmallDistanceUnit(unitChoice)
+    ) as number;
+  } else if (DISTANCE_METRICS.has(metricName)) {
     converted = convertDistance(
       numValue,
       reportUnitSystem.distanceUnit,
@@ -345,9 +390,11 @@ export function normalizeMetricValue(
       unitChoice.speed
     ) as number;
   } else {
-    // No conversion needed for this metric type
-    return value;
+    converted = numValue;
   }
+
+  // SpinRate: round to whole numbers
+  if (metricName === "SpinRate") return Math.round(converted);
 
   // Round to 1 decimal place for consistency
   return Math.round(converted * 10) / 10;

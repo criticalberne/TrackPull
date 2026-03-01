@@ -124,7 +124,7 @@
                   }
                   if (numValue !== null) {
                     allMetricNames.add(key);
-                    shotMetrics[key] = `${Math.round(numValue * 10) / 10}`;
+                    shotMetrics[key] = `${numValue}`;
                   }
                 }
                 if (Object.keys(shotMetrics).length > 0) {
