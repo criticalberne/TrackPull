@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TrackPull",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Pull shot data from Trackman reports",
   "permissions": ["storage", "downloads"],
   "host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"],
