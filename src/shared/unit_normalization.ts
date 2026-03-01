@@ -10,6 +10,7 @@ export type UnitSystemId = "789012" | "789013" | "789014" | string;
 
 export type SpeedUnit = "mph" | "m/s";
 export type DistanceUnit = "yards" | "meters";
+export type SmallDistanceUnit = "inches" | "cm";
 export interface UnitChoice { speed: SpeedUnit; distance: DistanceUnit }
 export const DEFAULT_UNIT_CHOICE: UnitChoice = { speed: "mph", distance: "yards" };
 
@@ -68,6 +69,12 @@ export const DISTANCE_METRICS = new Set([
   "Height",
   "MaxHeight",
   "Curve",
+]);
+
+/**
+ * Metrics that use small distance units (inches/cm instead of yards/meters).
+ */
+export const SMALL_DISTANCE_METRICS = new Set([
   "LowPointDistance",
 ]);
 
@@ -113,6 +120,14 @@ export const SPEED_LABELS: Record<SpeedUnit, string> = {
 export const DISTANCE_LABELS: Record<DistanceUnit, string> = {
   "yards": "yds",
   "meters": "m",
+};
+
+/**
+ * Small distance unit display labels for CSV headers.
+ */
+export const SMALL_DISTANCE_LABELS: Record<SmallDistanceUnit, string> = {
+  "inches": "in",
+  "cm": "cm",
 };
 
 /**
@@ -206,6 +221,13 @@ export function getApiSourceUnitSystem(
 }
 
 /**
+ * Derive the small distance unit from the user's distance preference.
+ */
+export function getSmallDistanceUnit(unitChoice: UnitChoice): SmallDistanceUnit {
+  return unitChoice.distance === "yards" ? "inches" : "cm";
+}
+
+/**
  * Get the unit label for a metric based on user's unit choice.
  * Returns empty string for dimensionless metrics (e.g. SmashFactor, SpinRate).
  */
@@ -215,6 +237,7 @@ export function getMetricUnitLabel(
 ): string {
   if (metricName in FIXED_UNIT_LABELS) return FIXED_UNIT_LABELS[metricName];
   if (SPEED_METRICS.has(metricName)) return SPEED_LABELS[unitChoice.speed];
+  if (SMALL_DISTANCE_METRICS.has(metricName)) return SMALL_DISTANCE_LABELS[getSmallDistanceUnit(unitChoice)];
   if (DISTANCE_METRICS.has(metricName)) return DISTANCE_LABELS[unitChoice.distance];
   if (ANGLE_METRICS.has(metricName)) return "°";
   return "";
@@ -243,6 +266,27 @@ export function convertDistance(
   // Convert to meters first, then to target unit
   const inMeters = fromUnit === "yards" ? numValue * 0.9144 : numValue;
   return toUnit === "yards" ? inMeters / 0.9144 : inMeters;
+}
+
+/**
+ * Convert a small distance value from meters to inches or cm.
+ * Used for metrics like LowPointDistance where yards/meters are too large.
+ * The API always returns these values in meters.
+ *
+ * @param value - The value in meters
+ * @param toSmallUnit - Target small unit ("inches" or "cm")
+ * @returns Converted value, or original if invalid
+ */
+export function convertSmallDistance(
+  value: number | string | null,
+  toSmallUnit: "inches" | "cm"
+): number | string | null {
+  if (value === null || value === "") return value;
+
+  const numValue = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(numValue)) return value;
+
+  return toSmallUnit === "inches" ? numValue * 39.3701 : numValue * 100;
 }
 
 /**
@@ -326,7 +370,12 @@ export function normalizeMetricValue(
 
   let converted: number;
 
-  if (DISTANCE_METRICS.has(metricName)) {
+  if (SMALL_DISTANCE_METRICS.has(metricName)) {
+    converted = convertSmallDistance(
+      numValue,
+      getSmallDistanceUnit(unitChoice)
+    ) as number;
+  } else if (DISTANCE_METRICS.has(metricName)) {
     converted = convertDistance(
       numValue,
       reportUnitSystem.distanceUnit,
@@ -345,11 +394,11 @@ export function normalizeMetricValue(
       unitChoice.speed
     ) as number;
   } else {
-    // No conversion needed for this metric type
-    return value;
+    converted = numValue;
   }
 
-  // Round to 1 decimal place for consistency
+  // SpinRate is whole numbers; everything else rounds to 1 decimal
+  if (metricName === "SpinRate") return Math.round(converted);
   return Math.round(converted * 10) / 10;
 }
 

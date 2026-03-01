@@ -145,7 +145,7 @@ function parseSessionData(data: Record<string, unknown>, sourceUrl: string): Ses
             }
             if (numValue !== null) {
               allMetricNames.add(key);
-              shotMetrics[key] = `${Math.round(numValue * 10) / 10}`;
+              shotMetrics[key] = `${numValue}`;
             }
           }
 
