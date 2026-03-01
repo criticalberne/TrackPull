@@ -65,7 +65,7 @@ Metrics are grouped by analytical category for quick scanning:
 | Distance | Carry, Total |
 | Dispersion | Side, Side Total, Carry Side, Total Side, Curve |
 | Ball Flight | Height, Max Height, Landing Angle, Hang Time |
-| Impact | Low Point, Impact Height, Impact Offset |
+| Impact | Low Point Distance (in/cm), Impact Height, Impact Offset |
 | Other | Tempo |
 
 ## AI Prompt Templates
