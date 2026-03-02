@@ -99,7 +99,11 @@ Plans:
   3. User selects a built-in prompt from a skill-tiered dropdown and clicks "Open in AI" — the assembled prompt+data is copied to clipboard and ChatGPT or Claude opens in a new tab
   4. User clicks "Copy Prompt + Data" and the full AI payload is on the clipboard without any new tab opening
   5. User sets a default AI service preference in the popup and it is remembered on next open
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01: Config, constants, and popup HTML/CSS layout (wave 1)
+- [ ] 06-02: Popup TypeScript logic -- clipboard handlers, AI launch, preference persistence (wave 2)
 
 ### Phase 7: Options Page and Custom Prompts
 **Goal**: Users can create, edit, and delete their own prompt templates in a dedicated settings page
@@ -121,7 +125,7 @@ Plans:
 | 3. Unit Preferences | v1.x | 3/3 | Complete | Pre-existing |
 | 4. Popup UI | v1.x | 2/2 | Complete | Pre-existing |
 | 5. Foundation Modules | 3/3 | Complete    | 2026-03-02 | - |
-| 6. Clipboard Copy and AI Launch | v1.3 | 0/? | Not started | - |
+| 6. Clipboard Copy and AI Launch | v1.3 | 0/2 | Planned | - |
 | 7. Options Page and Custom Prompts | v1.3 | 0/? | Not started | - |
 
 ---
