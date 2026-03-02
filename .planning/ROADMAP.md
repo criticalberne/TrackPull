@@ -82,7 +82,12 @@ Plans:
   2. A TSV writer converts SessionData into a tab-separated string that pastes correctly into Google Sheets and Excel
   3. A prompt builder assembles a final prompt+data payload string from any prompt template and TSV data
   4. Unit tests cover TSV edge cases (field values containing tabs, newlines, or commas) and pass in CI
-**Plans**: TBD
+**Plans**:
+
+Plans:
+- [ ] 05-A: TSV Writer Module (wave 1)
+- [ ] 05-B: Prompt Library Types and Constants (wave 1)
+- [ ] 05-C: Prompt Builder Module (wave 2, depends on 05-A + 05-B)
 
 ### Phase 6: Clipboard Copy and AI Launch
 **Goal**: Users can copy their shot data and launch AI analysis in one click from the popup
@@ -115,7 +120,7 @@ Plans:
 | 2. CSV Export | v1.x | 2/2 | Complete | Pre-existing |
 | 3. Unit Preferences | v1.x | 3/3 | Complete | Pre-existing |
 | 4. Popup UI | v1.x | 2/2 | Complete | Pre-existing |
-| 5. Foundation Modules | v1.3 | 0/? | Not started | - |
+| 5. Foundation Modules | 2/3 | In Progress|  | - |
 | 6. Clipboard Copy and AI Launch | v1.3 | 0/? | Not started | - |
 | 7. Options Page and Custom Prompts | v1.3 | 0/? | Not started | - |
 

@@ -1,3 +1,16 @@
+---
+gsd_state_version: 1.0
+milestone: v1.3
+milestone_name: milestone
+status: unknown
+last_updated: "2026-03-02T18:47:07.906Z"
+progress:
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 3
+---
+
 # Project State
 
 ## Project Reference
@@ -10,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 5 — Foundation Modules
-Plan: —
-Status: Roadmap defined, ready for Phase 5 planning
-Last activity: 2026-03-02 — v1.3 roadmap created (phases 5-7)
+Plan: 05-A (TSV Writer) complete, 05-B (Prompt Library) complete -- 05-C (Prompt Builder) next
+Status: In progress
+Last activity: 2026-03-02 — 05-01 (TSV Writer Module) complete
 
 Progress: [░░░░░░░░░░] 0% (v1.3 — 0/3 phases complete)
 
@@ -31,7 +44,7 @@ Progress: [░░░░░░░░░░] 0% (v1.3 — 0/3 phases complete)
 | 2. CSV Export | v1.x | 2 | N/A | N/A |
 | 3. Unit Preferences | v1.x | 3 | N/A | N/A |
 | 4. Popup UI | v1.x | 2 | N/A | N/A |
-| 5. Foundation Modules | v1.3 | TBD | - | - |
+| 5. Foundation Modules | v1.3 | 3 | - | - |
 | 6. Clipboard Copy and AI Launch | v1.3 | TBD | - | - |
 | 7. Options Page and Custom Prompts | v1.3 | TBD | - | - |
 
@@ -55,6 +68,9 @@ Recent decisions affecting current work:
 - [v1.3]: Built-in prompts as TypeScript constants (not storage) — BUILTIN_PROMPTS array in prompt_types.ts; only user-created templates go to storage
 - [v1.3]: Gemini deferred to v1.4+ — requires host_permissions addition which triggers permission update prompt for all existing users; isolate to its own release
 - [v1.3]: Custom prompts (PRMT-03/04) and options page (PREF-02) deferred to Phase 7 — higher UI complexity; core v1.3 value (clipboard + AI launch) ships in Phase 6 independently
+- [Phase 05-foundation-modules]: METRIC_COLUMN_ORDER duplicated in tsv_writer.ts (not imported from csv_writer) to keep modules independent
+- [05-02]: Built-in prompts are TypeScript constants only in BUILTIN_PROMPTS -- not stored in chrome.storage; BuiltInPrompt interface uses all-readonly fields enabling future custom prompt types in Phase 7
+- [05-02]: All prompt templates include {{DATA}} placeholder for TSV data injection at clipboard-copy time; tone ladder: beginner=friendly coach, intermediate=moderate depth, advanced=numbers-first data analyst
 
 ### Pending Todos
 
@@ -72,6 +88,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: v1.3 roadmap created — phases 5-7 defined, REQUIREMENTS.md traceability updated
+Stopped at: Completed 05-01-PLAN.md (TSV Writer Module)
 Resume file: None
-Next action: Run /gsd:plan-phase 5 to plan Foundation Modules
+Next action: Execute 05-03 (Prompt Builder module)
