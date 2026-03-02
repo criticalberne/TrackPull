@@ -48,9 +48,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-2 pending:
-- Add license info to GitHub (general)
-- Add passing test badges (docs)
+None.
 
 ### Blockers/Concerns
 

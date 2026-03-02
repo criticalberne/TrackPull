@@ -4,6 +4,9 @@
   <img src="TrackPuller.png" alt="TrackPull" width="300">
 </p>
 
+[![Tests](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml/badge.svg)](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A Chrome extension that pulls shot data from Trackman web reports and exports it as CSV.
 
 ## Features
