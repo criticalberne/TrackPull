@@ -55,22 +55,22 @@
 
 ## Traceability
 
-All v1 requirements are validated (already implemented).
+All v1 requirements are implemented (shipped in v1.x milestone).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CAPT-01 | Pre-existing | Complete |
-| CAPT-02 | Pre-existing | Complete |
-| CAPT-03 | Pre-existing | Complete |
-| CAPT-04 | Pre-existing | Complete |
-| CAPT-05 | Pre-existing | Complete |
-| EXPO-01 | Pre-existing | Complete |
-| EXPO-02 | Pre-existing | Complete |
-| UNIT-01 | Pre-existing | Complete |
-| UNIT-02 | Pre-existing | Complete |
-| UNIT-03 | Pre-existing | Complete |
-| UI-01 | Pre-existing | Complete |
-| UI-02 | Pre-existing | Complete |
+| CAPT-01 | Phase 1 (Data Capture) | Complete |
+| CAPT-02 | Phase 1 (Data Capture) | Complete |
+| CAPT-03 | Phase 1 (Data Capture) | Complete |
+| CAPT-04 | Phase 1 (Data Capture) | Complete |
+| CAPT-05 | Phase 1 (Data Capture) | Complete |
+| EXPO-01 | Phase 2 (CSV Export) | Complete |
+| EXPO-02 | Phase 2 (CSV Export) | Complete |
+| UNIT-01 | Phase 3 (Unit Preferences) | Complete |
+| UNIT-02 | Phase 3 (Unit Preferences) | Complete |
+| UNIT-03 | Phase 3 (Unit Preferences) | Complete |
+| UI-01 | Phase 4 (Popup UI) | Complete |
+| UI-02 | Phase 4 (Popup UI) | Complete |
 
 **Coverage:**
 - v1 requirements: 12 total
@@ -79,4 +79,4 @@ All v1 requirements are validated (already implemented).
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after initial definition*
+*Last updated: 2026-03-02 after roadmap creation — phase assignments finalized*
