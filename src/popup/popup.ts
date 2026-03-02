@@ -4,6 +4,22 @@
 
 import { STORAGE_KEYS } from "../shared/constants";
 import { migrateLegacyPref } from "../shared/unit_normalization";
+import type { SessionData } from "../models/types";
+import type { UnitChoice } from "../shared/unit_normalization";
+import { DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
+import { writeTsv } from "../shared/tsv_writer";
+import { BUILTIN_PROMPTS } from "../shared/prompt_types";
+import { assemblePrompt, buildUnitLabel, countSessionShots } from "../shared/prompt_builder";
+
+// Pre-fetched data for synchronous clipboard access (avoids focus-loss errors)
+let cachedData: SessionData | null = null;
+let cachedUnitChoice: UnitChoice = DEFAULT_UNIT_CHOICE;
+
+const AI_URLS: Record<string, string> = {
+  "ChatGPT": "https://chatgpt.com",
+  "Claude": "https://claude.ai",
+  "Gemini": "https://gemini.google.com",
+};
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("TrackPull popup initialized");
@@ -15,6 +31,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const data = result[STORAGE_KEYS.TRACKMAN_DATA];
     console.log("Popup loaded data:", data ? "has data" : "no data");
+
+    cachedData = (data as SessionData) ?? null;
 
     updateShotCount(data);
     updateExportButtonVisibility(data);
@@ -38,6 +56,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       chrome.storage.local.remove("unitPreference");
     }
 
+    // Cache the unit choice after migration/resolution
+    cachedUnitChoice = {
+      speed: speedUnit as "mph" | "m/s",
+      distance: distanceUnit as "yards" | "meters",
+    };
+
     const speedSelect = document.getElementById("speed-unit") as HTMLSelectElement | null;
     const distanceSelect = document.getElementById("distance-unit") as HTMLSelectElement | null;
 
@@ -45,6 +69,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       speedSelect.value = speedUnit;
       speedSelect.addEventListener("change", () => {
         chrome.storage.local.set({ [STORAGE_KEYS.SPEED_UNIT]: speedSelect.value });
+        cachedUnitChoice = { ...cachedUnitChoice, speed: speedSelect.value as "mph" | "m/s" };
       });
     }
 
@@ -52,11 +77,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       distanceSelect.value = distanceUnit;
       distanceSelect.addEventListener("change", () => {
         chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
+        cachedUnitChoice = { ...cachedUnitChoice, distance: distanceSelect.value as "yards" | "meters" };
       });
     }
 
     chrome.runtime.onMessage.addListener((message: { type: string; data?: unknown }) => {
       if (message.type === 'DATA_UPDATED') {
+        cachedData = (message.data as SessionData) ?? null;
         updateShotCount(message.data);
         updateExportButtonVisibility(message.data);
       }
@@ -72,6 +99,115 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (clearBtn) {
       clearBtn.addEventListener("click", handleClearClick);
     }
+
+    // Restore last-selected prompt
+    const promptSelect = document.getElementById("prompt-select") as HTMLSelectElement | null;
+    if (promptSelect) {
+      const promptResult = await new Promise<Record<string, unknown>>((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.SELECTED_PROMPT_ID], resolve);
+      });
+      const savedPromptId = promptResult[STORAGE_KEYS.SELECTED_PROMPT_ID] as string | undefined;
+      if (savedPromptId) {
+        promptSelect.value = savedPromptId;
+        // If the saved ID doesn't match any option (e.g., removed prompt), select falls back to first option automatically
+      }
+      // Auto-save on change
+      promptSelect.addEventListener("change", () => {
+        chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
+      });
+    }
+
+    // Restore AI service preference (from sync storage for cross-device)
+    const aiServiceSelect = document.getElementById("ai-service-select") as HTMLSelectElement | null;
+    if (aiServiceSelect) {
+      const syncResult = await new Promise<Record<string, unknown>>((resolve) => {
+        chrome.storage.sync.get([STORAGE_KEYS.AI_SERVICE], resolve);
+      });
+      const savedService = syncResult[STORAGE_KEYS.AI_SERVICE] as string | undefined;
+      if (savedService) {
+        aiServiceSelect.value = savedService;
+      }
+      // Auto-save on change
+      aiServiceSelect.addEventListener("change", () => {
+        chrome.storage.sync.set({ [STORAGE_KEYS.AI_SERVICE]: aiServiceSelect.value });
+      });
+    }
+
+    // Copy TSV button handler (CLIP-01, CLIP-02, CLIP-03)
+    const copyTsvBtn = document.getElementById("copy-tsv-btn");
+    if (copyTsvBtn) {
+      copyTsvBtn.addEventListener("click", async () => {
+        if (!cachedData) return;
+        const tsvText = writeTsv(cachedData, cachedUnitChoice);
+        try {
+          await navigator.clipboard.writeText(tsvText);
+          showToast("Shot data copied!", "success");
+        } catch (err) {
+          console.error("Clipboard write failed:", err);
+          showToast("Failed to copy data", "error");
+        }
+      });
+    }
+
+    // Open in AI button handler (AILN-01, AILN-02, AILN-03)
+    const openAiBtn = document.getElementById("open-ai-btn");
+    if (openAiBtn) {
+      openAiBtn.addEventListener("click", async () => {
+        if (!cachedData || !promptSelect || !aiServiceSelect) return;
+
+        const selectedPromptId = promptSelect.value;
+        const selectedService = aiServiceSelect.value;
+        const prompt = BUILTIN_PROMPTS.find(p => p.id === selectedPromptId);
+        if (!prompt) return;
+
+        const tsvData = writeTsv(cachedData, cachedUnitChoice);
+        const metadata = {
+          date: cachedData.date,
+          shotCount: countSessionShots(cachedData),
+          unitLabel: buildUnitLabel(cachedUnitChoice),
+        };
+        const assembled = assemblePrompt(prompt, tsvData, metadata);
+
+        try {
+          await navigator.clipboard.writeText(assembled);
+          // Fire-and-forget tab creation -- do not await
+          chrome.tabs.create({ url: AI_URLS[selectedService] });
+          showToast(`Prompt + data copied \u2014 paste into ${selectedService}`, "success");
+        } catch (err) {
+          console.error("AI launch failed:", err);
+          showToast("Failed to copy prompt", "error");
+        }
+      });
+    }
+
+    // Copy Prompt + Data button handler (AILN-04)
+    const copyPromptBtn = document.getElementById("copy-prompt-btn");
+    if (copyPromptBtn) {
+      copyPromptBtn.addEventListener("click", async () => {
+        if (!cachedData || !promptSelect) return;
+
+        const selectedPromptId = promptSelect.value;
+        const prompt = BUILTIN_PROMPTS.find(p => p.id === selectedPromptId);
+        if (!prompt) return;
+
+        const tsvData = writeTsv(cachedData, cachedUnitChoice);
+        const metadata = {
+          date: cachedData.date,
+          shotCount: countSessionShots(cachedData),
+          unitLabel: buildUnitLabel(cachedUnitChoice),
+        };
+        const assembled = assemblePrompt(prompt, tsvData, metadata);
+
+        try {
+          await navigator.clipboard.writeText(assembled);
+          showToast("Prompt + data copied!", "success");
+        } catch (err) {
+          console.error("Clipboard write failed:", err);
+          showToast("Failed to copy prompt", "error");
+        }
+      });
+    }
+
   } catch (error) {
     console.error("Error loading popup data:", error);
     showToast("Error loading shot count", "error");
@@ -107,13 +243,14 @@ function updateShotCount(data: unknown): void {
 }
 
 function updateExportButtonVisibility(data: unknown): void {
-  const exportBtn = document.getElementById("export-btn");
-  if (!exportBtn) return;
+  const exportRow = document.getElementById("export-row");
+  const aiSection = document.getElementById("ai-section");
 
-  const hasValidData = data && typeof data === "object" && 
+  const hasValidData = data && typeof data === "object" &&
     (data as Record<string, unknown>)["club_groups"];
-  
-  exportBtn.style.display = hasValidData ? "block" : "none";
+
+  if (exportRow) exportRow.style.display = hasValidData ? "flex" : "none";
+  if (aiSection) aiSection.style.display = hasValidData ? "block" : "none";
 }
 
 async function handleExportClick(): Promise<void> {
@@ -195,6 +332,7 @@ async function handleClearClick(): Promise<void> {
       });
     });
 
+    cachedData = null;
     updateShotCount(null);
     updateExportButtonVisibility(null);
     showToast("Session data cleared", "success");
