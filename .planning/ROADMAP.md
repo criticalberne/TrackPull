@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.x Core Extension** - Phases 1-4 (shipped before 2026-03-02)
-- 📋 **Future milestones** - To be defined via `/gsd:new-milestone`
+- 📋 **v1.3 Export & AI** - Phases 5-7 (in progress)
 
 ## Phases
 
@@ -71,6 +71,42 @@ Plans:
 
 </details>
 
+## Phase Details
+
+### Phase 5: Foundation Modules
+**Goal**: Shared TypeScript modules for TSV export and prompt assembly are tested and ready for popup integration
+**Depends on**: Phase 4
+**Requirements**: PRMT-01
+**Success Criteria** (what must be TRUE):
+  1. All 7+ built-in golf prompts are bundled as TypeScript constants and accessible by name and skill tier
+  2. A TSV writer converts SessionData into a tab-separated string that pastes correctly into Google Sheets and Excel
+  3. A prompt builder assembles a final prompt+data payload string from any prompt template and TSV data
+  4. Unit tests cover TSV edge cases (field values containing tabs, newlines, or commas) and pass in CI
+**Plans**: TBD
+
+### Phase 6: Clipboard Copy and AI Launch
+**Goal**: Users can copy their shot data and launch AI analysis in one click from the popup
+**Depends on**: Phase 5
+**Requirements**: CLIP-01, CLIP-02, CLIP-03, AILN-01, AILN-02, AILN-03, AILN-04, PRMT-02, PREF-01
+**Success Criteria** (what must be TRUE):
+  1. User clicks "Copy to Clipboard" and can paste tab-separated shot data with column headers directly into a spreadsheet
+  2. A toast confirmation appears in the popup after every clipboard copy so the user knows the data is ready
+  3. User selects a built-in prompt from a skill-tiered dropdown and clicks "Open in AI" — the assembled prompt+data is copied to clipboard and ChatGPT or Claude opens in a new tab
+  4. User clicks "Copy Prompt + Data" and the full AI payload is on the clipboard without any new tab opening
+  5. User sets a default AI service preference in the popup and it is remembered on next open
+**Plans**: TBD
+
+### Phase 7: Options Page and Custom Prompts
+**Goal**: Users can create, edit, and delete their own prompt templates in a dedicated settings page
+**Depends on**: Phase 6
+**Requirements**: PRMT-03, PRMT-04, PREF-02
+**Success Criteria** (what must be TRUE):
+  1. User opens the options page from the popup and sees all built-in prompts listed (read-only) and any custom prompts they have saved
+  2. User creates a new custom prompt with a name and body, saves it, and it immediately appears in the popup prompt selector
+  3. User edits an existing custom prompt and the updated version is reflected in the popup on next open
+  4. User deletes a custom prompt and it is removed from both the options page and the popup selector
+**Plans**: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -79,8 +115,11 @@ Plans:
 | 2. CSV Export | v1.x | 2/2 | Complete | Pre-existing |
 | 3. Unit Preferences | v1.x | 3/3 | Complete | Pre-existing |
 | 4. Popup UI | v1.x | 2/2 | Complete | Pre-existing |
+| 5. Foundation Modules | v1.3 | 0/? | Not started | - |
+| 6. Clipboard Copy and AI Launch | v1.3 | 0/? | Not started | - |
+| 7. Options Page and Custom Prompts | v1.3 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*
 *v1.x phases reflect pre-existing implementation — all 12 v1 requirements complete*
-*Future milestones to be added via `/gsd:new-milestone`*
+*v1.3 phases added: 2026-03-02 — 12 requirements mapped across phases 5-7*

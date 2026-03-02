@@ -87,6 +87,7 @@
 ## Traceability
 
 All v1 requirements are implemented (shipped in v1.x milestone).
+All v1.3 requirements are mapped to phases 5-7.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -102,26 +103,26 @@ All v1 requirements are implemented (shipped in v1.x milestone).
 | UNIT-03 | Phase 3 (Unit Preferences) | Complete |
 | UI-01 | Phase 4 (Popup UI) | Complete |
 | UI-02 | Phase 4 (Popup UI) | Complete |
-| CLIP-01 | Phase ? | Pending |
-| CLIP-02 | Phase ? | Pending |
-| CLIP-03 | Phase ? | Pending |
-| AILN-01 | Phase ? | Pending |
-| AILN-02 | Phase ? | Pending |
-| AILN-03 | Phase ? | Pending |
-| AILN-04 | Phase ? | Pending |
-| PRMT-01 | Phase ? | Pending |
-| PRMT-02 | Phase ? | Pending |
-| PRMT-03 | Phase ? | Pending |
-| PRMT-04 | Phase ? | Pending |
-| PREF-01 | Phase ? | Pending |
-| PREF-02 | Phase ? | Pending |
+| PRMT-01 | Phase 5 (Foundation Modules) | Pending |
+| CLIP-01 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| CLIP-02 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| CLIP-03 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| AILN-01 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| AILN-02 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| AILN-03 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| AILN-04 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| PRMT-02 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| PREF-01 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| PRMT-03 | Phase 7 (Options Page and Custom Prompts) | Pending |
+| PRMT-04 | Phase 7 (Options Page and Custom Prompts) | Pending |
+| PREF-02 | Phase 7 (Options Page and Custom Prompts) | Pending |
 
 **Coverage:**
 - v1 requirements: 12 total (all complete)
 - v1.3 requirements: 12 total
-- Mapped to phases: 12 (v1) + 0 (v1.3 — pending roadmap)
-- Unmapped: 12 (v1.3)
+- Mapped to phases: 12 (v1) + 12 (v1.3)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after milestone v1.3 requirements defined*
+*Last updated: 2026-03-02 — v1.3 requirements mapped to phases 5-7*
