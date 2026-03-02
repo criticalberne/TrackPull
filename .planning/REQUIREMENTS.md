@@ -33,16 +33,16 @@
 
 ### Clipboard
 
-- [ ] **CLIP-01**: User can copy all shot data to clipboard as tab-separated values with one click
-- [ ] **CLIP-02**: User sees visual confirmation (toast) after successful clipboard copy
-- [ ] **CLIP-03**: Clipboard copy includes column headers as the first row
+- [x] **CLIP-01**: User can copy all shot data to clipboard as tab-separated values with one click
+- [x] **CLIP-02**: User sees visual confirmation (toast) after successful clipboard copy
+- [x] **CLIP-03**: Clipboard copy includes column headers as the first row
 
 ### AI Launch
 
-- [ ] **AILN-01**: User can open ChatGPT in a new tab with prompt+data auto-copied to clipboard
-- [ ] **AILN-02**: User can open Claude in a new tab with prompt+data auto-copied to clipboard
-- [ ] **AILN-03**: User can open Gemini in a new tab with prompt+data auto-copied to clipboard
-- [ ] **AILN-04**: User can copy assembled prompt+data to clipboard without opening an AI tab
+- [x] **AILN-01**: User can open ChatGPT in a new tab with prompt+data auto-copied to clipboard
+- [x] **AILN-02**: User can open Claude in a new tab with prompt+data auto-copied to clipboard
+- [x] **AILN-03**: User can open Gemini in a new tab with prompt+data auto-copied to clipboard
+- [x] **AILN-04**: User can copy assembled prompt+data to clipboard without opening an AI tab
 
 ### Prompt Library
 
@@ -104,13 +104,13 @@ All v1.3 requirements are mapped to phases 5-7.
 | UI-01 | Phase 4 (Popup UI) | Complete |
 | UI-02 | Phase 4 (Popup UI) | Complete |
 | PRMT-01 | Phase 5 (Foundation Modules) | Complete |
-| CLIP-01 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
-| CLIP-02 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
-| CLIP-03 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
-| AILN-01 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
-| AILN-02 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
-| AILN-03 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
-| AILN-04 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| CLIP-01 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
+| CLIP-02 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
+| CLIP-03 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
+| AILN-01 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
+| AILN-02 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
+| AILN-03 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
+| AILN-04 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
 | PRMT-02 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
 | PREF-01 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
 | PRMT-03 | Phase 7 (Options Page and Custom Prompts) | Pending |
