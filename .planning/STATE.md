@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** No active phase — v1.x complete, awaiting next milestone
+**Current focus:** Milestone v1.3 — Export & AI
 
 ## Current Position
 
-Phase: 4 of 4 (Popup UI — complete)
-Plan: All plans complete
-Status: All v1.x phases complete — ready for new milestone
-Last activity: 2026-03-02 — GSD initialized on existing v1.2.1 codebase; roadmap created
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-02 — Milestone v1.3 started
 
-Progress: [██████████] 100% (v1.x)
+Progress: [░░░░░░░░░░] 0% (v1.3)
 
 ## Performance Metrics
 

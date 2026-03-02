@@ -4,6 +4,19 @@
 
 A Chrome extension that scrapes shot data from Trackman golf web reports and exports it to CSV. It intercepts API responses on trackmangolf.com, parses shot metrics by club, and lets golfers download their session data for external analysis.
 
+## Current Milestone: v1.3 Export & AI
+
+**Goal:** Give users more ways to get their data out — clipboard copy for spreadsheets and one-click AI analysis with pre-built golf prompts.
+
+**Target features:**
+- Copy shot data to clipboard as tab-separated values (paste-friendly for spreadsheets)
+- Launch AI analysis in ChatGPT, Claude, or Gemini with data + prompt pre-formatted
+- Copy prompt+data to clipboard as alternative to direct AI tab launch
+- Bundle 7+ built-in golf analysis prompts (beginner/intermediate/advanced tiers)
+- User can create and save custom prompt templates
+- Set default AI service with per-launch override
+- Quick AI settings in popup, full prompt management in options page
+
 ## Core Value
 
 Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export — scraping and exporting are inseparable.
@@ -26,11 +39,18 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 
 ### Active
 
-(None yet — setting up GSD for future work)
+- [ ] Copy shot data to clipboard as tab-separated values
+- [ ] Launch AI analysis in ChatGPT, Claude, or Gemini with data + prompt
+- [ ] Copy prompt+data to clipboard for manual AI paste
+- [ ] Bundle built-in golf analysis prompts across skill tiers
+- [ ] Let users create and save custom prompt templates
+- [ ] Set default AI service with per-launch override
+- [ ] Prompt management in options page, quick access in popup
 
 ### Out of Scope
 
-(None defined yet)
+- Real-time API integration with AI services — opens in browser tab, no API keys
+- Mobile app — web extension only
 
 ## Context
 
@@ -59,5 +79,10 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 | esbuild over webpack/vite | Simpler, faster builds for a small extension with no complex bundling needs | ✓ Good |
 | dist/ tracked in git | Simplifies releases — zip and upload without separate build step | ✓ Good |
 
+| Bundle existing prompt library in extension | 7 well-written prompts already exist in repo; ship them as built-ins | — Pending |
+| CSV format for AI data payload | Compact, reliable LLM parsing, same format already generated | — Pending |
+| Tab-separated for clipboard | Paste-friendly for Google Sheets / Excel | — Pending |
+| Default AI + override model | Set once, one-click launch, but can switch per-use | — Pending |
+
 ---
-*Last updated: 2026-03-02 after initialization*
+*Last updated: 2026-03-02 after milestone v1.3 started*
