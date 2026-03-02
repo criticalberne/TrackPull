@@ -1,247 +1,339 @@
 # Pitfalls Research
 
-**Domain:** Chrome extension data scraping (Trackman golf reports)
+**Domain:** Chrome Extension (MV3) — Clipboard Export and AI Prompt Tab Launch
 **Researched:** 2026-03-02
-**Confidence:** HIGH for Chrome extension mechanics (official docs verified); MEDIUM for Trackman-specific API stability (no official API docs; inferred from existing scraper behavior)
+**Confidence:** HIGH for MV3 clipboard mechanics (official docs + Chromium issue tracker verified); HIGH for AI URL pre-fill status (multiple community sources, cross-verified); MEDIUM for options page patterns (official docs, single source); LOW for AI service URL stability (undocumented, subject to change without notice)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Trackman Renames CSS Classes, Breaking the HTML Fallback Scraper
+### Pitfall 1: Clipboard Write Fails in Service Worker — Wrong Context Used
 
 **What goes wrong:**
-The HTML fallback scraper (html_scraping.ts) targets hardcoded CSS class names like `player-and-results-table-wrapper`, `ResultsTable`, `parameter-names-row`, `row-with-shot-details`, and `group-tag`. These are defined in constants.ts and used throughout. Trackman's frontend is a React SPA (confirmed: uses create-react-app). React SPAs frequently rename or hash CSS classes during routine frontend refactors or dependency upgrades — without any public changelog. When this happens, the HTML fallback silently returns empty data rather than throwing a visible error, so users see a 0-shot export without knowing why.
+A developer routes the clipboard copy through the service worker (e.g., handling a `COPY_TO_CLIPBOARD` message in `serviceWorker.ts`). `navigator.clipboard` is unavailable in service worker context. The call either throws `TypeError: navigator.clipboard is undefined` or silently fails. The user clicks "Copy" and nothing happens.
 
 **Why it happens:**
-Developers assume CSS class names on third-party sites are stable. They rarely are on React SPAs. Trackman has no obligation to maintain scraper-compatible markup. The existing code hard-codes 8+ CSS class names with no version guard or detection mechanism.
+Service workers do not have a DOM context and therefore have no access to `navigator.clipboard`. The existing architecture for CSV export (popup → message → service worker → download) works for `chrome.downloads`, which is a Chrome API available to service workers. Developers naturally try to replicate this pattern for clipboard, but the clipboard API is a Web Platform API requiring a document context, not a Chrome API.
 
 **How to avoid:**
-- Before implementing any feature that touches HTML scraping, verify the current class names against live Trackman pages.
-- Add a health-check log on extension load that confirms at least one expected CSS selector matches a real DOM element. If none match, log a warning the user can see in the popup.
-- Consider targeting structural HTML attributes (ARIA roles, data attributes) or element hierarchy over class names where possible, as these change less frequently.
-- Document which class names were verified on what date inside constants.ts.
+Clipboard write belongs in the **popup context**, not the service worker. The popup is a document context — `navigator.clipboard.writeText()` works there directly when the user clicks a button. Call it directly in the popup's click handler. Do not route it through the service worker at all. Add `"clipboardWrite"` to `manifest.json` permissions to skip the transient activation requirement.
+
+The correct flow is:
+```
+User clicks "Copy" button in popup
+→ popup.ts handler calls navigator.clipboard.writeText(formattedData) directly
+→ success/error toast shown to user
+```
 
 **Warning signs:**
-- HTML fallback path returns 0 shots while API interception returns data (class names changed but API still works).
-- Both paths return 0 shots (more severe: API response shape may have also changed).
-- Users reporting "no data captured" after a Trackman site update with no extension change on our side.
+- `TypeError: Cannot read properties of undefined (reading 'writeText')` in service worker console.
+- User reports "Copy" button does nothing, no error shown.
+- Developer adding a `COPY_TO_CLIPBOARD` message type to serviceWorker.ts.
 
 **Phase to address:**
-Any phase that adds HTML fallback features or new CSS selectors. All new CSS selector additions should be verified against the live site before merging. Adding a DOM health-check should be a task in the first implementation phase.
+Clipboard copy implementation phase. Architect the copy handler to live in popup.ts from the start — do not prototype it in the service worker first.
 
 ---
 
-### Pitfall 2: Trackman Changes the StrokeGroups JSON Schema, Breaking API Interception
+### Pitfall 2: Clipboard Write Silently Fails When Popup Loses Focus Before Async Resolves
 
 **What goes wrong:**
-The interceptor.ts parser deeply assumes the API response shape: `StrokeGroups` array, each with `Club`, `Strokes` array, each stroke with `NormalizedMeasurement` and `Measurement` objects. If Trackman renames any of these keys or nests them differently (e.g., introducing a wrapper object), `parseSessionData` returns `null` silently. The extension appears to work (no error) but captures nothing. This is harder to detect than a CSS class change because nothing in the UI signals the failure.
+The popup fetches shot data from `chrome.storage.local` asynchronously, formats it as TSV, then calls `navigator.clipboard.writeText()`. If the popup loses focus between the storage read completing and `writeText()` executing, Chrome throws `DOMException: Document is not focused`. This manifests as a silent failure — the copy toast may show "success" while the clipboard actually has stale or no content.
 
 **Why it happens:**
-The API is undocumented and private. The existing parser was built by reverse-engineering responses — a snapshot in time. Trackman could reshape the API for new frontend features (e.g., adding new data categories, restructuring for GraphQL) with no notice.
+The `navigator.clipboard.writeText()` API requires the document to have focus at call time, even with the `clipboardWrite` permission. In a Chrome extension popup, focus is fragile: the popup closes (and thus loses focus) if the user clicks outside it. An async chain of `storage.get → format → clipboard.write` opens a window where focus can be lost between storage callback resolution and the clipboard write.
 
 **How to avoid:**
-- Add a diagnostic log after each intercepted response indicating whether `containsStrokegroups()` returned true or false, so failures are visible in the console without user action.
-- When adding new metrics or new data sources, always inspect the live API response shape first (`Read` the actual JSON, don't assume). This is already stated in CLAUDE.md but worth reinforcing.
-- The existing `containsStrokegroups()` heuristic (checking for 3+ indicator strings) provides a useful early-warning layer — keep it and extend it if new response shapes are added.
-- Consider logging the raw response structure (not full data) when `containsStrokegroups()` is true but `parseSessionData()` returns null, to make debugging faster.
+Keep the async chain as tight as possible. Retrieve the data, format it, and call `navigator.clipboard.writeText()` all within the same microtask queue flush — avoid any `setTimeout` or unnecessary `await` between the data retrieval and the clipboard write. The storage read can be done proactively on popup load (not on button click) so that when the user clicks "Copy", the data is already in memory and the write fires synchronously within the click handler's event context.
+
+Pattern to use:
+```typescript
+// On popup load: pre-fetch data into memory
+let cachedTsvData: string | null = null;
+
+// On load
+const data = await chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA]);
+cachedTsvData = formatAsTsv(data[STORAGE_KEYS.TRACKMAN_DATA]);
+
+// On button click: fire immediately with cached data
+copyBtn.addEventListener('click', () => {
+  if (!cachedTsvData) return;
+  navigator.clipboard.writeText(cachedTsvData)
+    .then(() => showToast('Copied to clipboard', 'success'))
+    .catch(() => showToast('Copy failed — try again', 'error'));
+});
+```
 
 **Warning signs:**
-- `TrackPull: Shot data detected in:` log appears (containsStrokegroups passed) but no subsequent `SessionData posted to bridge` log.
-- Shot count in popup shows 0 despite navigating a report page.
-- The metric key set in `METRIC_KEYS` begins missing values that Trackman has clearly displayed on screen.
+- `DOMException: Document is not focused` appearing in the popup's DevTools console.
+- Clipboard contains old data after clicking "Copy" on a new session.
+- The copy operation is unreliable: works sometimes, not others.
 
 **Phase to address:**
-Every phase touching metric parsing. Any phase adding new data fields must begin with live API inspection, not assumptions from training data or existing code.
+Clipboard copy implementation phase. Pre-fetch and cache data on popup open; do not initiate storage reads inside the click handler.
 
 ---
 
-### Pitfall 3: Service Worker Terminates During Data Capture, Losing In-Flight Session Data
+### Pitfall 3: AI URL Pre-Fill Is Not a Supported Feature — It Is a Fragile Hack
 
 **What goes wrong:**
-Chrome MV3 service workers terminate after ~30 seconds of inactivity (confirmed by official Chrome docs). The current architecture stores session data in `chrome.storage.local` synchronously when `SAVE_DATA` is received, which is safe. But if the service worker is idle and the interceptor fires (page loaded, API response captured), the bridge sends `chrome.runtime.sendMessage` to the service worker. If the worker isn't running, it must cold-start. During that cold-start gap, the message may be dropped. The `chrome.runtime.lastError` in bridge.ts catches this — but the shot data is then lost with no retry.
+The developer designs the "AI tab launch" feature assuming that opening `https://chatgpt.com/?q=<prompt>` or `https://claude.ai/?q=<prompt>` will reliably pre-fill the prompt field. This was community-discovered URL behavior, not an official API. These URLs break silently when the AI provider updates their frontend. The tab opens but the prompt field is empty, and the user has no idea why.
 
 **Why it happens:**
-MV3 service workers are not persistent background pages. This is a fundamental MV3 architectural constraint. The bridge has no retry or queue mechanism. When the service worker is warming up, messages sent during that window fail silently from the user's perspective.
+There is no official ChatGPT, Claude, or Gemini URL API for pre-filling prompts. ChatGPT's `?q=` parameter was identified by the community and works as of early 2026, but OpenAI has no obligation to maintain it. Claude's equivalent (`claude.ai/new?q=`) was removed in October 2025. Gemini has no native URL parameter support — browser extensions that appear to support it work by injecting content scripts that simulate DOM input events after the page loads.
 
 **How to avoid:**
-- When adding any new feature that depends on message passing from content script to service worker, test the cold-start scenario: navigate directly to a Trackman report URL without first opening the popup (which would wake the worker).
-- If a new feature requires reliable message delivery, implement a retry loop in the bridge: catch `lastError`, wait 200ms, retry up to 3 times before giving up.
-- Never store ephemeral state in service worker module-level variables — always read from `chrome.storage.local`.
-- Register all `chrome.runtime.onMessage` listeners synchronously at module top-level (not inside callbacks) so they survive worker restarts. The existing code already does this correctly; new features must not break this pattern.
+Design the feature around **clipboard copy as the primary delivery mechanism**, not URL pre-fill. The user flow should be:
+
+1. User selects AI service (ChatGPT / Claude / Gemini)
+2. Extension copies prompt+data to clipboard
+3. Extension opens the AI service URL (the bare homepage, no query params)
+4. User pastes with Cmd+V in the chat input
+
+This flow is robust against frontend changes at AI providers because it uses no undocumented APIs. URL pre-fill can be offered as a "try it" enhancement for ChatGPT where the `?q=` param currently works, but it must degrade gracefully (open the page, show "prompt copied — paste to proceed" message) when the URL param is ignored.
+
+If URL pre-fill is implemented:
+- ChatGPT: `https://chatgpt.com/?q=<encoded_prompt>` — works as of early 2026, LOW confidence in stability
+- Claude: No URL parameter works as of 2025 (removed October 2025)
+- Gemini: No native URL parameter — requires content script injection to simulate input
 
 **Warning signs:**
-- `TrackPull bridge: sendMessage failed` logs appearing in console on first page load after browser idle.
-- Users reporting intermittent "no data" on the first report they open in a browser session.
-- Shot count stays at 0 until user opens the popup (which wakes the service worker) and then refreshes the page.
+- AI tab opens but chat field is empty with no error.
+- Users report that the AI launch "used to work" after a provider UI update.
+- A provider changelog mentions "new chat interface" or "redesigned input".
 
 **Phase to address:**
-Any phase that adds new message types between content scripts and the service worker. Cold-start resilience should be a success criterion for those phases.
+AI tab launch design phase. Decide the delivery model before implementation: clipboard-first with optional URL pre-fill, not URL pre-fill as primary.
 
 ---
 
-### Pitfall 4: Building Without Committing dist/, Then Releasing Stale Built Artifacts
+### Pitfall 4: Prompt + Data Payload Exceeds URL Length Limits for Tab Launch
 
 **What goes wrong:**
-`dist/` is tracked in git (deliberate project decision — documented in CLAUDE.md and project memory). This means the release is whatever is in `dist/` at commit time. If a developer makes source changes, forgets to run `bash scripts/build-extension.sh`, and commits only the TypeScript source files, the released extension is the old build. Users installing from the release zip get the previous version's behavior. This is especially dangerous when fixing bugs — the fix appears merged but the distribution is unaffected.
+The developer encodes the full prompt template + full TSV shot data into a URL query parameter and opens it with `chrome.tabs.create({ url: ... })`. A Trackman session with 200 shots × 29 metrics produces ~50-80 KB of TSV data. URL-encoded, this far exceeds practical limits. The `chrome.tabs.create()` call may succeed (Chrome supports URLs up to 2 MB technically), but the AI provider's server or frontend rejects or truncates the oversized URL, delivering a garbled or empty prompt.
 
 **Why it happens:**
-There is no automated pre-commit hook or CI enforcing that `dist/` matches the source. The build step is manual. The project memory documents it, but it's easy to forget under time pressure.
+It seems natural to encode everything into the URL for a one-step launch. But URL encoding inflates data size (spaces become `%20`, etc.), and AI provider frontends are not designed to receive megabytes of data as URL parameters. HTTP servers typically enforce limits of 8 KB–64 KB on query strings.
 
 **How to avoid:**
-- Every phase task list that modifies TypeScript source must end with: run `npx vitest run`, run `bash scripts/build-extension.sh`, verify output in `dist/`, then commit with both source and dist changes in the same commit.
-- Consider adding a simple check: if any `.ts` file in `src/` is newer than the corresponding `.js` in `dist/`, warn before any `gh release create`.
-- Make "rebuild and verify dist" an explicit success criterion in every implementation phase.
+Never put the full shot data into the URL. The URL pre-fill pattern (where it works) should contain only the prompt template text — a few hundred characters at most. The shot data always goes through the clipboard. The recommended flow is: copy prompt+data to clipboard, open AI tab to homepage, user pastes.
+
+If URL pre-fill is used for the prompt text only (no data embedded), keep the prompt template short. The 7 built-in golf prompts should be designed to be terse instructions — the data comes from clipboard paste, not URL embedding.
 
 **Warning signs:**
-- `dist/*.js` timestamps are older than `src/*.ts` timestamps after a source change.
-- Git diff shows only `.ts` changes with no corresponding `.js` changes in `dist/`.
-- A release tag exists but the reported version in the extension popup doesn't match the commit.
+- `chrome.tabs.create()` with a URL argument longer than 2,000 characters.
+- AI chat field shows a truncated or garbled prompt.
+- Developer using `encodeURIComponent(csvContent + promptText)` to build the URL.
 
 **Phase to address:**
-Every phase. Make it the last step in every task list involving source file changes.
+AI tab launch implementation phase. Establish upfront: URL carries prompt template only (if anything); data always travels via clipboard.
+
+---
+
+### Pitfall 5: Storage Quota Exceeded When Saving Many Custom Prompt Templates to chrome.storage.sync
+
+**What goes wrong:**
+The developer stores user-created prompt templates in `chrome.storage.sync` to sync across devices. `chrome.storage.sync` has a hard limit of 8,192 bytes (8 KB) per item and 102,400 bytes (100 KB) total across all items. A single verbose custom prompt template can easily be 1–3 KB of text. With 7 built-in prompts stored alongside user-created prompts, the total easily approaches or exceeds 100 KB. Writes fail silently if the quota is exceeded (`chrome.runtime.lastError` is set but not user-visible), leaving the user's prompt template unsaved with no feedback.
+
+**Why it happens:**
+Developers choose `chrome.storage.sync` because it sounds like the right choice for "user settings." But sync storage was designed for small configuration values (booleans, short strings), not multi-kilobyte text templates. The quota is extremely tight for prompt libraries.
+
+**How to avoid:**
+Use `chrome.storage.local` for prompt templates, not `chrome.storage.sync`. `chrome.storage.local` has a 10 MB default quota — sufficient for hundreds of prompts. Only store small, singular configuration values (like the default AI service preference, a single string) in `chrome.storage.sync`.
+
+Storage separation:
+- `chrome.storage.local` — prompt templates (built-in + custom), shot session data
+- `chrome.storage.sync` — user preferences: default AI service, unit preferences
+
+Never store the prompt text bodies in `chrome.storage.sync`.
+
+**Warning signs:**
+- `chrome.runtime.lastError: QUOTA_BYTES_PER_ITEM quota exceeded` when saving a prompt.
+- User's custom prompt template disappears after saving (write failed).
+- Developer using `chrome.storage.sync.set({ prompts: allPromptTemplates })` — storing all prompts as one object.
+
+**Phase to address:**
+Prompt storage design phase. Establish the storage split (local vs. sync) in the data model before writing any storage code.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 5: postMessage Race Between MAIN World Interceptor and ISOLATED World Bridge
+### Pitfall 6: Built-In Prompts Bundled as Storage Writes Bloat Local Storage and Conflict With User Edits
 
 **What goes wrong:**
-Both `interceptor.js` (MAIN world) and `bridge.js` (ISOLATED world) are injected at `document_start`. The interceptor sends data via `window.postMessage`; the bridge listens via `window.addEventListener("message")`. If the interceptor fires before the bridge's listener is registered (possible in edge cases where the ISOLATED world script is slightly delayed), the message is never received. The current architecture doesn't have a handshake or queuing mechanism between the two worlds.
-
-**Why it happens:**
-`document_start` injection ordering between MAIN and ISOLATED world scripts is not strictly guaranteed to be synchronous. Chrome's documentation notes that script execution order within a single world is guaranteed but cross-world ordering has implicit dependencies on the extension's internal scheduling.
+On extension install, the service worker writes all 7 built-in prompts into `chrome.storage.local`. On update, it overwrites them again — wiping any user modifications to the default prompts. Alternatively, if built-in prompts are never written and only exist in source code, reading them requires different code paths than reading user-created prompts (inconsistent API).
 
 **How to avoid:**
-- When adding any new message types between the interceptor and bridge, test on cold page loads and on hard refresh (Cmd+Shift+R) where script timing is tightest.
-- Do not add synchronous initialization logic in the interceptor that fires messages before the DOM is even partially ready — the existing `waitForTagsThenPost` + polling pattern provides adequate delay for most cases.
-- If a new feature needs guaranteed delivery of MAIN-to-ISOLATED messages, consider a heartbeat or acknowledgment pattern: interceptor retries `postMessage` if no `ACK` arrives within 100ms.
+Do not store built-in prompts in `chrome.storage.local` at all. Bundle them as static TypeScript constants in the source code. At runtime, merge built-in prompts (from code) with user-created prompts (from storage) in-memory when the popup or options page renders the prompt list. This approach:
+- Never overwrites user changes on extension update
+- Keeps storage lean (only user-created prompts stored)
+- Gives a clean architectural boundary between "shipped content" and "user data"
+
+Pattern:
+```typescript
+// In source: builtin-prompts.ts
+export const BUILTIN_PROMPTS: PromptTemplate[] = [
+  { id: 'builtin-beginner-overview', title: 'Beginner Overview', text: '...', tier: 'beginner', builtin: true },
+  // ...
+];
+
+// At render time:
+const userPrompts = await loadUserPrompts(); // from chrome.storage.local
+const allPrompts = [...BUILTIN_PROMPTS, ...userPrompts];
+```
 
 **Warning signs:**
-- `TrackPull: bridge content script loaded` does not appear in console for a page load that did capture data.
-- `TrackPull bridge: forwarding shot data to service worker` never fires despite interceptor confirming data was posted.
+- `chrome.runtime.onInstalled` handler calling `chrome.storage.local.set({ builtinPrompts: ... })`.
+- User reports their edited built-in prompt was reset after an extension update.
+- Storage inspection shows duplicate prompt data across both extension source and storage.
 
 **Phase to address:**
-Any phase adding new cross-world communication. Test in clean browser profiles where extension has no warm state.
+Prompt data model design phase, before any storage code is written.
 
 ---
 
-### Pitfall 6: chrome.storage.local Quota Exceeded Silently Drops Save
+### Pitfall 7: Options Page Cannot Open New Tabs Directly — Must Message Service Worker
 
 **What goes wrong:**
-`chrome.storage.local` has a 10 MB default quota (5 MB in Chrome 113 and earlier — confirmed by official Chrome docs). The current `SAVE_DATA` handler checks `chrome.runtime.lastError` and logs to console, but returns `{ success: false }` to the bridge, which ignores this response. If a session is large (many clubs, many shots, many metrics), the save silently fails. The popup still shows 0 shots because storage has no data, but no user-visible error appears.
-
-**Why it happens:**
-A single Trackman session is probably well under 10 MB. But if a future feature adds `raw_api_data` storage (the `SessionData` type already has this field), or if multi-session aggregation is added, the payload could grow unexpectedly. The `unlimitedStorage` permission is not currently requested in manifest.json.
+The developer writes an options page that, when the user clicks "Test prompt in ChatGPT," calls `chrome.tabs.create()` directly from the options page script. This fails when the options page is configured as an embedded options page (`options_ui` with `open_in_tab: false`), because embedded options pages are not hosted in a tab and do not have access to the full Tabs API.
 
 **How to avoid:**
-- When adding any feature that expands the data stored per session (new fields, raw API capture, historical sessions), estimate the storage cost first. A session with 300 shots × 29 metrics × ~10 bytes per value = ~87 KB — well within limits for single sessions.
-- If adding multi-session history, request `unlimitedStorage` in manifest.json proactively and add explicit quota error handling with a user-visible popup message.
-- Do not store raw API response blobs (`raw_api_data` field in SessionData) in production unless necessary — they can be megabytes.
+Route all tab-creation calls through the service worker via `chrome.runtime.sendMessage`. The options page sends a message; the service worker calls `chrome.tabs.create()`. This works regardless of whether the options page is embedded or full-page.
+
+```typescript
+// Options page:
+chrome.runtime.sendMessage({ type: 'OPEN_AI_TAB', service: 'chatgpt' });
+
+// Service worker:
+if (message.type === 'OPEN_AI_TAB') {
+  chrome.tabs.create({ url: AI_SERVICE_URLS[message.service] });
+}
+```
+
+Additionally, the `tabs` permission should be added to manifest.json if the extension needs to open tabs from the service worker. Note this permission addition will trigger Chrome's privilege escalation prompt for existing users (see Pitfall 8 in the base PITFALLS for context), so confirm it is truly necessary before adding it. Alternatively, `chrome.tabs.create` works without the `tabs` permission — it only grants access to tab metadata (URL, title) which is not needed here.
 
 **Warning signs:**
-- `TrackPull: Failed to save data:` in service worker console.
-- `chrome.runtime.lastError` containing "QUOTA_BYTES quota exceeded".
-- Shot count shows 0 after what appeared to be a successful capture.
+- `chrome.tabs is undefined` or `chrome.tabs.create is not a function` in the options page DevTools console.
+- Options page uses `window.open()` as a fallback (this opens outside the extension context and may be blocked).
 
 **Phase to address:**
-Any phase adding multi-session storage, historical data, or raw API response persistence.
+Options page implementation phase. Decide upfront whether to use embedded or full-page options (full-page avoids this issue), and if embedded, route all tab operations through the service worker.
 
 ---
 
-### Pitfall 7: New Metric Added to Trackman Not Captured Because METRIC_KEYS is a Closed Set
+### Pitfall 8: Popup Sends Clipboard + Tab-Open Sequentially — Popup Closes Before Tab Opens
 
 **What goes wrong:**
-`interceptor.ts` has an explicit `METRIC_KEYS` Set. Any metric key not in this set is dropped during parsing. If Trackman introduces new ball-flight metrics (e.g., `SpinDecay`, `CarryEfficiency`), they are silently ignored even if present in the API response. The existing code also mirrors `ALL_METRICS` in `constants.ts`, creating two places that must be updated in sync.
-
-**Why it happens:**
-The allow-list was a conscious design choice (filter noise from the API), but it creates a maintenance burden. Every Trackman product update that adds metrics requires a code change. The Golf Simulator Forum search result confirms Trackman announced new data points at the 2025 PGA Show, suggesting this is an active risk.
+The developer sequences: (1) write to clipboard, (2) open AI tab. When `chrome.tabs.create()` is called after `navigator.clipboard.writeText()`, the popup may close (Chrome auto-closes the popup when focus shifts to a new tab). If the clipboard write is still in-flight (the Promise hasn't resolved), the popup's document is destroyed mid-operation, aborting the clipboard write. The tab opens but the clipboard is empty or stale.
 
 **How to avoid:**
-- When adding features or after any Trackman product announcement, inspect live API responses to check if new keys appear in `Measurement` or `NormalizedMeasurement` that aren't in `METRIC_KEYS`.
-- Consider making the allow-list user-configurable or adding a "capture all numeric metrics" debug mode that bypasses the allow-list.
-- If `METRIC_KEYS` in interceptor.ts and `ALL_METRICS` in constants.ts are ever out of sync, data will be captured but not exported in the CSV. Keep them synchronized — treat them as a single source of truth.
+`await` the clipboard write to completion before calling `chrome.tabs.create()`. The tab open should happen only after the clipboard Promise has fully resolved. Since the popup will close when the tab opens, show any status toast (e.g., "Prompt copied — paste in chat") before opening the tab.
+
+```typescript
+copyBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(promptAndData);
+    showToast('Prompt copied — paste in AI chat', 'success');
+    // Brief pause so user sees the toast before popup closes
+    await new Promise(r => setTimeout(r, 400));
+    chrome.tabs.create({ url: aiServiceUrl });
+  } catch {
+    showToast('Copy failed', 'error');
+  }
+});
+```
 
 **Warning signs:**
-- Trackman UI displays a metric value on screen that does not appear in the exported CSV.
-- Trackman PGA Show or app update notes mention new data categories.
+- Clipboard is empty or stale after AI tab opens.
+- Race condition: works sometimes, fails others.
+- Developer calling `chrome.tabs.create()` before `await`ing the clipboard write Promise.
 
 **Phase to address:**
-Any phase adding new metric support. Always update both `METRIC_KEYS` (interceptor.ts) and `ALL_METRICS` (constants.ts) together.
+AI tab launch implementation. Write the operation sequence with explicit awaits and verify with manual testing that the clipboard contains the expected content after the tab opens.
 
 ---
 
-### Pitfall 8: Adding New Permissions to manifest.json Disables the Extension for Existing Users
+### Pitfall 9: Manifest Permissions Addition for "tabs" Disables Extension for Existing Users
 
 **What goes wrong:**
-If a new feature requires new Chrome permissions beyond the current set (`storage`, `downloads`, `host_permissions` for trackmangolf.com), adding them to `manifest.json` triggers Chrome's privilege escalation check on extension update. Chrome disables the extension and shows users a permission re-approval prompt. Users who don't notice miss the prompt and have a broken extension until they manually re-enable it. The Chrome Web Store is not involved here (this is a direct-install extension via dist/), but the same Chrome behavior applies.
+Adding `"tabs"` to the `permissions` array in `manifest.json` to support tab opening triggers Chrome's privilege escalation check on extension update. The extension is disabled and existing users see a re-approval prompt. Users who miss the prompt have a broken extension.
 
-**Why it happens:**
-Developers add permissions without thinking about the update path. This applies to both API permissions (`tabs`, `scripting`, etc.) and new host_permissions patterns.
+**Why it matters here:**
+The current manifest has only `"storage"` and `"downloads"`. Adding `"tabs"` for the AI launch feature would be a new required permission.
 
 **How to avoid:**
-- Before adding any new `manifest.json` permission, ask: is this truly required? Can the existing `storage` and `downloads` permissions cover the use case?
-- If a new permission is optional (e.g., access to another golf platform domain), use `optional_permissions` or `optional_host_permissions` rather than baking it into the required manifest. Optional permissions don't trigger re-approval on update.
-- Document in the phase plan which permissions are being added and why, so it's a deliberate decision rather than an oversight.
+`chrome.tabs.create()` does **not** require the `"tabs"` permission — it works with no tabs permission. The `"tabs"` permission only grants access to tab metadata (URL, title, favIconUrl for all tabs). For simply opening a new tab to an AI service URL, no additional permissions are needed.
+
+If the feature only opens tabs via `chrome.tabs.create({ url: 'https://chatgpt.com' })`, the current manifest permissions are sufficient. Do not add `"tabs"` to the manifest.
 
 **Warning signs:**
-- A new feature requires `tabs`, `activeTab`, `scripting`, `webRequest`, or a new origin pattern.
-- Reviewing the manifest diff before a release and seeing new entries in `permissions` or `host_permissions`.
+- Developer adding `"tabs"` to manifest because they saw it referenced in documentation alongside `chrome.tabs.create`.
+- A manifest diff before release showing new entries in the `permissions` array.
 
 **Phase to address:**
-Any phase that introduces new capabilities outside the existing feature set (especially multi-tab or multi-domain features).
+Any phase touching manifest.json. Review the manifest diff as part of every pre-release checklist.
 
 ---
 
 ## Minor Pitfalls
 
-### Pitfall 9: response.clone() on Large Responses Doubles Memory Consumption
+### Pitfall 10: TSV Formatting Breaks When Shot Data Contains Tabs or Newlines
 
 **What goes wrong:**
-`interceptor.ts` clones every intercepted fetch response (`response.clone()`) to read the body without consuming the original. For large API responses, this doubles the memory footprint for the duration of body reading. Trackman's StrokeGroups responses for large sessions (300+ shots across 15 clubs) can be several hundred KB. If a future feature intercepts additional Trackman endpoints (video data, image data, or other binary resources), the clone pattern would be applied to every response including large ones.
+Tab-separated values (TSV) use `\t` as the column delimiter. If any shot metric value contains a literal tab character or newline, the TSV is malformed and the spreadsheet import produces garbled rows. Trackman metric values are typically numeric, but string fields (club name, session date, notes) could theoretically contain problematic characters.
 
 **How to avoid:**
-Verify that the `containsStrokegroups()` URL filter is applied before cloning responses. The existing code applies it after cloning — consider filtering by URL prefix first. For any new intercepted endpoint, add URL-based filtering as the first guard before cloning.
+When formatting TSV, sanitize string fields: replace `\t` with a space or strip it, and replace `\n`/`\r` with a space. For purely numeric fields no sanitization is needed. Add a dedicated TSV formatting function (analogous to the existing CSV formatter) that applies this sanitization.
 
 **Warning signs:**
-Chrome's Task Manager shows elevated memory for the extension process compared to baseline.
+- Pasting TSV into Google Sheets produces extra rows or misaligned columns.
+- Any string field in the export contains a `\t` or newline character.
 
 **Phase to address:**
-Any phase adding new intercepted endpoints or capturing new response types.
+Clipboard copy implementation. Write a unit test that verifies TSV output for a session containing edge-case string values.
 
 ---
 
-### Pitfall 10: Tests Run Against TypeScript Source But Extension Runs Built Artifacts
+### Pitfall 11: "Copy Prompt + Data" Produces a Payload Too Large for Some AI Services
 
 **What goes wrong:**
-Vitest runs against `src/*.ts` directly. The built `dist/*.js` files (produced by esbuild IIFE bundling) could behave differently — particularly around scope, module resolution, or edge cases in esbuild's TypeScript-to-JS transpilation. A test can pass while the built extension fails. This gap is the same reason the project mandate says to always rebuild and verify after source changes.
+Combining a prompt template (200–500 characters) with full TSV shot data (potentially 50–100 KB for large sessions) produces a paste payload that exceeds some AI chat input limits. ChatGPT's web interface supports very large inputs, but there may be practical rendering lag, and some AI services have lower limits.
 
 **How to avoid:**
-When a bug only reproduces in the extension but not in unit tests, suspect build-artifact differences before assuming test environment issues. After any non-trivial refactor, do a manual smoke test on the built extension loaded into Chrome (not just vitest).
+This is a known limitation to document, not necessarily to engineer around at v1.3. The built-in prompts should include instructions for the model to process large data. If needed in a future phase, offer a "summary data" mode that exports per-club averages only (already produced by the CSV writer) rather than every individual shot. For v1.3: ship with full data, note the limitation, revisit if users report issues.
 
 **Warning signs:**
-`npx vitest run` passes but loading the extension into Chrome produces runtime errors in the DevTools console.
+- User reports AI service shows "message too long" error.
+- Paste operation takes multiple seconds due to large clipboard content.
 
 **Phase to address:**
-Every phase. Add "load built extension into Chrome and verify basic capture flow" to the manual verification steps for any implementation phase.
+Post-launch follow-up, not a blocking concern for v1.3 unless tested and found to be a consistent failure mode.
 
 ---
 
-### Pitfall 11: Group Tag Timing Assumption Breaks When Trackman Changes Render Timing
+### Pitfall 12: Options Page State Not Persisted on Close If User Navigates Away Without Explicit Save
 
 **What goes wrong:**
-`waitForTagsThenPost` polls for `.group-tag` elements every 300ms for up to 8 seconds. If Trackman changes how or when these elements render (e.g., lazy-loading, deferred hydration, or server-side rendering), the poll could timeout and post data without tags. Tags are the human-readable club labels that make the CSV meaningful — without them, shots are labeled with raw API club strings that may be internal codes rather than user-facing names.
+The options page shows a prompt editor. User edits a prompt. User navigates to a different page or closes the options tab without clicking "Save." Changes are lost silently. This is a common UX failure in extension options pages that do not use auto-save.
 
 **How to avoid:**
-When testing any change that touches timing (React lazy-loading, pagination, SPA routing changes on Trackman's side), verify that group tags are still being applied in the exported CSV. Look for shots with `tag: undefined` in the posted session data as a diagnostic signal.
+Use either auto-save (write to storage on every keypress with debounce, ~500ms) or add an explicit unsaved-changes indicator that warns the user before they navigate away (`beforeunload` event). Auto-save is simpler and more reliable for a prompt editor context.
+
+```typescript
+promptTextarea.addEventListener('input', debounce(() => {
+  savePrompt(currentPromptId, promptTextarea.value);
+}, 500));
+```
 
 **Warning signs:**
-- CSV exports show raw club codes instead of human-readable names like "D1 SW".
-- Console shows `No .group-tag elements found in DOM` after a Trackman UI update.
+- Options page only saves on a button click with no auto-save fallback.
+- No `beforeunload` warning for unsaved changes.
+- User reports losing edited prompts.
 
 **Phase to address:**
-Any phase modifying DOM scraping timing or adding new tag types.
+Options page implementation phase. Decide save strategy (auto-save recommended) before building the editor component.
 
 ---
 
@@ -249,11 +341,11 @@ Any phase modifying DOM scraping timing or adding new tag types.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Hardcoded CSS class names in constants.ts | Simple, readable code | Breaks silently when Trackman refactors frontend | Only with a DOM health-check that alerts when selectors stop matching |
-| Closed `METRIC_KEYS` allow-list | Prevents capturing noise fields | Misses new metrics Trackman adds | Add a "capture all numeric" debug mode to detect new fields without shipping them |
-| `dist/` tracked in git without pre-commit build enforcement | Simple release process | Stale artifacts shipped if build step is forgotten | Acceptable only if every phase task list includes rebuild as an explicit final step |
-| No retry on bridge `sendMessage` failure | Simpler code | Lost data on service worker cold-start | Never for production; add retry for any new critical message type |
-| No user-visible error when `SAVE_DATA` fails | Less UI surface | Users see 0 shots with no explanation | Never; add at minimum a console warning that the popup can surface |
+| URL pre-fill as primary AI delivery mechanism | Feels like one-click magic | Breaks silently whenever AI providers update their frontend; no official API | Never as primary; always implement clipboard-first with URL pre-fill as enhancement |
+| Storing built-in prompts in chrome.storage.local on install | Single code path for all prompts | Built-in prompts get overwritten on update, losing user edits | Never — bundle built-ins in source, store only user-created prompts |
+| Using chrome.storage.sync for prompt template bodies | Cross-device sync sounds appealing | 8 KB per-item quota; 100 KB total; silently fails on save | Never — use chrome.storage.local for templates |
+| Routing clipboard write through service worker | Follows existing message-passing pattern | Service workers have no navigator.clipboard access; always fails | Never — clipboard must live in popup context |
+| No toast shown when clipboard write succeeds | Less UI to implement | User doesn't know if copy worked | Never — always show feedback for clipboard operations |
 
 ---
 
@@ -261,11 +353,12 @@ Any phase modifying DOM scraping timing or adding new tag types.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Trackman fetch API | Assuming `NormalizedMeasurement` always contains all metrics | Check both `Measurement` and `NormalizedMeasurement`; the existing merge (`...raw, ...normalized`) is correct — preserve it |
-| Trackman HTML DOM | Querying selectors before React has hydrated the component | Use MutationObserver or polling (existing pattern); do not query at `document_start` |
-| chrome.storage.local | Not checking `chrome.runtime.lastError` after every write | Always check in callback; the existing code does this, new code must too |
-| chrome.runtime.sendMessage | Sending from content script when service worker hasn't started | Handle `Could not establish connection` lastError; do not treat it as fatal without retry |
-| esbuild IIFE output | Assuming TypeScript types catch all runtime issues | IIFE bundles can have subtle differences from ESM source; always smoke-test the built artifact |
+| ChatGPT URL pre-fill | Using `?prompt=` parameter | Use `?q=` parameter; `?prompt=` has not been observed to work |
+| Claude URL pre-fill | Using `claude.ai/new?q=` or any URL parameter | No URL pre-fill works on claude.ai as of 2025 — use clipboard delivery only |
+| Gemini URL pre-fill | Assuming `?q=` or `?prompt=` works natively | No native support; requires a content script that simulates DOM input events; do not implement in v1.3 |
+| chrome.tabs.create | Adding `"tabs"` permission to manifest | Not needed for tab creation; only needed for reading tab metadata |
+| Options page embedded mode | Calling chrome.tabs.create() directly from options page script | Route tab creation through service worker via sendMessage |
+| navigator.clipboard.writeText | Calling after an async gap from user click | Call within the click handler's synchronous path or immediately after awaiting pre-fetched data |
 
 ---
 
@@ -273,9 +366,9 @@ Any phase modifying DOM scraping timing or adding new tag types.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Cloning all intercepted responses regardless of content | High memory usage during page load | Filter by URL before cloning; skip non-JSON content types | Any session with large non-JSON responses (images, video) being intercepted |
-| JSON.stringify in `containsStrokegroups()` on large objects | CPU spike during API response handling | Keep the heuristic fast; the existing 3-indicator check is good; do not add full-object traversal | API responses larger than ~1 MB |
-| Polling DOM every 300ms for up to 8 seconds | Minor but constant DOM queries during page load | Current limit is acceptable; do not increase MAX_WAIT or decrease POLL_INTERVAL without measuring impact | Not a current concern at current session sizes |
+| Formatting TSV on every popup render | Slow popup open for large sessions | Pre-format on popup load once; cache result in memory | Sessions with 300+ shots and 29 metrics (~50 KB output) |
+| Storing full prompt list as single chrome.storage.local key | One large read on every popup open | Store prompts indexed by ID; read only what is needed for current view | Libraries with 20+ large custom prompts |
+| Rendering full prompt text in popup dropdown | Popup layout performance | Show only title/tier in dropdown; lazy-load full text when prompt is selected | 7+ built-in prompts with long text bodies |
 
 ---
 
@@ -283,9 +376,9 @@ Any phase modifying DOM scraping timing or adding new tag types.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Validating `event.source === window` but not `event.origin` in bridge.ts | Malicious page scripts could theoretically spoof `trackpull-interceptor` messages | The `source` check provides meaningful protection; add `event.origin === location.origin` for defense-in-depth when extending bridge message types |
-| Storing sensitive user data in `chrome.storage.local` without considering extension's public install model | Other extensions with storage access could theoretically read shot data | Not currently a threat (extension is direct-install, not Web Store published), but avoid storing authentication tokens or personal data beyond the shot metrics themselves |
-| Using `window.postMessage("*")` as target origin | Any frame on the page receives the message | Acceptable for same-origin SPA pages; if Trackman ever embeds third-party iframes, tighten to specific origin |
+| Injecting user-provided prompt text directly into URL without encoding | URL injection breaks the constructed URL or is exploited | Always use `encodeURIComponent()` for any text placed in URL parameters |
+| Storing the user's AI service preference in a globally readable storage key without namespace | Minimal risk but good hygiene | Use a namespaced key like `tp_ai_default_service` rather than `default_service` to avoid accidental collisions with other extensions |
+| Including raw session data in a URL sent to an AI service | Golf shot data is not sensitive, but sets a bad pattern | Do not embed session data in URLs; clipboard-only delivery keeps data off the wire until the user explicitly pastes it |
 
 ---
 
@@ -293,20 +386,24 @@ Any phase modifying DOM scraping timing or adding new tag types.
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Popup shows "0 shots" with no explanation when capture fails | User doesn't know if extension is broken or no data exists yet | Add a status indicator: "Waiting for data", "Capture failed — see console", "N shots ready" |
-| CSV downloads with internal clock API names (no group tags) | Useless file — user can't tell which club is which | Log when tags are missing; consider including the raw `Club` API field as a fallback column |
-| No feedback when a new Trackman UI update breaks scraping | Silent failure — user keeps trying, gets nothing | Add a DOM health-check on page load that logs a clear warning if expected selectors are missing |
+| No feedback after clicking "Copy to clipboard" | User re-clicks repeatedly thinking it failed | Always show a brief "Copied!" toast for 2 seconds after a successful write |
+| AI tab opens and the user doesn't know to paste | User stares at empty AI chat input | Show "Prompt copied — press Cmd+V in the chat input" message in toast before tab opens |
+| Prompt dropdown in popup shows full text | Popup is cramped; long prompts break layout | Show title only in dropdown; show first 80 characters as preview in a tooltip or below the dropdown |
+| Default AI service is undefined on first use | User clicks launch, nothing happens or gets an error | Default to ChatGPT on first use; surface the setting on first launch |
+| Custom prompt edit form requires clicking into options page | High friction for a quick tweak | Allow prompt title/text editing directly in options page without a separate modal |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **New metric field added:** Verify it exists in both `METRIC_KEYS` (interceptor.ts) AND `ALL_METRICS` (constants.ts) AND has a display name in `METRIC_DISPLAY_NAMES` — all three must be updated together.
-- [ ] **New CSS selector added:** Verify it matches elements on the current live Trackman site, not just the last-seen version.
-- [ ] **New service worker message type:** Verify the listener is registered synchronously at module top level, not inside a callback.
-- [ ] **Source files changed:** Verify `bash scripts/build-extension.sh` ran, `dist/` files have newer timestamps than `src/` files, and `npx vitest run` passes.
-- [ ] **New manifest permission added:** Verify whether it will trigger Chrome's privilege escalation and disable the extension on update. If yes, consider `optional_permissions` instead.
-- [ ] **HTML fallback modified:** Manually verify with an actual Trackman report page that data is captured correctly, not just that unit tests pass.
+- [ ] **Clipboard copy:** Verify the clipboard actually contains the expected TSV content after clicking "Copy" — check with Cmd+V in a plain text editor, not just a success toast.
+- [ ] **AI tab launch:** Verify the tab opens to the correct AI service homepage and the clipboard contains the expected prompt+data — test with each supported service (ChatGPT, Claude, Gemini).
+- [ ] **URL pre-fill (if implemented):** Verify the AI chat input is actually pre-filled, not just that the tab opened. Test after an incognito session (not cached state).
+- [ ] **Custom prompt save:** Verify the prompt survives popup close and re-open — read from storage, not in-memory cache.
+- [ ] **Options page:** Verify prompt list renders correctly after extension update (built-in prompts present, user prompts preserved, no duplicates).
+- [ ] **Storage quota:** Verify that adding 10 custom prompts of ~1,000 characters each does not hit storage errors — check `chrome.runtime.lastError` after each write.
+- [ ] **Manifest permissions:** Verify that no new required permissions were added that would disable the extension on update — diff `manifest.json` before release.
+- [ ] **Build artifacts:** Verify `dist/` contains rebuilt files after any TypeScript change to popup.ts, serviceWorker.ts, or new files — check timestamps.
 
 ---
 
@@ -314,11 +411,11 @@ Any phase modifying DOM scraping timing or adding new tag types.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Trackman CSS class rename breaking HTML fallback | LOW | Inspect live DOM, update constants.ts with new class names, rebuild, release patch |
-| Trackman API JSON schema change breaking interceptor | MEDIUM | Inspect live network traffic in DevTools, update parseSessionData(), update METRIC_KEYS if fields renamed, rebuild, release patch |
-| Stale dist/ released | LOW | Rebuild, bump patch version, create new release, notify users |
-| Service worker cold-start dropping messages | MEDIUM | Add retry loop to bridge.ts, rebuild, release patch |
-| chrome.storage.local quota exceeded | LOW | Add unlimitedStorage permission to manifest, rebuild, release patch (will require user re-approval if quota is in `permissions` array — it is not, so no re-approval needed) |
+| Clipboard write in service worker fails | LOW | Move write handler to popup.ts; rebuild; no permission changes needed |
+| AI URL pre-fill breaks after provider update | LOW | Remove URL pre-fill for that service; update flow to clipboard-only; rebuild; release patch |
+| Prompt templates lost due to sync quota exceeded | MEDIUM | Migrate storage key from sync to local; add migration code in onInstalled; rebuild; release patch with user communication |
+| Built-in prompts overwriting user edits on update | MEDIUM | Refactor to source-bundled built-ins; write storage migration to restore user edits from backup key; rebuild |
+| Options page tab-open fails in embedded mode | LOW | Add sendMessage route to service worker for tab creation; rebuild |
 
 ---
 
@@ -326,30 +423,34 @@ Any phase modifying DOM scraping timing or adding new tag types.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Trackman CSS class rename | Every phase touching html_scraping.ts | Manually verify selectors on live Trackman site before merge |
-| Trackman API schema change | Every phase touching interceptor.ts or metric parsing | Inspect live API response JSON before implementing; log parse failures |
-| Service worker cold-start drops | Any phase adding new message types | Test with cold browser profile, no popup pre-opened |
-| Stale dist/ in release | Every phase | Confirm dist/ timestamp is newer than src/ timestamps before committing |
-| New permission breaks update | Any phase adding manifest.json entries | Review manifest diff in PR; confirm no new required permissions |
-| METRIC_KEYS out of sync | Any phase adding metrics | Unit test that METRIC_KEYS and ALL_METRICS contain identical entries |
-| Group tag timing | Any phase touching DOM scraping timing | Verify tags appear in CSV after smoke test on live site |
-| Storage quota | Any phase adding data storage breadth | Estimate payload size before shipping; test with large session |
+| Clipboard in service worker | Clipboard copy implementation | Code review: no clipboard calls in serviceWorker.ts; manual test of copy button |
+| Async focus loss on clipboard write | Clipboard copy implementation | Test with popup unfocused during async gap; verify clipboard content after click |
+| AI URL pre-fill fragility | AI tab launch design | Design doc must specify clipboard-first; URL pre-fill only as degradable enhancement |
+| URL payload too large | AI tab launch implementation | Measure payload size with a 200-shot session; reject any URL over 500 characters |
+| Sync quota exceeded for prompts | Prompt storage design | Unit test: attempt to store 20 × 1,000-char prompts; verify no quota error; check storage area is local not sync |
+| Built-in prompts overwriting user edits | Prompt data model design | Architecture review: built-ins must be source constants, not storage writes |
+| Options page tab-open failure | Options page implementation | Test in embedded mode (open_in_tab: false); verify tab opens |
+| Clipboard write before tab close races | AI tab launch implementation | Manual test: verify clipboard content after tab opens; add brief delay and await chain |
+| "tabs" permission added unnecessarily | Manifest review (every phase) | diff manifest.json; confirm no new permissions added for tab creation |
+| TSV data contains tabs or newlines | Clipboard copy implementation | Unit test TSV formatter with club name containing \t and \n characters |
 
 ---
 
 ## Sources
 
-- [Chrome Extension Content Scripts — official docs](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts) — MAIN/ISOLATED world mechanics, API access limits
-- [chrome.storage API reference — official docs](https://developer.chrome.com/docs/extensions/reference/api/storage) — 10 MB quota limit, lastError behavior (HIGH confidence)
-- [Service Worker Lifecycle — official docs](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle) — idle termination, cold-start behavior (HIGH confidence)
-- [Declare Permissions — official docs](https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions) — privilege escalation on update, optional_permissions pattern (HIGH confidence)
-- [Intercepting Network Requests in Chrome Extensions](https://rxliuli.com/blog/intercepting-network-requests-in-chrome-extensions/) — response.clone() memory patterns (MEDIUM confidence)
-- [How We Captured AJAX Requests with a Chrome Extension — Moesif Blog](https://www.moesif.com/blog/technical/apirequest/How-We-Captured-AJAX-Requests-with-a-Chrome-Extension/) — XHR monkey-patching pitfalls (MEDIUM confidence)
-- [ServiceWorker is shut down every 5 minutes — Chromium Issue Tracker](https://issues.chromium.org/issues/40733525) — real-world service worker termination (MEDIUM confidence)
-- [Smart Site Detection and Dynamic CSS Selector Generation — Medium](https://medium.com/@yukselcosgun/smart-site-detection-and-dynamic-css-selector-generation-for-resilient-scraping-ba8a5ba6ce26) — dynamic class name risks (MEDIUM confidence)
-- [Trackman Golf at the 2025 PGA Show — Golf Simulator Forum](https://golfsimulatorforum.com/forum/trackman/412080-trackman-golf-at-the-2025-pga-show-new-data-points-software-features) — evidence of active metric expansion (LOW confidence; indirect)
-- Project source code inspection: `src/content/interceptor.ts`, `src/content/bridge.ts`, `src/background/serviceWorker.ts`, `src/shared/constants.ts`, `src/manifest.json` (HIGH confidence — direct inspection)
+- [Offscreen Documents in Manifest V3 — Chrome for Developers](https://developer.chrome.com/blog/Offscreen-Documents-in-Manifest-v3) — confirmed one offscreen document per profile, CLIPBOARD reason, lifecycle management (HIGH confidence)
+- [Cannot read clipboard from service worker — Chromium Issue Tracker](https://issues.chromium.org/issues/40738001) — confirmed service workers cannot use navigator.clipboard (HIGH confidence)
+- [Interact with the clipboard — MDN Web Extensions](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Interact_with_the_clipboard) — clipboardWrite permission behavior, gesture requirements (HIGH confidence)
+- [chrome.storage API reference — Chrome for Developers](https://developer.chrome.com/docs/extensions/reference/api/storage) — exact sync quota: 8 KB per item, 100 KB total, 512 items max; 120 writes/min (HIGH confidence)
+- [Give users options — Chrome for Developers](https://developer.chrome.com/docs/extensions/develop/ui/options-page) — embedded options page Tabs API limitations, messaging workaround (HIGH confidence)
+- [Implementing a Link Copy Extension: Pitfalls of Clipboard API, CSP, and Service Workers — zenn.dev](https://zenn.dev/atani/articles/copy-current-page-as-chrome-extension?locale=en) — real-world clipboard pitfalls: execCommand fallback, CSP issues, service worker routing (MEDIUM confidence)
+- [OpenAI Developer Community — URL query param to open chat with initial message](https://community.openai.com/t/url-query-param-to-open-chat-with-initial-message/64167) — ChatGPT ?q= parameter community discovery, no official support (MEDIUM confidence)
+- [Claude URL parameter removed — GitHub issue #8827 reference via WebSearch](https://github.com) — claude.ai URL pre-fill removed October 2025 (MEDIUM confidence; indirect)
+- [Gemini URL Prompt extension — Chrome Web Store](https://chromewebstore.google.com/detail/gemini-url-prompt) — Gemini has no native URL parameter; extension simulates DOM input events (MEDIUM confidence)
+- [async clipboard API not working in Chrome extension offscreen — Google Issue Tracker 41497480](https://issuetracker.google.com/issues/41497480) — offscreen documents cannot use navigator.clipboard due to focus requirements (MEDIUM confidence)
+- [clipboard.writeText() user gesture requirement — Chromium Issue 40846300](https://issues.chromium.org/issues/40846300) — focus requirement behavior, clipboardWrite permission interaction (MEDIUM confidence)
+- Project source code inspection: `src/manifest.json`, `src/popup/popup.ts`, `src/background/serviceWorker.ts` — existing architecture baseline for compatibility assessment (HIGH confidence)
 
 ---
-*Pitfalls research for: Chrome extension data scraping (TrackPull / Trackman golf reports)*
+*Pitfalls research for: Chrome Extension (MV3) — Clipboard Export and AI Prompt Tab Launch (TrackPull v1.3)*
 *Researched: 2026-03-02*

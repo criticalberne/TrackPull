@@ -1,155 +1,264 @@
 # Stack Research
 
-**Domain:** Golf data scraping Chrome extension (Manifest V3 / TypeScript / CSV export)
+**Domain:** Chrome Extension v1.3 — Clipboard export and AI prompt launch additions
 **Researched:** 2026-03-02
-**Confidence:** HIGH for existing stack validation; MEDIUM for additive recommendations
+**Confidence:** HIGH for Chrome API patterns (verified against official docs); MEDIUM for AI service URL behavior (verified via community + security research, but subject to third-party change)
 
 ---
 
-## Context: What Already Exists
+## Context: Narrowly Scoped Additions
 
-TrackPull v1.2.1 already has a well-chosen core stack:
+TrackPull already has a validated, no-production-dependency stack (TypeScript + esbuild + Chrome APIs). This document covers ONLY what is new for v1.3:
 
-- **TypeScript 5.9.3** — current latest, no upgrade needed
-- **esbuild 0.27.x** (via `npx esbuild`) — current latest is 0.27.3
-- **vitest 4.0.18** — current latest
-- **Manifest V3** with MAIN world interceptor + ISOLATED world bridge
-- **Zero production dependencies** — by design, Chrome APIs only
+1. Clipboard write from popup
+2. Opening AI service tabs (ChatGPT, Claude, Gemini) with data pre-filled
+3. Options page for prompt template management
+4. chrome.storage for prompt templates
 
-The research question is: what *additional* tooling or libraries would improve the extension for future milestones?
+Do not re-research or change anything about interceptor, CSV generation, unit conversion, or the build system.
 
 ---
 
 ## Recommended Stack
 
-### Core Technologies (Keep As-Is)
+### Core Technologies (New for v1.3)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| TypeScript | 5.9.3 | Static typing, compile-time safety | Already at latest. TS 5.9 added import defer syntax and better init defaults. No upgrade needed. |
-| esbuild | 0.27.3 | Multi-entry bundling to IIFE for each content script | Already at latest. Correct choice: one esbuild invocation per script, IIFE format required by MV3. Faster than webpack/Vite for this use case. |
-| Manifest V3 | — | Extension platform | Already correct. MV2 is deprecated. The MAIN world + ISOLATED world bridge architecture is the canonical solution for API interception. |
-| Chrome storage API | built-in | Persist session data and user preferences | Correct. 10 MB quota (Chrome 113+) is sufficient for golf session data (a session is typically a few KB). No additional storage library needed. |
-| Chrome downloads API | built-in | CSV export | Correct. `data:text/csv;charset=utf-8,` URL approach with `encodeURIComponent` is the standard MV3 pattern — avoids needing `URL.createObjectURL` which requires DOM access unavailable in service workers. |
-
-### Missing Dev Tooling (Should Add)
-
-| Tool | Version | Purpose | Why Now |
-|------|---------|---------|---------|
-| tsconfig.json | — | TypeScript compiler configuration | No tsconfig.json exists in the project. esbuild works without one but uses defaults. Without tsconfig, the `tsc` type-checker cannot be run standalone, and vitest may silently ignore type errors. Add with `strict: true`, `isolatedModules: true` (required for esbuild single-file compilation), `lib: ["dom", "dom.iterable", "esnext"]`. |
-| @types/chrome | 0.1.37 | TypeScript definitions for Chrome extension APIs | No Chrome API types exist. Without this, all `chrome.*` calls are untyped. Prefer `@types/chrome` over `chrome-types`: `@types/chrome` is updated more frequently (last updated 3 days ago at time of research) and is the DefinitelyTyped community standard. `chrome-types` (Google's auto-generated version) is also valid but has the same version cadence risk. |
-| vitest-chrome | 0.1.0 | Mock Chrome API in vitest tests | Currently tests cannot mock `chrome.storage`, `chrome.downloads`, or `chrome.runtime`. This is a complete Chrome API mock compatible with vitest. Low star count (10) but the only purpose-built vitest option. Alternative: manually mock with `vi.stubGlobal('chrome', {...})` per test — simpler for small surface area. |
-
-### Supporting Libraries (Do NOT Add Unless Specifically Needed)
-
-| Library | Why Not Now | Use Instead |
-|---------|-------------|-------------|
-| Papa Parse | CSV generation is already custom and correct. Adding a library adds production dependency. | Keep hand-written CSV writer — it handles RFC4180 escaping correctly already. |
-| webextension-polyfill | Not needed — extension targets Chrome only, not Firefox. Would add production dependency. | Chrome APIs directly |
-| Plasmo / WXT / crxjs | Full extension frameworks that automate building and reloading. Overkill for a single-domain scraper with a working esbuild pipeline. | Keep current build script |
-| Zod | Schema validation library. Useful if API response shape becomes complex or untrusted. | LOW priority — existing `containsStrokegroups()` heuristic is sufficient |
-| React / Preact | UI framework for popup. Current popup is minimal vanilla HTML/JS. Unnecessary complexity. | Vanilla TypeScript DOM manipulation |
+| `navigator.clipboard.writeText()` | Web API (no version) | Write tab-separated data to system clipboard | The popup is an extension page — not a service worker — so the Web Clipboard API is accessible directly. Add `"clipboardWrite"` permission to manifest. No offscreen document needed. Zero dependencies. |
+| `chrome.tabs.create({ url })` | Built-in Chrome API | Open ChatGPT, Claude, or Gemini in a new tab | No permission needed for basic tab creation (tabs permission only required for reading sensitive tab properties like url/title). Called from popup directly. |
+| `options_ui` manifest field | Manifest V3 | Declare options page for prompt management | MV3 deprecated `options_page`; use `options_ui` with `open_in_tab: true` to open the options page as a full tab (not embedded in chrome://extensions). |
+| `chrome.storage.local` | Built-in Chrome API | Persist prompt templates and default AI preference | Use `local` not `sync`: sync has an 8 KB per-item limit and 100 KB total quota — a user with 7+ prompt templates hits this easily. Local has 10 MB quota with no per-item limit. |
+| `chrome.runtime.openOptionsPage()` | Built-in Chrome API | Open options page from popup with one call | No manual URL construction needed. Works regardless of how options page was declared. Called from popup "Manage prompts" link. |
 
 ---
 
-## Installation
+### Clipboard Implementation Pattern
 
-For the recommended additions:
+**Where the write happens: popup.ts (extension page context, not service worker)**
 
-```bash
-# TypeScript config base (optional, can write manually)
-# No npm install needed — tsconfig.json is a file, not a package
+The popup runs in an extension page, which has DOM access and a trusted origin. `navigator.clipboard.writeText()` works there without offscreen documents. The service worker cannot do clipboard writes directly — but the popup can. Since all new export buttons live in the popup, no architectural complexity is needed.
 
-# Chrome API types (dev dep — types only, no runtime code)
-npm install -D @types/chrome
-
-# Chrome API mock for tests (dev dep)
-npm install -D vitest-chrome
+```typescript
+// In popup.ts — direct clipboard write (no message passing needed)
+async function copyToClipboard(text: string): Promise<void> {
+  await navigator.clipboard.writeText(text);
+}
 ```
+
+**Manifest addition required:**
+```json
+"permissions": ["storage", "downloads", "clipboardWrite"]
+```
+
+`clipboardWrite` enables writing to clipboard "outside a short-lived event handler for a user action." In practice, the button click IS a user action, so even without this permission the write might succeed. But declare it anyway — it makes the intent explicit and avoids intermittent failures.
+
+Do NOT add `clipboardRead` — TrackPull never reads from clipboard.
+
+---
+
+### AI Tab Launch Implementation Pattern
+
+**How to open AI services: `chrome.tabs.create` from popup**
+
+None of the three AI services (ChatGPT, Claude.ai, Gemini) provide a reliable, official URL parameter for pre-filling and auto-submitting prompts. The approach that works reliably across all three is:
+
+1. Write the prompt + data to clipboard (`navigator.clipboard.writeText`)
+2. Open the AI service URL in a new tab (`chrome.tabs.create`)
+3. Show a toast in the popup: "Prompt copied to clipboard — paste it in the chat"
+
+This works because the user is already expecting to interact with the AI; one Ctrl+V is not friction.
+
+**What does NOT work reliably as of 2026-03:**
+
+| Service | Parameter | Status |
+|---------|-----------|--------|
+| ChatGPT (`chatgpt.com`) | `?q=` or `?prompt=` | Pre-fills but **auto-submits** the prompt (security risk, no user review). Behavior subject to change without notice. OpenAI added `sec-fetch-site` protections in 2025. |
+| Claude.ai | `?q=` | Removed as of October 2025. No replacement. |
+| Gemini (`gemini.google.com`) | None native | No native URL parameter support. Third-party extensions required. |
+
+**Conclusion:** Do not depend on URL parameters. Clipboard + tab open is the only approach that works reliably across all three services today and will continue working regardless of third-party changes.
+
+```typescript
+// In popup.ts
+const AI_URLS: Record<string, string> = {
+  chatgpt: "https://chatgpt.com/",
+  claude:  "https://claude.ai/new",
+  gemini:  "https://gemini.google.com/app",
+};
+
+async function launchAI(service: string, promptText: string): Promise<void> {
+  await navigator.clipboard.writeText(promptText);
+  await chrome.tabs.create({ url: AI_URLS[service] });
+  showToast("Prompt copied — paste it in the chat", "success");
+}
+```
+
+No permission additions needed for `chrome.tabs.create` beyond what already exists.
+
+---
+
+### Options Page Setup
+
+**Manifest declaration:**
+```json
+"options_ui": {
+  "page": "options.html",
+  "open_in_tab": true
+}
+```
+
+Use `open_in_tab: true` (full tab) rather than embedded (`false`) because:
+- Embedded options in chrome://extensions has limited viewport; prompt text areas need space
+- Full-tab options is simpler to style (no iframe constraints)
+- Prompt management is a deliberate workflow, not a quick toggle
+
+**Build script addition:** Add one esbuild line for `options.ts`:
+```bash
+npx esbuild src/options/options.ts --bundle --outfile="$DIST_DIR/options.js" --format=iife
+cp src/options/options.html "$DIST_DIR/options.html"
+```
+
+**No new permissions required** for the options page itself.
+
+---
+
+### Prompt Template Storage Schema
+
+Store prompts in `chrome.storage.local` under a new key. Keep separate from `trackmanData` to avoid accidental clears.
+
+```typescript
+// Extend STORAGE_KEYS in constants.ts
+PROMPT_TEMPLATES: "promptTemplates",
+DEFAULT_AI_SERVICE: "defaultAiService",
+```
+
+```typescript
+// Prompt template shape
+interface PromptTemplate {
+  id: string;           // UUID or timestamp-based
+  name: string;         // Display name, e.g. "Distance Gapping"
+  tier: "beginner" | "intermediate" | "advanced" | "custom";
+  body: string;         // The prompt text (can be 2-4 KB)
+  builtIn: boolean;     // true = shipped in extension, false = user-created
+}
+```
+
+Built-in prompts ship as a TypeScript constant (compiled into the bundle). User-created prompts go into `chrome.storage.local`. This avoids the options page needing to load built-ins from storage on every open — they are always present in memory.
+
+---
+
+## Supporting Libraries (Still Zero Production Dependencies)
+
+No new production dependencies are needed. All new features use:
+- `navigator.clipboard.writeText()` — Web API
+- `chrome.tabs.create()` — Chrome built-in
+- `chrome.storage.local` — Chrome built-in
+- `chrome.runtime.openOptionsPage()` — Chrome built-in
+- Vanilla TypeScript DOM manipulation for options page UI
+
+The zero-production-dependency constraint is maintained.
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | When to Use Alternative |
-|----------|-------------|-------------|-------------------------|
-| Chrome types | `@types/chrome@0.1.37` | `chrome-types@0.1.420` | `chrome-types` if you want types auto-generated from Chromium source (more authoritative but can lag). For TypeScript IDE support, both work. |
-| Chrome API mocking | `vitest-chrome@0.1.0` | `vi.stubGlobal('chrome', {...})` | Manual stubs when only testing 1-2 Chrome APIs. vitest-chrome when testing service worker message handling end-to-end. |
-| TypeScript bundling | esbuild (current) | tsup | tsup wraps esbuild with zero-config defaults. Only useful if build script complexity grows. Current bash script is already simple. |
-| Test environment | vitest default (node) | vitest + jsdom | Add jsdom (`npm install -D jsdom @vitest/browser`) only if popup UI tests are needed. Current tests are pure logic tests that don't need DOM. |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Clipboard write | `navigator.clipboard.writeText()` from popup | Offscreen document + `CLIPBOARD` reason | Offscreen is needed only when the service worker must write to clipboard. The popup is an extension page with direct clipboard access. Offscreen adds 2 extra files and message-passing complexity for no benefit. |
+| Clipboard write | `navigator.clipboard.writeText()` | `document.execCommand('copy')` | `execCommand` is deprecated. MDN marks it as not recommended. Only use as fallback if navigator.clipboard fails (e.g. focus lost). |
+| AI tab pre-fill | Clipboard + toast | URL `?prompt=` parameter | URL params are unreliable: Claude removed theirs, Gemini has none, ChatGPT auto-submits (no user review). Clipboard approach works identically for all three, forever. |
+| AI tab pre-fill | Clipboard + toast | Content script injection into AI page | Would require host_permissions for chatgpt.com, claude.ai, and gemini.google.com — adds privacy surface, requires user permission grants, and violates Chrome Web Store policies if injecting into unrelated pages. |
+| Options page | `options_ui` (open_in_tab: true) | `options_ui` (open_in_tab: false, embedded) | Embedded options are too cramped for prompt text areas. Full tab is appropriate for a content management workflow. |
+| Prompt storage | `chrome.storage.local` | `chrome.storage.sync` | Sync has 8 KB per-item, 100 KB total limit. A golf prompt with context + instructions can reach 2-3 KB. With 7+ built-ins plus user templates, sync quota is easily hit. Local has 10 MB. |
+| Built-in prompts | Compiled TypeScript constant | Fetched from remote URL | MV3 prohibits remotely-hosted code. Prompts must be compiled into the bundle. They already exist as markdown files in the repo — convert body text to a TS constant at build time. |
 
 ---
 
-## What NOT to Use
+## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| webpack | 5-10x slower builds than esbuild for this use case, complex config for multi-entry IIFE. The existing esbuild build is already correct and fast. | esbuild (current) |
-| Vite + crxjs | Vite/crxjs adds hot module reload and full framework tooling. For a content-script-first extension with no UI framework, this is unnecessary complexity and can break MAIN world injection patterns. | esbuild (current) |
-| `chrome-types` as primary | Auto-generated from Chromium IDL; can include unstable/internal APIs. @types/chrome is the community-vetted, DefinitelyTyped standard. | @types/chrome |
-| `setInterval` polling in service worker | Service workers are terminated after 30s idle; timers are cancelled on termination. The current `waitForTagsThenPost()` polling in interceptor.ts (MAIN world, not service worker) is fine — this warning applies only to background service worker code. | `chrome.alarms` API for any background scheduling |
-| `localStorage` in extension | Not accessible in service workers; not scoped to extension. | `chrome.storage.local` (already used) |
-| Inline source maps in production | `--sourcemap=inline` is used in the current background.js build. Inline maps bloat JS file size. Acceptable for dev builds, but should be removed for production release ZIPs. | `--sourcemap=external` or no sourcemap for production builds |
-| `unlimitedStorage` permission | Golf session data is KB-scale. Requesting this permission raises Chrome Web Store scrutiny and privacy red flags for users. | Current 10 MB default quota (more than sufficient) |
+| `clipboardRead` permission | TrackPull only writes to clipboard, never reads. This permission displays "Read data you copy and paste" warning to users — unnecessarily alarming and unused. | Omit — only add `clipboardWrite` |
+| `tabs` permission | Only needed for reading url/title/favIconUrl from tab objects. `chrome.tabs.create()` does not need it. Adding it displays "Read your browsing history" warning — a major trust signal for users. | Omit — `chrome.tabs.create` works without it |
+| `host_permissions` for AI services | Would be required for content script injection into chatgpt.com etc. Not needed for the clipboard approach. | Omit — clipboard + tab open requires no host_permissions |
+| `offscreen` permission + document | Only needed when service worker must clipboard-write. Popup handles all clipboard writes directly. | `navigator.clipboard.writeText()` in popup |
+| React / Preact for options page | Options page is a list + textarea + buttons. Vanilla TypeScript handles this in ~150 lines. Adding a UI framework adds a production dependency and bundle size for no benefit at this complexity level. | Vanilla TypeScript DOM manipulation |
+| UUID library for template IDs | `crypto.randomUUID()` is available natively in all modern Chrome versions (Chrome 92+, well within MV3 support window). | `crypto.randomUUID()` built-in |
+| IndexedDB | Overkill for a flat list of prompt templates. `chrome.storage.local` handles arrays of objects natively. | `chrome.storage.local` |
 
 ---
 
 ## Stack Patterns by Variant
 
-**If adding popup UI complexity (e.g., settings page, multi-session history):**
-- Use vanilla TypeScript with typed DOM queries — no React needed at current complexity
-- If UI grows beyond ~200 lines, consider Preact (3 KB, JSX-compatible, no build change needed with esbuild)
-- Do NOT use React — bundle size overhead is unjustified for a single popup
+**If clipboard write from popup fails (edge case: focus lost before API call):**
+- Fallback to `document.execCommand('copy')` using a temporary textarea
+- Detect failure via Promise rejection, not silent failure
+- Show user-friendly toast: "Copy failed — click the button again while the popup is focused"
 
-**If adding cross-browser support (Firefox):**
-- Add `webextension-polyfill` as a production dependency
-- Switch manifest to use `browser_specific_settings` for Firefox
-- This is currently out of scope but the zero-production-dependency constraint would need revisiting
+**If user wants prompts synced across Chrome profiles:**
+- Consider splitting storage: preferences (sync) vs templates (local)
+- Default AI service preference (a small string) fits in sync easily
+- Prompt templates stay in local regardless
+- This is a nice-to-have, not v1.3 scope
 
-**If Trackman API changes structure significantly:**
-- Add `zod` for runtime schema validation of API responses
-- Wrap `parseSessionData()` with a Zod schema
-- Keeps type safety at the runtime boundary without changing the overall architecture
+**If a fourth AI service is added later:**
+- AI_URLS is a plain record — add one entry
+- No architecture change needed
+- Service picker in popup is already planned as a dropdown
+
+---
+
+## Manifest Changes Summary
+
+The full manifest.json diff for v1.3 is:
+
+```json
+{
+  "permissions": ["storage", "downloads", "clipboardWrite"],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}
+```
+
+Two additions:
+1. `"clipboardWrite"` in permissions
+2. `"options_ui"` block pointing to `options.html`
+
+No new host_permissions. No content_scripts additions.
 
 ---
 
 ## Version Compatibility
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| typescript@5.9.3 | esbuild@0.27.3 | esbuild reads tsconfig but does not run tsc — type errors do not block builds. Run `tsc --noEmit` separately to catch type errors. |
-| vitest@4.0.18 | typescript@5.9.3 | Compatible. Note: vitest 4.x has breaking changes vs vitest 1.x (removed `poolMatchGlobs`, `environmentMatchGlobs`). Current vitest.config.ts only uses `test.include` — unaffected. |
-| @types/chrome@0.1.37 | typescript@5.9.3 | Compatible. Types declare global `chrome` namespace — no import needed. |
-| vitest-chrome@0.1.0 | vitest@4.0.18 | LOW confidence — vitest-chrome was written for earlier vitest versions (10 stars, no releases tagged). May require manual `vi.stubGlobal` fallback if incompatible. Verify before using in CI. |
-
----
-
-## Key Architecture Constraints That Affect Stack Choices
-
-These are not library choices but platform realities that any future stack decision must respect:
-
-1. **MAIN world scripts cannot import modules at runtime** — esbuild must bundle everything into a single IIFE. No dynamic imports.
-2. **Service workers terminate after 30s idle** — no stateful singletons in `serviceWorker.ts`. All state must go through `chrome.storage`.
-3. **Only `chrome.runtime` is available in offscreen documents** — if DOM access from the service worker is ever needed, an offscreen document can only message back via `chrome.runtime.sendMessage`.
-4. **MV3 prohibits remotely-hosted code** — all JavaScript must be bundled into the extension at install time.
+| API | Availability | Notes |
+|-----|-------------|-------|
+| `navigator.clipboard.writeText()` | Chrome 66+ | Extension pages (popup, options) have reliable access. Requires `clipboardWrite` permission for calls outside user gesture. |
+| `chrome.tabs.create()` | All MV3 Chrome versions | No permissions needed for URL-only tab creation. |
+| `chrome.runtime.openOptionsPage()` | Chrome 42+ | Works with both `options_page` and `options_ui` declaration. |
+| `options_ui` with `open_in_tab: true` | Chrome 40+ MV3 supported | `options_page` deprecated in MV3 — `options_ui` is the correct field. |
+| `crypto.randomUUID()` | Chrome 92+ | Safe to use — MV3 requires Chrome 88+, and any extension running MV3 is well above Chrome 92. |
+| `chrome.storage.local` (10 MB quota) | Chrome 113+ | Extended from 5 MB to 10 MB in Chrome 113. All current Chrome versions are above 113. |
 
 ---
 
 ## Sources
 
-- TypeScript 5.9 Release Notes — https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-9.html (HIGH confidence, official)
-- Vitest 4.0 Blog — https://vitest.dev/blog/vitest-4 (HIGH confidence, official)
-- Vitest 4.0 Migration Guide — https://vitest.dev/guide/migration.html (HIGH confidence, official)
-- Chrome Storage API Reference — https://developer.chrome.com/docs/extensions/reference/api/storage (HIGH confidence, official; confirms 10 MB quota)
-- Chrome MV3 Service Worker Limits — https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3 (HIGH confidence, official)
-- Chrome Offscreen Documents — https://developer.chrome.com/docs/extensions/reference/api/offscreen (HIGH confidence, official)
-- @types/chrome npm — https://www.npmjs.com/package/@types/chrome (HIGH confidence, official registry)
-- chrome-types GitHub — https://github.com/GoogleChrome/chrome-types (HIGH confidence, official Google)
-- vitest-chrome GitHub — https://github.com/probil/vitest-chrome (LOW confidence — minimal maintenance signals)
-- esbuild npm — version 0.27.3 confirmed via `npm info esbuild version` (HIGH confidence)
-- MutationObserver recommendation — https://developer.chrome.com/blog/detect-dom-changes-with-mutation-observers (HIGH confidence, official)
+- Chrome Offscreen API Reference — https://developer.chrome.com/docs/extensions/reference/api/offscreen (HIGH confidence, official; confirmed CLIPBOARD reason and permission requirements)
+- Chrome Tabs API Reference — https://developer.chrome.com/docs/extensions/reference/api/tabs (HIGH confidence, official; confirmed tabs.create needs no permission for basic URL open)
+- Chrome Permissions Reference — https://developer.chrome.com/docs/extensions/reference/permissions-list (HIGH confidence, official; confirmed clipboardWrite purpose and warning text)
+- Chrome Storage API Reference — https://developer.chrome.com/docs/extensions/reference/api/storage (HIGH confidence, official; confirmed sync 8 KB/item vs local 10 MB)
+- Offscreen Documents Blog Post — https://developer.chrome.com/blog/Offscreen-Documents-in-Manifest-v3 (HIGH confidence, official; service worker clipboard limitation confirmed)
+- ChatGPT URL parameter security research — https://de.tenable.com/security/research/tra-2025-22 (MEDIUM confidence; confirms `?q=` auto-submission and OpenAI's sec-fetch-site protections)
+- ChatGPT URL prompt community thread — https://community.openai.com/t/url-query-param-to-open-chat-with-initial-message/64167 (MEDIUM confidence; reliability issues with parameter confirmed by multiple developers)
+- Claude.ai ?q= parameter removal — GitHub issue #8827 anthropics/claude-code (MEDIUM confidence; removal reported as of October 2025)
+- Gemini URL parameter support — Google AI Developers Forum discussion (MEDIUM confidence; confirmed no native support, only third-party extensions)
+- chrome.storage.sync quota — confirmed via Chrome Storage API docs, December 2025 update (HIGH confidence, official)
+- options_ui vs options_page in MV3 — WebSearch + MDN options_ui reference (MEDIUM confidence; options_page confirmed deprecated in MV3 by parcel issue and Chrome docs)
 
 ---
 
-*Stack research for: TrackPull Chrome extension (golf data scraping / CSV export)*
+*Stack research for: TrackPull v1.3 — Clipboard export and AI prompt launch*
 *Researched: 2026-03-02*
