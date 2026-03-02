@@ -140,4 +140,6 @@ export const STORAGE_KEYS = {
   TRACKMAN_DATA: "trackmanData",
   SPEED_UNIT: "speedUnit",
   DISTANCE_UNIT: "distanceUnit",
+  SELECTED_PROMPT_ID: "selectedPromptId",
+  AI_SERVICE: "aiService",
 } as const;
