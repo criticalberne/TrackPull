@@ -29,19 +29,47 @@
 - [x] **UI-01**: User can see shot count in popup
 - [x] **UI-02**: User can clear stored session data from popup
 
+## v1.3 Requirements
+
+### Clipboard
+
+- [ ] **CLIP-01**: User can copy all shot data to clipboard as tab-separated values with one click
+- [ ] **CLIP-02**: User sees visual confirmation (toast) after successful clipboard copy
+- [ ] **CLIP-03**: Clipboard copy includes column headers as the first row
+
+### AI Launch
+
+- [ ] **AILN-01**: User can open ChatGPT in a new tab with prompt+data auto-copied to clipboard
+- [ ] **AILN-02**: User can open Claude in a new tab with prompt+data auto-copied to clipboard
+- [ ] **AILN-03**: User can open Gemini in a new tab with prompt+data auto-copied to clipboard
+- [ ] **AILN-04**: User can copy assembled prompt+data to clipboard without opening an AI tab
+
+### Prompt Library
+
+- [ ] **PRMT-01**: Extension ships with 7+ built-in golf analysis prompts bundled as code constants
+- [ ] **PRMT-02**: Built-in prompts are organized by skill tier (beginner/intermediate/advanced) in the popup
+- [ ] **PRMT-03**: User can create and save custom prompt templates
+- [ ] **PRMT-04**: User can edit and delete their custom prompt templates
+
+### Preferences
+
+- [ ] **PREF-01**: User can set a default AI service (ChatGPT, Claude, or Gemini)
+- [ ] **PREF-02**: User can manage prompts and AI preferences in a dedicated options page
+
 ## v2 Requirements
 
-(None defined — research identified potential features below for future consideration)
+(Deferred from v1.3 or identified for future)
 
-### Potential Future Features (from research)
+### Potential Future Features
 
 - **Capture status indicator** — show when extension is actively intercepting
 - **Export feedback** — clear success/error confirmation on download
-- **Clipboard copy** — paste directly into Excel/Sheets
 - **Column selection** — choose which metrics to export
 - **Multi-session history** — persist data across multiple sessions
 - **Shot filtering** — include/exclude shots before export
 - **Dev tooling** — tsconfig.json, @types/chrome, DOM health-check
+- **Prompt preview panel** — read-only preview of assembled prompt+data before launch
+- **Per-launch AI service override** — pick different AI service on individual launches
 
 ## Out of Scope
 
@@ -50,7 +78,10 @@
 | Cloud sync | No backend; extension is local-only by design |
 | In-extension visualization | Purpose-built analytics platforms do this better |
 | Trackman OAuth | Extension piggybacks on website auth |
-| Real-time AI coaching | Outside core value; competency mismatch |
+| Direct AI API integration | Requires API key management, billing; opens tab instead |
+| Streaming AI response in popup | Requires API integration; AI service's chat UI is better |
+| Prompt sharing / community library | Requires backend, moderation, user accounts |
+| Auto-submit to AI without user review | Bypasses user's chance to review; rate-limit risk |
 | Mobile app | Web extension only |
 
 ## Traceability
@@ -71,12 +102,26 @@ All v1 requirements are implemented (shipped in v1.x milestone).
 | UNIT-03 | Phase 3 (Unit Preferences) | Complete |
 | UI-01 | Phase 4 (Popup UI) | Complete |
 | UI-02 | Phase 4 (Popup UI) | Complete |
+| CLIP-01 | Phase ? | Pending |
+| CLIP-02 | Phase ? | Pending |
+| CLIP-03 | Phase ? | Pending |
+| AILN-01 | Phase ? | Pending |
+| AILN-02 | Phase ? | Pending |
+| AILN-03 | Phase ? | Pending |
+| AILN-04 | Phase ? | Pending |
+| PRMT-01 | Phase ? | Pending |
+| PRMT-02 | Phase ? | Pending |
+| PRMT-03 | Phase ? | Pending |
+| PRMT-04 | Phase ? | Pending |
+| PREF-01 | Phase ? | Pending |
+| PREF-02 | Phase ? | Pending |
 
 **Coverage:**
-- v1 requirements: 12 total
-- Mapped to phases: 12
-- Unmapped: 0 ✓
+- v1 requirements: 12 total (all complete)
+- v1.3 requirements: 12 total
+- Mapped to phases: 12 (v1) + 0 (v1.3 — pending roadmap)
+- Unmapped: 12 (v1.3)
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after roadmap creation — phase assignments finalized*
+*Last updated: 2026-03-02 after milestone v1.3 requirements defined*
