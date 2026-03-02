@@ -95,7 +95,7 @@
       font-size: 14px;
     }
 
-    #export-btn, #clear-btn {
+    #clear-btn {
       width: 100%;
       padding: 12px;
       color: white;
@@ -104,14 +104,6 @@
       font-size: 16px;
       cursor: pointer;
       margin-top: 15px;
-    }
-
-    #export-btn {
-      background-color: #1976d2;
-    }
-
-    #export-btn:hover {
-      background-color: #1565c0;
     }
 
     #export-btn:disabled, #clear-btn:disabled {
@@ -161,6 +153,124 @@
       outline: 2px solid #1976d2;
       outline-offset: -1px;
     }
+
+    /* Section dividers */
+    .ai-section {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .ai-section h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin: 0 0 12px 0;
+    }
+
+    /* Export row: side-by-side buttons */
+    .export-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 15px;
+    }
+
+    .export-row button {
+      flex: 1;
+      min-width: 0;
+      padding: 12px;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      background-color: #1976d2;
+    }
+
+    .export-row button:hover {
+      background-color: #1565c0;
+    }
+
+    .export-row button:disabled {
+      background-color: #bdbdbd;
+      cursor: not-allowed;
+    }
+
+    /* AI controls: prompt and service dropdowns */
+    .ai-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .ai-group {
+      width: 100%;
+    }
+
+    .ai-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 4px;
+    }
+
+    .ai-group select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #1976d2;
+      border-radius: 6px;
+      background: #fff;
+      color: #333;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .ai-group select:focus {
+      outline: 2px solid #1976d2;
+      outline-offset: -1px;
+    }
+
+    /* AI action buttons */
+    .ai-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      flex: 1;
+      min-width: 0;
+      padding: 12px;
+      color: white;
+      background-color: #1976d2;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .btn-primary:hover {
+      background-color: #1565c0;
+    }
+
+    .btn-outline {
+      flex: 1;
+      min-width: 0;
+      padding: 12px;
+      color: #1976d2;
+      background-color: transparent;
+      border: 2px solid #1976d2;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .btn-outline:hover {
+      background-color: rgba(25, 118, 210, 0.08);
+    }
   </style>
   <script src="./popup.js"></script>
 </head>
@@ -186,7 +296,46 @@
       </select>
     </div>
   </div>
-  <button id="export-btn" style="display:none;">Export CSV</button>
+  <div id="export-row" class="export-row" style="display:none;">
+    <button id="export-btn">Export CSV</button>
+    <button id="copy-tsv-btn">Copy TSV</button>
+  </div>
+  <div id="ai-section" class="ai-section" style="display:none;">
+    <h2>AI Analysis</h2>
+    <div class="ai-controls">
+      <div class="ai-group">
+        <label for="prompt-select">Prompt</label>
+        <select id="prompt-select">
+          <optgroup label="Beginner">
+            <option value="quick-summary-beginner">Quick Session Summary</option>
+            <option value="session-overview-beginner">Session Overview</option>
+            <option value="distance-gapping-beginner">Distance Gapping Report</option>
+          </optgroup>
+          <optgroup label="Intermediate">
+            <option value="club-breakdown-intermediate">Club-by-Club Breakdown</option>
+            <option value="launch-spin-intermediate">Launch &amp; Spin Optimization</option>
+            <option value="shot-shape-intermediate">Shot Shape &amp; Dispersion</option>
+          </optgroup>
+          <optgroup label="Advanced">
+            <option value="consistency-analysis-advanced">Consistency Analysis</option>
+            <option value="club-delivery-advanced">Club Delivery Analysis</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="ai-group">
+        <label for="ai-service-select">AI Service</label>
+        <select id="ai-service-select">
+          <option value="ChatGPT">ChatGPT</option>
+          <option value="Claude">Claude</option>
+          <option value="Gemini">Gemini</option>
+        </select>
+      </div>
+    </div>
+    <div class="ai-actions">
+      <button id="open-ai-btn" class="btn-primary">Open in AI</button>
+      <button id="copy-prompt-btn" class="btn-outline">Copy Prompt + Data</button>
+    </div>
+  </div>
   <button id="clear-btn">Clear Session Data</button>
   <div id="status-message"></div>
   <div id="toast-container" style="position: fixed; top: 0; left: 0; right: 0; z-index: 1000;"></div>
