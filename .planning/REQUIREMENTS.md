@@ -47,13 +47,13 @@
 ### Prompt Library
 
 - [x] **PRMT-01**: Extension ships with 7+ built-in golf analysis prompts bundled as code constants
-- [ ] **PRMT-02**: Built-in prompts are organized by skill tier (beginner/intermediate/advanced) in the popup
+- [x] **PRMT-02**: Built-in prompts are organized by skill tier (beginner/intermediate/advanced) in the popup
 - [ ] **PRMT-03**: User can create and save custom prompt templates
 - [ ] **PRMT-04**: User can edit and delete their custom prompt templates
 
 ### Preferences
 
-- [ ] **PREF-01**: User can set a default AI service (ChatGPT, Claude, or Gemini)
+- [x] **PREF-01**: User can set a default AI service (ChatGPT, Claude, or Gemini)
 - [ ] **PREF-02**: User can manage prompts and AI preferences in a dedicated options page
 
 ## v2 Requirements
@@ -111,8 +111,8 @@ All v1.3 requirements are mapped to phases 5-7.
 | AILN-02 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
 | AILN-03 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
 | AILN-04 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
-| PRMT-02 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
-| PREF-01 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
+| PRMT-02 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
+| PREF-01 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
 | PRMT-03 | Phase 7 (Options Page and Custom Prompts) | Pending |
 | PRMT-04 | Phase 7 (Options Page and Custom Prompts) | Pending |
 | PREF-02 | Phase 7 (Options Page and Custom Prompts) | Pending |

@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-02T18:54:50.453Z"
+last_updated: "2026-03-02T19:56:38.846Z"
 progress:
-  total_phases: 1
+  total_phases: 2
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 5
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** Milestone v1.3 — Export & AI, Phase 5: Foundation Modules
+**Current focus:** Milestone v1.3 — Export & AI, Phase 6: Clipboard Copy and AI Launch
 
 ## Current Position
 
-Phase: 5 — Foundation Modules
-Plan: 05-01 (TSV Writer) complete, 05-02 (Prompt Library) complete, 05-03 (Prompt Builder) complete -- Phase 5 complete
-Status: Phase 5 complete
-Last activity: 2026-03-02 — 05-03 (Prompt Builder Module) complete
+Phase: 6 — Clipboard Copy and AI Launch
+Plan: 06-01 (Popup HTML and Config Foundation) complete
+Status: Phase 6 in progress — 1 of ~2 plans complete
+Last activity: 2026-03-02 — 06-01 (Popup HTML and Config Foundation) complete
 
-Progress: [░░░░░░░░░░] 0% (v1.3 — 0/3 phases complete)
+Progress: [##░░░░░░░░] 33% (v1.3 — Phase 5 complete, Phase 6 in progress)
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0% (v1.3 — 0/3 phases complete)
 
 *Updated after each plan completion*
 | Phase 05-foundation-modules P05-03 | 1 | 3 tasks | 2 files |
+| Phase 06-clipboard-copy-and-ai-launch P06-01 | 2 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,8 @@ Recent decisions affecting current work:
 - [05-02]: Built-in prompts are TypeScript constants only in BUILTIN_PROMPTS -- not stored in chrome.storage; BuiltInPrompt interface uses all-readonly fields enabling future custom prompt types in Phase 7
 - [05-02]: All prompt templates include {{DATA}} placeholder for TSV data injection at clipboard-copy time; tone ladder: beginner=friendly coach, intermediate=moderate depth, advanced=numbers-first data analyst
 - [Phase 05-foundation-modules]: assemblePrompt replaces only the first {{DATA}} occurrence via String.replace; PromptMetadata is optional; countSessionShots uses minimal anonymous type to avoid SessionData import
+- [Phase 06-01]: Quick Session Summary is first option in prompt dropdown; ChatGPT is first in AI service dropdown — browser auto-selects first option so no JS needed for first-time defaults
+- [Phase 06-01]: Export row and AI section use inline style=display:none for hiding; Plan 06-02 TypeScript shows them when session data is present
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 05-03-PLAN.md (Prompt Builder Module) — Phase 5 Foundation Modules fully complete
+Stopped at: Completed 06-01-PLAN.md (Popup HTML and Config Foundation) — Phase 6 Clipboard Copy and AI Launch in progress
 Resume file: None
-Next action: Plan and execute Phase 6 (Clipboard Copy and AI Launch)
+Next action: Execute Phase 6 Plan 06-02 (TypeScript wiring for clipboard copy and AI launch)

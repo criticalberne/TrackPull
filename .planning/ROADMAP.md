@@ -125,7 +125,7 @@ Plans:
 | 3. Unit Preferences | v1.x | 3/3 | Complete | Pre-existing |
 | 4. Popup UI | v1.x | 2/2 | Complete | Pre-existing |
 | 5. Foundation Modules | 3/3 | Complete    | 2026-03-02 | - |
-| 6. Clipboard Copy and AI Launch | v1.3 | 0/2 | Planned | - |
+| 6. Clipboard Copy and AI Launch | 1/2 | In Progress|  | - |
 | 7. Options Page and Custom Prompts | v1.3 | 0/? | Not started | - |
 
 ---
