@@ -46,7 +46,7 @@
 
 ### Prompt Library
 
-- [ ] **PRMT-01**: Extension ships with 7+ built-in golf analysis prompts bundled as code constants
+- [x] **PRMT-01**: Extension ships with 7+ built-in golf analysis prompts bundled as code constants
 - [ ] **PRMT-02**: Built-in prompts are organized by skill tier (beginner/intermediate/advanced) in the popup
 - [ ] **PRMT-03**: User can create and save custom prompt templates
 - [ ] **PRMT-04**: User can edit and delete their custom prompt templates
@@ -103,7 +103,7 @@ All v1.3 requirements are mapped to phases 5-7.
 | UNIT-03 | Phase 3 (Unit Preferences) | Complete |
 | UI-01 | Phase 4 (Popup UI) | Complete |
 | UI-02 | Phase 4 (Popup UI) | Complete |
-| PRMT-01 | Phase 5 (Foundation Modules) | Pending |
+| PRMT-01 | Phase 5 (Foundation Modules) | Complete |
 | CLIP-01 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
 | CLIP-02 | Phase 6 (Clipboard Copy and AI Launch) | Pending |
 | CLIP-03 | Phase 6 (Clipboard Copy and AI Launch) | Pending |

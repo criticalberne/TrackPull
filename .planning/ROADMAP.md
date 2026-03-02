@@ -120,7 +120,7 @@ Plans:
 | 2. CSV Export | v1.x | 2/2 | Complete | Pre-existing |
 | 3. Unit Preferences | v1.x | 3/3 | Complete | Pre-existing |
 | 4. Popup UI | v1.x | 2/2 | Complete | Pre-existing |
-| 5. Foundation Modules | 3/3 | Complete   | 2026-03-02 | - |
+| 5. Foundation Modules | 3/3 | Complete    | 2026-03-02 | - |
 | 6. Clipboard Copy and AI Launch | v1.3 | 0/? | Not started | - |
 | 7. Options Page and Custom Prompts | v1.3 | 0/? | Not started | - |
 
