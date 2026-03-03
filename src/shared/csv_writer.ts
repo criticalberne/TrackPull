@@ -131,56 +131,49 @@ export function writeCsv(
       rows.push(row);
     }
 
-    if (includeAverages && Object.keys(club.averages).length > 0) {
-      const avgRow: Record<string, string> = {
-        Date: session.date,
-        Club: club.club_name,
-        "Shot #": "",
-        Type: "Average",
-      };
-
-      if (hasTags(session)) {
-        avgRow.Tag = "";
+    if (includeAverages) {
+      // Group shots by tag
+      const tagGroups = new Map<string, Shot[]>();
+      for (const shot of club.shots) {
+        const tag = shot.tag ?? "";
+        if (!tagGroups.has(tag)) tagGroups.set(tag, []);
+        tagGroups.get(tag)!.push(shot);
       }
 
-      for (const metric of orderedMetrics) {
-        const colName = getColumnName(metric, unitChoice);
-        const rawValue = club.averages[metric] ?? "";
+      for (const [tag, shots] of tagGroups) {
+        // Only write average row if group has 2+ shots
+        if (shots.length < 2) continue;
 
-        if (typeof rawValue === "string" || typeof rawValue === "number") {
-          avgRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitChoice));
-        } else {
-          avgRow[colName] = "";
+        const avgRow: Record<string, string> = {
+          Date: session.date,
+          Club: club.club_name,
+          "Shot #": "",
+          Type: "Average",
+        };
+
+        if (hasTags(session)) {
+          avgRow.Tag = tag;
         }
-      }
 
-      rows.push(avgRow);
-    }
+        for (const metric of orderedMetrics) {
+          const colName = getColumnName(metric, unitChoice);
+          const values = shots
+            .map((s) => s.metrics[metric])
+            .filter((v) => v !== undefined && v !== "")
+            .map((v) => parseFloat(String(v)));
+          const numericValues = values.filter((v) => !isNaN(v));
 
-    if (includeAverages && Object.keys(club.consistency).length > 0) {
-      const consRow: Record<string, string> = {
-        Date: session.date,
-        Club: club.club_name,
-        "Shot #": "",
-        Type: "Consistency",
-      };
-
-      if (hasTags(session)) {
-        consRow.Tag = "";
-      }
-
-      for (const metric of orderedMetrics) {
-        const colName = getColumnName(metric, unitChoice);
-        const rawValue = club.consistency[metric] ?? "";
-
-        if (typeof rawValue === "string" || typeof rawValue === "number") {
-          consRow[colName] = String(normalizeMetricValue(rawValue, metric, unitSystem, unitChoice));
-        } else {
-          consRow[colName] = "";
+          if (numericValues.length > 0) {
+            const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+            const rounded = Math.round(avg * 10) / 10;
+            avgRow[colName] = String(normalizeMetricValue(rounded, metric, unitSystem, unitChoice));
+          } else {
+            avgRow[colName] = "";
+          }
         }
-      }
 
-      rows.push(consRow);
+        rows.push(avgRow);
+      }
     }
   }
 
