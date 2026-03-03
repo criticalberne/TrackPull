@@ -198,7 +198,8 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
         SPEED_UNIT: "speedUnit",
         DISTANCE_UNIT: "distanceUnit",
         SELECTED_PROMPT_ID: "selectedPromptId",
-        AI_SERVICE: "aiService"
+        AI_SERVICE: "aiService",
+        HITTING_SURFACE: "hittingSurface"
       };
     }
   });
