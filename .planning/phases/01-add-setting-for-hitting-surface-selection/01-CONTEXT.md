@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Add a user-selectable hitting surface preference (Grass, Mat, Simulator) to the extension popup. The surface is included as metadata in CSV/TSV exports and auto-injected into AI prompts for analysis context.
+Add a user-selectable hitting surface preference (Grass or Mat) to the extension popup. The surface is included as metadata in CSV/TSV exports and auto-injected into AI prompts for analysis context.
 
 </domain>
 
@@ -14,7 +14,7 @@ Add a user-selectable hitting surface preference (Grass, Mat, Simulator) to the 
 ## Implementation Decisions
 
 ### Surface options
-- Three surfaces: Grass, Mat, Simulator
+- Two surfaces: Grass, Mat
 - Simple display labels (no descriptions/parentheticals)
 - Global default only — no per-session override
 - Default on install: Grass
