@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.6
-milestone_name: Dark Mode
-status: in_progress
-last_updated: "2026-03-03T05:00:00.000Z"
+milestone: v1.5
+milestone_name: Polish & Quick Wins
+status: unknown
+last_updated: "2026-03-03T05:00:37.751Z"
 progress:
-  total_phases: 1
-  completed_phases: 0
-  total_plans: 2
-  completed_plans: 1
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-02)
 ## Current Position
 
 Phase: 9 of 12 (Dark Mode CSS Foundation)
-Plan: 1 of 2 in current phase (complete)
-Status: Plan 09-01 complete — ready for plan 09-02
-Last activity: 2026-03-03 — 09-01 executed (CSS custom properties dark mode refactor)
+Plan: 2 of 2 in current phase (complete)
+Status: Phase 09 complete — all plans executed
+Last activity: 2026-03-03 — 09-02 executed (JS inline style replaced with CSS class toggling)
 
-Progress: [#####-----] 50% phase 9
+Progress: [##########] 100% phase 9
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Progress: [#####-----] 50% phase 9
 | Phase 01-add-setting-for-hitting-surface-selection P02 | v1.4 | 2 tasks | 4 files | — |
 | Phase 08 P01 | 4 | 3 tasks | 3 files |
 | Phase 09 P01 | v1.6 | 3 tasks | ~2 min | 4 files |
+| Phase 09 P02 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,7 @@ See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03 with v1.3 outc
 - [Phase 11]: Export toggle reads includeAverages from storage in the service worker directly (not passed via message) — service worker already reads all other preferences from storage; add to same get() call
 - [Phase 08]: _execute_action reserved command used — Chrome handles popup open natively, no background.js handler needed
 - [Phase 08]: No host_permissions added for Gemini — clipboard-first flow requires no page access, avoids user re-approval
+- [Phase 09]: classList.remove before classList.add prevents class accumulation in showStatusMessage — ensures only one state class (status-error or status-success) is active at a time
 
 ### Pending Todos
 
@@ -81,7 +83,7 @@ None.
 - [Phase 8]: Verify gemini.google.com URL lands on chat input before shipping — 30-second manual check
 ## Session Continuity
 
-Last session: 2026-03-03T05:00:00Z
-Stopped at: Completed 09-01-PLAN.md
-Resume file: .planning/phases/09-dark-mode-css-foundation/09-01-SUMMARY.md
-Next action: Execute plan 09-02 (JS inline style fix for dark mode)
+Last session: 2026-03-03T05:01:00Z
+Stopped at: Completed 09-02-PLAN.md
+Resume file: .planning/phases/09-dark-mode-css-foundation/09-02-SUMMARY.md
+Next action: Phase 9 complete — dark mode CSS foundation fully shipped
