@@ -1,6 +1,6 @@
 {
   "name": "trackv3",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "<p align=\"center\">   <img src=\"TrackPuller.png\" alt=\"TrackPull\" width=\"300\"> </p>",
   "main": "index.js",
   "directories": {
