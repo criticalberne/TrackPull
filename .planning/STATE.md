@@ -46,6 +46,10 @@ Progress: [##########] 100% (v1.3 complete)
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 1 added: Add setting for hitting surface selection
+
 ### Decisions
 
 See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03 with v1.3 outcomes)
