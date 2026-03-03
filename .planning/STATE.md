@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 Phase: All v1.3 phases complete (5-7)
 Status: v1.3 milestone SHIPPED
-Last activity: 2026-03-03 — milestone archived
+Last activity: 2026-03-03 - Completed quick task 1: Fix build script to work when run from any directory
 Next action: `/gsd:new-milestone` for next version
 
 Progress: [##########] 100% (v1.3 complete)
@@ -53,6 +53,12 @@ See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03 with v1.3 outc
 ### Pending Todos
 
 None.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Fix build script to work when run from any directory | 2026-03-03 | 4a4de28 | [1-fix-build-script-to-work-when-run-from-a](./quick/1-fix-build-script-to-work-when-run-from-a/) |
 
 ### Blockers/Concerns
 
