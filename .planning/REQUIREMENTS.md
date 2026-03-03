@@ -58,18 +58,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AI-01 | — | Pending |
-| AI-02 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| EXP-01 | — | Pending |
-| NAV-01 | — | Pending |
+| AI-01 | Phase 8 | Pending |
+| NAV-01 | Phase 8 | Pending |
+| UI-01 | Phase 9 | Pending |
+| UI-02 | Phase 10 | Pending |
+| EXP-01 | Phase 11 | Pending |
+| AI-02 | Phase 12 | Pending |
 
 **Coverage:**
 - v1.5 requirements: 6 total
-- Mapped to phases: 0
-- Unmapped: 6
+- Mapped to phases: 6
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-02*
-*Last updated: 2026-03-02 after initial definition*
+*Last updated: 2026-03-02 after roadmap creation — all 6 requirements mapped*
