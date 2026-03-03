@@ -7,30 +7,26 @@
 [![Tests](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml/badge.svg)](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Chrome extension that pulls shot data from Trackman web reports — export to CSV, copy to clipboard, or launch one-click AI analysis.
+Grab your Trackman data and actually do something with it. Export to CSV, paste into a spreadsheet, or send it straight to ChatGPT/Claude for analysis — all from one Chrome extension.
 
-## Features
+## What it does
 
-- Automatically captures shot data when you open a Trackman report
-- **Export CSV** with metrics grouped by category (speed, launch, spin, distance, etc.)
-- **Copy to clipboard** as tab-separated values — paste directly into Google Sheets or Excel
-- **One-click AI analysis** — launch ChatGPT or Claude with your data + a golf analysis prompt
-- 8 built-in golf prompts across beginner, intermediate, and advanced skill tiers
-- Create and manage custom prompt templates in the options page
-- Independent speed (mph / m/s) and distance (yards / meters) unit selectors
-- Hitting surface selector (Mat / Grass) — included as metadata in all exports and AI prompts
-- Files named `ShotData_YYYY-MM-DD.csv` for easy organization
+- Opens a Trackman report? Data's already captured
+- Export as CSV or copy tab-separated values straight into Google Sheets
+- One click to launch AI analysis with your data and a golf prompt
+- 8 built-in prompts from beginner to advanced, plus custom templates you create
+- Pick your units (mph or m/s, yards or meters) and hitting surface (mat or grass)
 
 ## Install
 
-### Option 1: Download the release (easiest)
+### Download the release (easiest)
 
 1. Download `production.zip` from the [latest release](https://github.com/criticalberne/TrackPull/releases/latest)
 2. Unzip it
 3. Go to `chrome://extensions` and enable **Developer Mode**
 4. Click **Load unpacked** and select the unzipped folder
 
-### Option 2: Clone and build
+### Clone and build
 
 1. Clone the repo:
    ```bash
@@ -47,26 +43,29 @@ A Chrome extension that pulls shot data from Trackman web reports — export to 
 
 ## Usage
 
-1. Open a Trackman report URL (`web-dynamic-reports.trackmangolf.com`)
-2. The extension automatically captures shot data
-3. Click the TrackPull icon in your toolbar to see the shot count
-4. Choose your preferred speed units, distance units, and hitting surface
-5. **Export CSV** — download your data as a CSV file
-6. **Copy TSV** — copy tab-separated data to clipboard for spreadsheets
-7. **Open in AI** — launch ChatGPT or Claude with your data and a selected prompt
-8. **Copy Prompt + Data** — copy the prompt and data to clipboard for manual paste
+1. Open any Trackman report — the extension grabs your shot data automatically
+2. Click the TrackPull icon to see your shot count and set preferences
+3. Pick what you want to do:
+   - **Export CSV** — downloads a file with your data
+   - **Copy TSV** — pastes right into spreadsheets
+   - **Open in AI** — launches ChatGPT or Claude with a prompt and your data
+   - **Copy Prompt + Data** — for pasting into any AI chat manually
 
-### Supported URL formats
+Your hitting surface (mat/grass) is tagged in every export and prompt so the AI knows what it's working with.
+
+<details>
+<summary>Supported Trackman URLs</summary>
 
 ```
 https://web-dynamic-reports.trackmangolf.com/reports?r=12345
 https://web-dynamic-reports.trackmangolf.com/activities?a=67890
 https://web-dynamic-reports.trackmangolf.com/reports?ReportId=11223
 ```
+</details>
 
-## CSV Column Order
+## CSV columns
 
-Metrics are grouped by analytical category for quick scanning:
+Columns are grouped so you can scan without hunting:
 
 | Group | Metrics |
 |---|---|
@@ -79,36 +78,30 @@ Metrics are grouped by analytical category for quick scanning:
 | Impact | Low Point Distance (in/cm), Impact Height, Impact Offset |
 | Other | Tempo |
 
-## AI Prompt Templates
+## AI prompts
 
-TrackPull includes 8 built-in prompts accessible directly from the popup — select a prompt, click **Open in AI**, and your data is ready for analysis. You can also create custom prompts in the options page.
-
-The `prompts/` folder contains the same prompts as standalone markdown files for reference:
+Select a prompt from the popup and click **Open in AI** — your data goes with it. You can also build your own in the options page.
 
 ### Beginner
-- [Understanding Your Numbers](prompts/beginner/understanding-your-numbers.md) — Learn what each metric means and how yours compare to average golfers
-- [Basic Club Recommendations](prompts/beginner/basic-club-recommendations.md) — Find out what category of clubs suits your swing
+- [Understanding Your Numbers](prompts/beginner/understanding-your-numbers.md) — what each metric means and how yours compare
+- [Basic Club Recommendations](prompts/beginner/basic-club-recommendations.md) — what category of clubs fits your swing
 
 ### Intermediate
-- [Distance Gapping](prompts/intermediate/distance-gapping.md) — Identify carry distance gaps and overlaps in your bag
-- [Shaft Flex Analysis](prompts/intermediate/shaft-flex-analysis.md) — Get shaft flex and weight recommendations based on your speed and launch data
-- [Shot Shape Tendencies](prompts/intermediate/shot-shape-tendencies.md) — Analyze your face angle, club path, and curvature patterns
+- [Distance Gapping](prompts/intermediate/distance-gapping.md) — carry distance gaps and overlaps in your bag
+- [Shaft Flex Analysis](prompts/intermediate/shaft-flex-analysis.md) — shaft flex and weight recs from your speed and launch data
+- [Shot Shape Tendencies](prompts/intermediate/shot-shape-tendencies.md) — face angle, club path, and curvature patterns
 
 ### Advanced
-- [Launch & Spin Optimization](prompts/advanced/launch-spin-optimization.md) — Compare your launch/spin to optimal windows and suggest loft/shaft changes
-- [Club Delivery Analysis](prompts/advanced/club-delivery-analysis.md) — Evaluate attack angle, dynamic loft, and low point for efficiency
-- [Full Bag Fitting](prompts/advanced/full-bag-fitting.md) — Comprehensive analysis with specific club head, shaft, and setup recommendations
+- [Launch & Spin Optimization](prompts/advanced/launch-spin-optimization.md) — your launch/spin vs optimal windows, with loft/shaft suggestions
+- [Club Delivery Analysis](prompts/advanced/club-delivery-analysis.md) — attack angle, dynamic loft, and low point efficiency
+- [Full Bag Fitting](prompts/advanced/full-bag-fitting.md) — the whole picture with specific club head, shaft, and setup recs
 
 ## Development
 
-### Build the extension
-
 ```bash
+# Build the extension
 bash scripts/build-extension.sh
-```
 
-### Create a release zip
-
-```bash
+# Create a release zip
 bash scripts/build-zip.sh
 ```
