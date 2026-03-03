@@ -20,6 +20,7 @@ decisions:
   - "_execute_action reserved command used (not custom name) — Chrome handles popup open natively with no background.js handler"
   - "No host_permissions added for Gemini — clipboard-first flow copies data then opens URL, no page access required"
   - "Command shortcut is Cmd+Shift+G / Ctrl+Shift+G — Cmd+Shift+T is Chrome-reserved and silently fails"
+requirements-completed: [AI-01, NAV-01]
 metrics:
   duration: "4 minutes"
   completed_date: "2026-03-03"
