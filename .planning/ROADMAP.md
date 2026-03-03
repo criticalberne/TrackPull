@@ -41,7 +41,7 @@
 
 - [x] **Phase 8: Gemini Launch and Keyboard Shortcut** - Isolated manifest-only release adding Gemini host_permissions and Cmd+Shift+G keyboard shortcut (completed 2026-03-03)
 - [x] **Phase 9: Dark Mode CSS Foundation** - CSS custom properties refactor enabling system-driven dark mode in popup and options pages (completed 2026-03-03)
-- [ ] **Phase 10: Empty State Guidance** - Actionable guidance message replacing bare "0 shots" when no data is captured
+- [x] **Phase 10: Empty State Guidance** - Actionable guidance message replacing bare "0 shots" when no data is captured (completed 2026-03-03)
 - [ ] **Phase 11: Export Format Toggle** - Checkbox persisting user preference to include or exclude averages and consistency rows in CSV
 - [ ] **Phase 12: Prompt Preview** - Collapsible disclosure widget showing assembled prompt and data before AI launch
 
@@ -77,7 +77,7 @@
   1. Opening the popup with no stored data shows a guidance message (e.g., "Open a Trackman report to capture shots") instead of "0 shots"
   2. The guidance message does not flash briefly when data is already present — it only appears after storage resolves as empty
   3. The guidance message is readable in both light and dark mode
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 - [ ] 10-01-PLAN.md — Empty state guidance HTML/CSS + TypeScript logic refactor
 
 ### Phase 11: Export Format Toggle
@@ -118,7 +118,7 @@
 | 1. Add setting for hitting surface selection | v1.4 | 2/2 | Complete | 2026-03-03 |
 | 8. Gemini Launch and Keyboard Shortcut | 1/1 | Complete   | 2026-03-03 | - |
 | 9. Dark Mode CSS Foundation | 2/2 | Complete   | 2026-03-03 | - |
-| 10. Empty State Guidance | v1.5 | 0/1 | Planned | - |
+| 10. Empty State Guidance | 1/1 | Complete   | 2026-03-03 | - |
 | 11. Export Format Toggle | v1.5 | 0/TBD | Not started | - |
 | 12. Prompt Preview | v1.5 | 0/TBD | Not started | - |
 
