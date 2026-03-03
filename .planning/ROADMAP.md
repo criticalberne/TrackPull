@@ -114,7 +114,12 @@ Plans:
   2. User creates a new custom prompt with a name and body, saves it, and it immediately appears in the popup prompt selector
   3. User edits an existing custom prompt and the updated version is reflected in the popup on next open
   4. User deletes a custom prompt and it is removed from both the options page and the popup selector
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 07-01: Shared infrastructure -- CustomPrompt type, storage CRUD helpers, broadened assemblePrompt, manifest options_ui, build script wiring (wave 1)
+- [ ] 07-02: Options page HTML/CSS layout and TypeScript CRUD logic for custom prompts and AI preference (wave 2)
+- [ ] 07-03: Popup refactor -- dynamic prompt select rendering, gear icon, PromptItem lookup (wave 2, parallel with 07-02)
 
 ## Progress
 
@@ -126,7 +131,7 @@ Plans:
 | 4. Popup UI | v1.x | 2/2 | Complete | Pre-existing |
 | 5. Foundation Modules | 3/3 | Complete    | 2026-03-02 | - |
 | 6. Clipboard Copy and AI Launch | 2/2 | Complete   | 2026-03-02 | - |
-| 7. Options Page and Custom Prompts | v1.3 | 0/? | Not started | - |
+| 7. Options Page and Custom Prompts | v1.3 | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-02*
