@@ -1,513 +1,719 @@
 # Architecture Research
 
-**Domain:** Chrome Extension — golf data scraping and export (TrackPull)
+**Domain:** Chrome Extension — TrackPull v1.5 Polish & Quick Wins
 **Researched:** 2026-03-02
-**Confidence:** HIGH (based on direct source code inspection + MV3 official documentation)
+**Confidence:** HIGH (based on direct source code inspection of all current files + MV3 official documentation)
 
-## Standard Architecture
+---
 
-### System Overview
+## Scope
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    trackmangolf.com page                             │
-│                                                                       │
-│  ┌───────────────────────────────────────┐                           │
-│  │   MAIN world (interceptor.ts)         │                           │
-│  │   - monkey-patches fetch + XHR        │                           │
-│  │   - parses StrokeGroups JSON          │                           │
-│  │   - scrapes .group-tag DOM elements   │                           │
-│  │   - postMessage → window              │                           │
-│  └─────────────────┬─────────────────────┘                          │
-│                    │ window.postMessage                               │
-│  ┌─────────────────▼─────────────────────┐                          │
-│  │   ISOLATED world (bridge.ts)          │                           │
-│  │   - filters TRACKMAN_SHOT_DATA msgs   │                           │
-│  │   - chrome.runtime.sendMessage →      │                           │
-│  └─────────────────┬─────────────────────┘                          │
-└────────────────────┼────────────────────────────────────────────────┘
-                     │ chrome.runtime.sendMessage (SAVE_DATA)
-┌────────────────────▼────────────────────────────────────────────────┐
-│                SERVICE WORKER (serviceWorker.ts)                      │
-│                                                                       │
-│   Handles: SAVE_DATA, GET_DATA, EXPORT_CSV_REQUEST                   │
-│   Reads: chrome.storage.local → SessionData                          │
-│   Triggers: chrome.downloads.download (data URI)                     │
-│   Emits: DATA_UPDATED → popup (if open)                              │
-└──────────┬───────────────────────────────────────────────────────────┘
-           │ chrome.storage.local                  │ chrome.runtime.onMessage
-┌──────────▼───────────┐              ┌────────────▼───────────────────┐
-│  chrome.storage.local │              │   POPUP (popup.ts)             │
-│                       │              │                                 │
-│  trackmanData: {}     │◄─────────── │   - shot count display          │
-│  speedUnit: string    │             │   - export button               │
-│  distanceUnit: string │             │   - clear button                │
-│  prompts: [...]       │             │   - unit preference dropdowns   │
-│  defaultAiService:str │             │   [v1.3 additions:]             │
-│                       │             │   - copy to clipboard button    │
-│                       │             │   - AI launch button            │
-│                       │             │   - AI service selector         │
-└───────────────────────┘             └──────────────┬──────────────────┘
-                                                      │ chrome.runtime.openOptionsPage()
-                                       ┌──────────────▼──────────────────┐
-                                       │   OPTIONS PAGE (options.ts)     │
-                                       │   [NEW in v1.3]                 │
-                                       │   - prompt template CRUD        │
-                                       │   - default AI service setting  │
-                                       │   - view/edit built-in prompts  │
-                                       └─────────────────────────────────┘
+This document supersedes the v1.3 ARCHITECTURE.md and covers v1.5 integration only. The existing system architecture is documented fully in the prior version and in `.claude/projects/memory/architecture.md`. This file answers: **which files get modified, which are new, how each feature integrates, and what order to build them.**
 
-Shared modules (no Chrome API dependencies):
-  src/shared/constants.ts          — METRIC_DISPLAY_NAMES, STORAGE_KEYS, CSS selectors
-  src/shared/csv_writer.ts         — SessionData → CSV string (single conversion point)
-  src/shared/unit_normalization.ts — convertSpeed/Distance/Angle, UnitChoice types
-  src/shared/html_table_parser.ts  — DOM table extraction utility
-  src/shared/tsv_writer.ts         — [NEW] SessionData → tab-separated string (clipboard)
-  src/shared/prompt_builder.ts     — [NEW] assemble prompt + data payload
-  src/models/types.ts              — SessionData, ClubGroup, Shot, CaptureInfo, mergeSessionData
-  src/models/prompt_types.ts       — [NEW] PromptTemplate, AiService type definitions
-```
+---
 
-### Component Responsibilities
+## Current Architecture Baseline (v1.4)
 
-| Component | Status | Responsibility | Communicates With |
-|-----------|--------|----------------|-------------------|
-| interceptor.ts (MAIN) | Unchanged | Monkey-patch fetch/XHR, parse StrokeGroups JSON, scrape .group-tag DOM, build SessionData | bridge.ts via window.postMessage |
-| bridge.ts (ISOLATED) | Unchanged | Filter postMessage events, relay SessionData to service worker | serviceWorker.ts via chrome.runtime.sendMessage |
-| serviceWorker.ts | Modified | Persist SessionData, handle export (CSV via data URI), respond to popup; add new handlers for prompt storage CRUD | chrome.storage.local, chrome.downloads, popup via onMessage |
-| popup.ts | Modified | Display shot count, trigger export/clear, persist unit preferences; add clipboard copy button, AI launch controls, link to options page | serviceWorker.ts via chrome.runtime.sendMessage, chrome.storage.local directly, navigator.clipboard API directly |
-| popup.html | Modified | Add clipboard copy button, AI service selector, AI launch button, "Manage prompts" link | — |
-| options.ts | New | Prompt template CRUD (add/edit/delete custom, view built-in), default AI service setting | chrome.storage.sync directly (preferences and templates) |
-| options.html | New | Full-page UI for prompt management | — |
-| tsv_writer.ts | New | Pure function: SessionData → tab-separated string for clipboard | unit_normalization.ts |
-| prompt_builder.ts | New | Assemble prompt text + TSV/CSV data into AI payload; resolve AI service URL | prompt_types.ts |
-| prompt_types.ts | New | PromptTemplate interface, AiService type, built-in prompt catalog | — |
-| csv_writer.ts | Unchanged | Single source-of-truth for SessionData → CSV string with unit conversion | unit_normalization.ts |
-| unit_normalization.ts | Unchanged | Type definitions + conversion math for speed/distance/angle | csv_writer.ts, serviceWorker.ts |
-| types.ts | Unchanged | SessionData/Shot/ClubGroup interfaces + mergeSessionData() | All components |
-| constants.ts | Modified | Add STORAGE_KEYS for prompts and AI service preference | All components |
-
-## Recommended Project Structure
-
-Current structure is sound. v1.3 additions slot into existing folders:
+Before documenting changes, the system as it stands after v1.4:
 
 ```
-src/
-├── background/
-│   └── serviceWorker.ts           — add: GET_PROMPTS, SAVE_PROMPT, DELETE_PROMPT handlers
-├── content/
-│   ├── interceptor.ts             — unchanged
-│   ├── bridge.ts                  — unchanged
-│   └── html_scraping.ts           — unchanged
-├── popup/
-│   ├── popup.ts                   — add: clipboard button, AI launch, options page link
-│   └── popup.html                 — add: new buttons and AI service selector
-├── options/                       — NEW folder
-│   ├── options.ts                 — prompt template CRUD UI
-│   └── options.html               — prompt management page
-├── shared/
-│   ├── constants.ts               — add: STORAGE_KEYS.PROMPTS, STORAGE_KEYS.DEFAULT_AI
-│   ├── csv_writer.ts              — unchanged
-│   ├── html_table_parser.ts       — unchanged
-│   ├── tsv_writer.ts              — NEW: SessionData → tab-separated values
-│   ├── unit_normalization.ts      — unchanged
-│   └── prompt_builder.ts          — NEW: prompt + data assembly, AI URL resolver
-└── models/
-    ├── types.ts                   — unchanged
-    └── prompt_types.ts            — NEW: PromptTemplate, AiService types, built-in catalog
+┌────────────────────────────────────────────────────────────────────────┐
+│                    trackmangolf.com page                                │
+│  ┌──────────────────────────────────────────┐                           │
+│  │  interceptor.ts (MAIN world)             │  monkey-patches fetch/XHR │
+│  │  → parses StrokeGroups JSON              │  → builds SessionData     │
+│  └──────────────────┬───────────────────────┘                           │
+│                     │ window.postMessage                                 │
+│  ┌──────────────────▼───────────────────────┐                           │
+│  │  bridge.ts (ISOLATED world)              │  relays to service worker │
+│  └──────────────────┬───────────────────────┘                           │
+└─────────────────────┼──────────────────────────────────────────────────┘
+                      │ chrome.runtime.sendMessage (SAVE_DATA)
+┌─────────────────────▼──────────────────────────────────────────────────┐
+│  serviceWorker.ts                                                        │
+│  Handlers: SAVE_DATA, GET_DATA, EXPORT_CSV_REQUEST                      │
+│  Emits: DATA_UPDATED → popup                                             │
+│  APIs: chrome.storage.local, chrome.downloads                           │
+└────────────────┬───────────────────────────────────────────────────────┘
+                 │ chrome.storage.local + chrome.runtime.onMessage
+┌────────────────▼───────────────────┐   ┌────────────────────────────────┐
+│  popup.ts / popup.html             │   │  options.ts / options.html      │
+│  - shot count display              │   │  - custom prompt CRUD           │
+│  - export CSV                      │   │  - built-in prompts (read-only) │
+│  - copy TSV to clipboard           │   │  - default AI service setting   │
+│  - open in AI (ChatGPT/Claude/     │   └────────────────────────────────┘
+│    Gemini already in HTML select)  │
+│  - prompt selector dropdown        │
+│  - AI service selector dropdown    │
+│  - hitting surface selector        │
+│  - unit selectors                  │
+└────────────────────────────────────┘
+
+Shared modules (no Chrome APIs):
+  shared/constants.ts         — STORAGE_KEYS, METRIC_DISPLAY_NAMES, CSS selectors
+  shared/csv_writer.ts        — SessionData → CSV string; includeAverages flag
+  shared/tsv_writer.ts        — SessionData → TSV string (clipboard)
+  shared/unit_normalization.ts — conversion math, UnitChoice types
+  shared/prompt_builder.ts    — assemble prompt + data payload
+  shared/prompt_types.ts      — BuiltInPrompt, CustomPrompt types + BUILTIN_PROMPTS catalog
+  shared/custom_prompts.ts    — loadCustomPrompts/saveCustomPrompt/deleteCustomPrompt
+  shared/html_table_parser.ts — DOM table extraction utility
+  models/types.ts             — SessionData, ClubGroup, Shot interfaces
 ```
 
-### Structure Rationale
+**Storage layout (v1.4):**
 
-- **options/:** Parallel to popup/ — same pattern (one .ts + one .html, bundled independently by esbuild)
-- **shared/tsv_writer.ts:** Follows the same pure-function pattern as csv_writer.ts — zero Chrome APIs, fully testable with vitest
-- **shared/prompt_builder.ts:** Pure function: takes a PromptTemplate + SessionData → returns assembled string (and AI URL); no Chrome APIs, testable
-- **models/prompt_types.ts:** Separates prompt-domain types from shot-data types; built-in catalog lives as a const array here
+| Key | Store | Type | Set by |
+|-----|-------|------|--------|
+| `trackmanData` | local | SessionData | serviceWorker |
+| `speedUnit` | local | `"mph" \| "m/s"` | popup |
+| `distanceUnit` | local | `"yards" \| "meters"` | popup |
+| `hittingSurface` | local | `"Grass" \| "Mat"` | popup |
+| `selectedPromptId` | local | string | popup |
+| `aiService` | sync | string | popup + options |
+| `customPrompt_{id}` | sync | CustomPrompt | options |
+| `customPromptIds` | sync | string[] | options |
 
-## Architectural Patterns
+---
 
-### Pattern 1: World Separation (existing — must be preserved)
+## v1.5 Feature Integration Map
 
-**What:** MAIN world for page API access, ISOLATED world as relay, service worker for Chrome APIs. This is the only way to both intercept fetch/XHR and use chrome.runtime.sendMessage.
+Each feature is analyzed independently: what files it touches, whether any new files are needed, what storage changes (if any) are required, and what the data flow looks like.
 
-**When to use:** Every feature that needs to interact with page data. Never collapse these worlds.
+---
 
-**Trade-offs:** Extra message-passing indirection, but mandatory in MV3.
+### Feature 1: Gemini AI Launch Support
 
-**Example:**
-```typescript
-// interceptor.ts (MAIN) — never use chrome.* here
-window.postMessage({ type: "TRACKMAN_SHOT_DATA", source: "trackpull-interceptor", data: session }, "*");
+**What it does:** Gemini is already in the AI service selector HTML (`<option value="Gemini">Gemini</option>`) and in the `AI_URLS` record in popup.ts. The tab opens correctly. The issue is that Gemini has no native URL parameter support — the tab opens to `gemini.google.com` but no prompt is pre-filled. v1.5 ships Gemini as a working option via the clipboard-first flow, which already works (paste into Gemini after clipboard copy). The isolated host_permissions release means adding `"https://gemini.google.com/*"` to the manifest in a dedicated release so the permission prompt doesn't alarm existing users.
 
-// bridge.ts (ISOLATED) — never touch window.fetch here
-window.addEventListener("message", (event) => {
-  if (event.data?.source !== "trackpull-interceptor") return;
-  chrome.runtime.sendMessage({ type: "SAVE_DATA", data: event.data.data });
-});
-```
+**Confidence in approach:** HIGH — Gemini clipboard-first flow is already the architecture for all AI services. The only manifest change is host_permissions, not a new permission type.
 
-### Pattern 2: Service Worker as Single Dispatch Point
+**Files modified:**
 
-**What:** All Chrome API calls (storage, downloads, tabs) go through the service worker. Popup and content scripts send typed messages; the service worker routes them.
+| File | Change |
+|------|--------|
+| `src/manifest.json` | Add `"https://gemini.google.com/*"` to `host_permissions` array |
 
-**When to use:** Any new feature requiring chrome.storage writes, chrome.downloads, or cross-tab state. Do not call chrome.storage from content scripts.
+**Files created:** None.
 
-**Trade-offs:** One file concentrates side effects — easy to audit, but grows as features add. Keep handler logic thin; delegate computation to shared modules.
+**Storage schema changes:** None.
 
-**Exception for v1.3:** Prompt storage (user preferences and custom templates) uses `chrome.storage.sync` and is read/written directly by popup.ts and options.ts — consistent with the existing pattern where popup reads unit preferences directly from storage. This avoids unnecessary message round-trips for lightweight preference data.
+**Data flow:** No change to data flow. The existing clipboard-first flow (`await navigator.clipboard.writeText(assembled)` → `chrome.tabs.create({ url: AI_URLS[selectedService] })`) works for Gemini. `AI_URLS["Gemini"]` is already `"https://gemini.google.com"` in popup.ts.
 
-### Pattern 3: Shared Modules as Pure Functions
+**Why host_permissions for Gemini?** Chrome MV3 requires `host_permissions` for a domain before a content script can inject into it. Even though v1.5 uses clipboard-first (not content script injection), adding Gemini to host_permissions is the prerequisite for any future content script approach and signals intent. The isolated release requirement exists because any addition to `host_permissions` triggers a permission prompt for existing users. This must be its own version bump to control the rollout.
 
-**What:** csv_writer.ts, unit_normalization.ts, and html_table_parser.ts contain zero Chrome APIs and are testable in vitest without any mocking. New computation logic belongs here.
-
-**When to use:** Any stateless transformation — format conversion, filtering, calculation, rendering to string. If it doesn't need chrome.*, put it in shared/.
-
-**Trade-offs:** Deliberate; keeps the Chrome API surface auditable and keeps test coverage feasible.
-
-**v1.3 additions following this pattern:**
-- `tsv_writer.ts` — pure function, same shape as csv_writer.ts
-- `prompt_builder.ts` — pure function: (PromptTemplate, SessionData, UnitChoice) → string
-
-### Pattern 4: chrome.storage.local for Session Data, chrome.storage.sync for Preferences
-
-**What:** Session data in `chrome.storage.local` (large, device-specific). User preferences and prompt templates in `chrome.storage.sync` (small, synced across user's Chrome profiles).
-
-**When to use:** Any preference the user would want to carry between devices (AI service choice, custom prompts). Session shot data stays local.
-
-**Trade-offs:** storage.sync has stricter quotas: 100 KB total, 8 KB per item, 512 items. A single PromptTemplate with a 2-4 KB prompt body stays well under the 8 KB limit. A user with 20 custom prompts at 4 KB each uses 80 KB — approaching the 100 KB ceiling. Cap custom prompts at 20 to stay safe, with a warning if the limit is reached.
-
-## Data Flow
-
-### Primary Capture Flow (existing — unchanged)
+**Integration point with existing code:**
 
 ```
-Trackman page loads API data
-        ↓
-interceptor.ts intercepts fetch/XHR response
-        ↓
-containsStrokegroups() detection → parseSessionData()
-        ↓
-waitForTagsThenPost() polls for .group-tag DOM elements (up to 8s)
-        ↓
-window.postMessage({ type: "TRACKMAN_SHOT_DATA", data: SessionData })
-        ↓
-bridge.ts receives message → chrome.runtime.sendMessage({ type: "SAVE_DATA" })
-        ↓
-serviceWorker.ts → chrome.storage.local.set({ trackmanData: SessionData })
-        ↓
-chrome.storage.onChanged emits → chrome.runtime.sendMessage({ type: "DATA_UPDATED" })
-        ↓
-popup.ts (if open) receives DATA_UPDATED → updateShotCount()
+popup.ts — AI_URLS record already has "Gemini": "https://gemini.google.com"
+popup.html — Gemini already in <select> options
+manifest.json — ONLY file that changes for this feature
 ```
 
-### Export Flow (existing — unchanged)
+**Build order position:** Can ship first — manifest-only change, rebuild, release as a standalone version bump.
+
+---
+
+### Feature 2: Prompt Preview Before Sending to AI
+
+**What it does:** User selects a prompt and sees a preview of the assembled prompt + data text before clicking "Open in AI." Builds trust that the correct prompt and data will be sent.
+
+**Integration analysis:** The prompt assembly logic already exists in `shared/prompt_builder.ts` as `assemblePrompt()`. The `cachedData`, `cachedUnitChoice`, `cachedSurface`, and `cachedCustomPrompts` are already in popup.ts module scope. Preview needs: (1) a UI element in popup.html to show the assembled text, (2) a trigger in popup.ts to assemble and display it when the prompt or AI service selection changes.
+
+**Constraint:** The popup is 320px minimum width. A full-text prompt preview would overflow the popup. The correct UX is a collapsible/expandable preview section or a character-limited preview (first N characters with a "..." indicator). A `<textarea readonly>` element that expands on click is the simplest implementation requiring no new dependencies.
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/popup/popup.html` | Add a `<div id="prompt-preview-container">` section below the prompt/service selectors, containing a `<button id="preview-toggle-btn">` and a `<textarea id="prompt-preview" readonly>` (initially hidden) |
+| `src/popup/popup.ts` | Add `updatePromptPreview()` function that calls `assemblePrompt()` and sets the textarea value; call it when `promptSelect` or `aiServiceSelect` changes; wire toggle button; call on initial load |
+
+**Files created:** None.
+
+**Storage schema changes:** None. Preview is ephemeral, generated from cached data in memory, not persisted.
+
+**Data flow:**
 
 ```
-User clicks Export CSV in popup
+User changes prompt select or AI service select
+        ↓
+popup.ts: promptSelect.addEventListener("change", updatePromptPreview)
+        ↓
+updatePromptPreview() {
+  if (!cachedData || !promptSelect) return;
+  const prompt = findPromptById(promptSelect.value);
+  if (!prompt) return;
+  const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
+  const metadata = { date, shotCount, unitLabel, hittingSurface };
+  const assembled = assemblePrompt(prompt, tsvData, metadata);
+  previewTextarea.value = assembled;
+}
+        ↓
+User clicks toggle button → show/hide previewTextarea
+```
+
+**Key constraint — pre-assembled preview can be slow for large sessions:** `writeTsv()` and `assemblePrompt()` are pure synchronous functions. For a 200-shot session, TSV generation takes under 5ms — not a UX concern. Generating on every select change (not on every keystroke) is safe.
+
+**Key constraint — popup height:** Chrome popup windows have a maximum recommended height. A visible `<textarea>` with 10+ lines of preview text may push the popup height to an awkward dimension. Use `max-height: 120px; overflow-y: auto` on the preview textarea to contain it.
+
+**Integration point with existing code:**
+
+```
+popup.ts imports assemblePrompt from shared/prompt_builder.ts — already imported
+popup.ts imports writeTsv from shared/tsv_writer.ts — already imported
+popup.ts has cachedData, cachedUnitChoice, cachedSurface, cachedCustomPrompts — already in scope
+popup.ts has findPromptById() — already exists
+No new imports needed in popup.ts
+```
+
+**Build order position:** Build after dark mode CSS is finalized (dark mode affects preview textarea styling). Otherwise independent of other features.
+
+---
+
+### Feature 3: Empty State Guidance
+
+**What it does:** Instead of showing "0 shots" and hiding all export/AI buttons (the current `updateExportButtonVisibility()` behavior), show an actionable message explaining how to get data: "Open a Trackman report in this tab to capture shots."
+
+**Integration analysis:** `updateExportButtonVisibility()` in popup.ts already controls the `#export-row` and `#ai-section` display via `style.display`. `updateShotCount()` already sets the `#shot-count` text. The empty state replaces the current "0 shots" + hidden buttons with a visible guidance message. No data flow changes required.
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/popup/popup.html` | Add `<div id="empty-state">` element with guidance text and a link to trackmangolf.com; position it inside `#shot-count-container` or below it; hide by default |
+| `src/popup/popup.ts` | Modify `updateExportButtonVisibility()` to also toggle `#empty-state` visibility (show when no data, hide when data present); update `updateShotCount()` to show "0" count more gracefully or suppress the count in empty state |
+
+**Files created:** None.
+
+**Storage schema changes:** None.
+
+**Data flow:**
+
+```
+popup.ts DOMContentLoaded:
+  cachedData = null → updateExportButtonVisibility(null)
+        ↓
+updateExportButtonVisibility(data):
+  if hasValidData:
+    exportRow.display = "flex"
+    aiSection.display = "block"
+    emptyState.display = "none"
+  else:
+    exportRow.display = "none"
+    aiSection.display = "none"
+    emptyState.display = "block"   ← NEW
+```
+
+**Empty state content decision:** The guidance text should be specific and actionable: "Visit a Trackman report at web-dynamic-reports.trackmangolf.com and TrackPull will automatically capture your shots." A direct link is a nice addition but requires knowing if the user is already on the right domain. A static message is sufficient for v1.5.
+
+**Integration point with existing code:**
+
+```
+popup.ts: updateExportButtonVisibility() — modify existing function
+popup.html: add #empty-state div in existing layout
+No new imports, no storage changes, no service worker changes
+```
+
+**Build order position:** Can be built first or second — no dependencies on other v1.5 features.
+
+---
+
+### Feature 4: Export Format Toggle (Averages/Consistency Rows)
+
+**What it does:** Add a UI control (checkbox or toggle) in the popup that lets the user choose whether the exported CSV includes or excludes the "Average" and "Consistency" rows per club. The `writeCsv()` function in `csv_writer.ts` already has an `includeAverages` boolean parameter (currently always passed as `true` from `serviceWorker.ts`).
+
+**Integration analysis:** The `includeAverages` parameter in `writeCsv()` is the right hook — no changes to `csv_writer.ts` are needed. The only changes are: (1) persist the user's toggle preference to storage, (2) pass the preference when the service worker calls `writeCsv()`.
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `src/shared/constants.ts` | Add `INCLUDE_AVERAGES: "includeAverages"` to `STORAGE_KEYS` |
+| `src/popup/popup.html` | Add a checkbox `<input type="checkbox" id="include-averages-toggle" checked>` with label "Include averages" in the export section |
+| `src/popup/popup.ts` | Read `includeAverages` from `chrome.storage.local` on load; set checkbox state; wire `change` listener to persist to storage |
+| `src/background/serviceWorker.ts` | In the `EXPORT_CSV_REQUEST` handler, read `STORAGE_KEYS.INCLUDE_AVERAGES` from storage; pass the boolean to `writeCsv()` instead of hardcoded `true` |
+
+**Files created:** None.
+
+**Storage schema changes:**
+
+| Key | Store | Type | Default | Set by |
+|-----|-------|------|---------|--------|
+| `includeAverages` | local | boolean | `true` | popup |
+
+The default is `true` so existing users see no behavior change on upgrade.
+
+**Data flow:**
+
+```
+User toggles "Include averages" checkbox in popup
+        ↓
+popup.ts: chrome.storage.local.set({ includeAverages: checkbox.checked })
+        ↓
+User clicks "Export CSV"
         ↓
 popup.ts → chrome.runtime.sendMessage({ type: "EXPORT_CSV_REQUEST" })
         ↓
-serviceWorker.ts → chrome.storage.local.get([trackmanData, speedUnit, distanceUnit])
+serviceWorker.ts: reads includeAverages from storage (default true if absent)
         ↓
-writeCsv(session, true, undefined, unitChoice) — in shared/csv_writer.ts
+writeCsv(data, includeAverages, undefined, unitChoice, surface)
         ↓
-csv_writer applies normalizeMetricValue() with getApiSourceUnitSystem()
-        ↓
-chrome.downloads.download({ url: "data:text/csv;...base64..." })
-        ↓
-sendResponse({ success: true, filename })
+CSV written with or without Average/Consistency rows
 ```
 
-### Clipboard Copy Flow (NEW — v1.3)
+**Key implementation note:** The `includeAverages` flag also controls whether consistency rows appear (see `csv_writer.ts` lines 134 and 160 — both `includeAverages && ...`). This is the correct behavior: the toggle covers both Average and Consistency rows as a unit. No changes to csv_writer.ts logic are needed.
+
+**Integration point with existing code:**
 
 ```
-User clicks "Copy to Clipboard" in popup
-        ↓
-popup.ts reads SessionData from chrome.storage.local.get (directly, no SW round-trip)
-        ↓
-popup.ts reads unitChoice from chrome.storage.local
-        ↓
-writeTsv(session, unitChoice) — pure function in shared/tsv_writer.ts
-        ↓
-navigator.clipboard.writeText(tsvString)
-        ↓
-popup.ts shows success toast "Copied to clipboard"
+serviceWorker.ts: EXPORT_CSV_REQUEST handler at line 65
+  — already reads: TRACKMAN_DATA, SPEED_UNIT, DISTANCE_UNIT, HITTING_SURFACE, "unitPreference"
+  — add read of: STORAGE_KEYS.INCLUDE_AVERAGES
+  — change writeCsv call at line 83 from writeCsv(data, true, ...) to writeCsv(data, includeAverages, ...)
+
+popup.ts: DOMContentLoaded already reads from chrome.storage.local
+  — add includeAverages to the storage.local.get call
+  — wire checkbox change listener (same pattern as surface, speed, distance selectors)
+
+csv_writer.ts: no changes needed — includeAverages parameter already exists
 ```
 
-**Why popup handles this directly (not via service worker):**
-- `navigator.clipboard.writeText` requires a secure context with a DOM — only available in popup pages and options pages, not in service workers.
-- The offscreen document workaround is unnecessary because popups are already DOM contexts.
-- No `"clipboardWrite"` permission needed when called from a user-initiated click event in a popup (HIGH confidence: Chrome MV3 docs).
-- This follows the existing pattern of popup reading unit preferences directly from storage for lightweight read operations.
+**Build order position:** Service worker changes and popup changes are independent of other v1.5 features. Can build at any point.
 
-**Data source for clipboard:** TSV (tab-separated) is preferred over CSV for clipboard because Google Sheets and Excel both interpret paste-from-TSV natively, producing correctly-separated columns without needing a CSV import dialog.
+---
 
-### AI Tab Launch Flow (NEW — v1.3)
+### Feature 5: Keyboard Shortcut (Cmd+Shift+T)
 
-```
-User selects a prompt from popup dropdown (or uses default)
-        ↓
-User clicks "Open in AI" (or selects AI service from popup selector)
-        ↓
-popup.ts reads SessionData from chrome.storage.local.get (directly)
-        ↓
-popup.ts reads unitChoice from chrome.storage.local
-        ↓
-writeTsv(session, unitChoice) → tsvString  [shared/tsv_writer.ts]
-        ↓
-buildPromptPayload(template, tsvString) → fullPromptText  [shared/prompt_builder.ts]
-  - assembles: [prompt template text] + "\n\n" + [TSV data block]
-        ↓
-resolveAiUrl(aiService, fullPromptText) → url  [shared/prompt_builder.ts]
-  - ChatGPT:  https://chatgpt.com/?q={encodeURIComponent(fullPromptText)}
-  - Claude:   clipboard fallback (URL parameter removed Oct 2025 — LOW confidence, verify)
-  - Gemini:   https://gemini.google.com/app?prompt={encodeURIComponent(fullPromptText)}
-              (requires Gemini to recognize the ?prompt= param; may need fallback)
-        ↓
-chrome.tabs.create({ url }) — no "tabs" permission required for creating tabs
-        ↓
-popup.ts closes (popup closes automatically when user clicks away or tab opens)
-```
+**What it does:** Add a keyboard shortcut `Cmd+Shift+T` (Mac) / `Ctrl+Shift+T` (Windows/Linux) that opens the TrackPull popup from any tab, allowing users to launch the popup without clicking the toolbar icon.
 
-**Alternative for services without URL param support — Copy + Open:**
-```
-buildPromptPayload(template, tsvString) → fullPromptText
-        ↓
-navigator.clipboard.writeText(fullPromptText)   ← copy to clipboard
-        ↓
-chrome.tabs.create({ url: aiServiceBaseUrl })   ← open AI tab
-        ↓
-toast: "Prompt copied — paste it in the new tab"
-```
+**Integration analysis:** Chrome MV3 provides `commands` in `manifest.json` to declare keyboard shortcuts. The `_execute_action` reserved command name triggers the extension's action (popup open) without any code. This requires zero TypeScript changes.
 
-This fallback handles Claude (if URL params are broken) and any future service. It is also the explicit "Copy prompt+data to clipboard" feature from the requirements.
+**Constraint — `Ctrl+Shift+T` conflict on Windows:** `Ctrl+Shift+T` is the "reopen closed tab" shortcut in Chrome on Windows/Linux. Chrome will not let extensions override browser reserved shortcuts. The correct approach is to use a different modifier combo on Windows or just use `Ctrl+Shift+Y` (or similar). Alternatively, use `Ctrl+Shift+T` on Mac (not a reserved shortcut there) and a different combo on Windows. Chrome's command system supports platform-specific bindings.
 
-**AI Service URL Schemes (confidence assessment):**
+**Safer alternative:** Use `Alt+T` which is not reserved on any platform. The PROJECT.md specifies `Cmd+Shift+T` — use that as the Mac binding and `Ctrl+Shift+T` as the Windows/Linux fallback (Chrome will ignore it if reserved; users can manually reassign in chrome://extensions/shortcuts).
 
-| Service | URL Pattern | Native Support | Confidence |
-|---------|-------------|----------------|------------|
-| ChatGPT | `https://chatgpt.com/?q={prompt}` | YES — confirmed in community docs | MEDIUM (community-sourced, undocumented officially) |
-| Claude | `https://claude.ai/new?q={prompt}` | Broken as of Oct 2025 per GitHub issue | LOW — needs verification at build time |
-| Gemini | `https://gemini.google.com/app?prompt={prompt}` | NO native support — requires extension-based injection | LOW for direct URL; use clipboard fallback |
+**Files modified:**
 
-**Recommended approach:** Use URL params for ChatGPT. Default to clipboard-copy + open tab for Claude and Gemini, with a popup toast explaining to paste. This is simpler, more reliable, and avoids depending on undocumented URL schemes.
+| File | Change |
+|------|--------|
+| `src/manifest.json` | Add `"commands"` block with `_execute_action` command and suggested key bindings |
 
-### Prompt Template Storage Flow (NEW — v1.3)
+**Files created:** None.
 
-```
-Extension installs / first popup open
-        ↓
-popup.ts checks chrome.storage.sync for "prompts" key
-        ↓
-If absent → write built-in catalog (from prompt_types.ts) to storage.sync
-        ↓
-Popup dropdown populated from storage.sync prompts list
-```
+**Storage schema changes:** None.
 
-```
-User opens Options page (via "Manage prompts" link in popup)
-        ↓
-chrome.runtime.openOptionsPage() — opens options.html in new tab
-        ↓
-options.ts reads chrome.storage.sync → renders prompt list
-        ↓
-User creates/edits/deletes custom prompt → chrome.storage.sync.set({ prompts: [...] })
-        ↓
-Popup re-reads storage.sync on next open (no live sync needed for this flow)
-```
+**TypeScript changes:** None.
 
-## Integration Points
-
-### New vs Modified Components
-
-| Component | Change Type | What Changes |
-|-----------|-------------|--------------|
-| interceptor.ts | None | Content script capture unchanged |
-| bridge.ts | None | Bridge relay unchanged |
-| serviceWorker.ts | Modified | Add message handlers for prompt CRUD if needed; otherwise prompts live in sync storage accessed directly by popup/options |
-| popup.ts | Modified | Add: clipboard button handler, AI launch handler, prompt selector dropdown, AI service selector, "Manage prompts" link |
-| popup.html | Modified | Add: new buttons, selects, layout sections |
-| options.ts | New | Full prompt management UI |
-| options.html | New | Options page markup |
-| tsv_writer.ts | New | Pure function: SessionData → TSV string |
-| prompt_builder.ts | New | Pure functions: build payload, resolve AI URL |
-| prompt_types.ts | New | Types + built-in prompt catalog |
-| constants.ts | Modified | Add new STORAGE_KEYS entries |
-| manifest.json | Modified | Add `options_page` or `options_ui` field |
-| build script | Modified | Add esbuild step for options.ts → options.js |
-
-### Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| MAIN ↔ ISOLATED | window.postMessage (source-filtered) | Unchanged; malicious page postMessages rejected in bridge |
-| ISOLATED ↔ Service Worker | chrome.runtime.sendMessage / sendResponse | Unchanged |
-| Service Worker ↔ Popup | chrome.runtime.sendMessage + chrome.storage.onChanged | Unchanged |
-| Popup ↔ Storage (session data) | chrome.storage.local.get (direct read for clipboard/AI — no SW hop) | Acceptable for read-only; consistent with unit pref pattern |
-| Popup ↔ Storage (prompts/AI prefs) | chrome.storage.sync (direct read/write) | Prompts are user prefs, not session data — sync storage is appropriate |
-| Options ↔ Storage (prompts/AI prefs) | chrome.storage.sync (direct read/write) | Same as popup for consistency |
-| Popup → New Tab | chrome.tabs.create({ url }) | No permission needed for tab creation |
-| Popup → Clipboard | navigator.clipboard.writeText() | No clipboardWrite permission needed from popup click event |
-| Popup → Options Page | chrome.runtime.openOptionsPage() | Opens options page in new tab |
-
-### External Services
-
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| Trackman API (trackmangolf.com) | Passive interception — unchanged | Zero auth complexity |
-| chrome.downloads | Data URI pattern: `data:text/csv;charset=utf-8,...` | Unchanged |
-| chrome.storage.local | Session data blob | Unchanged; 10 MB limit |
-| chrome.storage.sync | User prompts + AI service preference | NEW; 100 KB total / 8 KB per item. Cap custom prompts at 20 |
-| ChatGPT (chatgpt.com) | `?q=` URL parameter + chrome.tabs.create | MEDIUM confidence — community-documented, not officially stable |
-| Claude (claude.ai) | Clipboard fallback recommended | URL param support unreliable as of late 2025; use copy + open pattern |
-| Gemini (gemini.google.com) | Clipboard fallback recommended | No native URL param support; injection requires content script we don't have on gemini.google.com |
-| Clipboard API | navigator.clipboard.writeText() from popup | Works in popup DOM context; no permission needed for write on user-initiated click |
-
-## Build Order for v1.3 Features
-
-Dependencies determine what must be built first. The two features (clipboard and AI launch) share a common foundation:
-
-```
-Phase A — Foundation (shared modules, no UI changes yet)
-        │
-        ├─ 1. models/prompt_types.ts        (PromptTemplate type + built-in catalog array)
-        │      — no dependencies; pure types and data
-        │
-        ├─ 2. shared/tsv_writer.ts          (SessionData → TSV string)
-        │      — depends on: unit_normalization.ts (existing), types.ts (existing)
-        │      — testable immediately with vitest
-        │
-        └─ 3. shared/prompt_builder.ts      (assemble payload, resolve AI URLs)
-               — depends on: prompt_types.ts (step 1), tsv_writer.ts (step 2)
-               — testable immediately with vitest
-
-Phase B — Storage and Constants
-        │
-        ├─ 4. shared/constants.ts           (add STORAGE_KEYS.PROMPTS, STORAGE_KEYS.DEFAULT_AI)
-        │      — depends on nothing new
-        │
-        └─ 5. Prompt initialization logic   (where to seed built-ins on first run)
-               — recommend: popup.ts reads sync on open; if "prompts" key absent, write built-ins
-               — no service worker changes needed for this
-
-Phase C — Clipboard Feature (simpler, no options page dependency)
-        │
-        └─ 6. popup.ts + popup.html         (add clipboard button → writeTsv → writeText)
-               — depends on: tsv_writer.ts (step 2), storage read pattern (existing)
-               — can ship independently of AI launch
-
-Phase D — AI Launch Feature
-        │
-        ├─ 7. popup.ts + popup.html         (add prompt selector, AI service selector, AI launch button)
-        │      — depends on: prompt_builder.ts (step 3), prompt_types.ts (step 1)
-        │      — can be built on top of Phase C popup changes
-        │
-        └─ 8. manifest.json + build script  (add options_page, add esbuild step for options.js)
-               — needed before options page can be linked
-
-Phase E — Options Page (prompt management)
-        │
-        └─ 9. options.ts + options.html     (full prompt CRUD UI)
-               — depends on: prompt_types.ts (step 1), constants.ts (step 4)
-               — depends on: manifest.json update (step 8)
-               — can be built last; popup shows prompts correctly even without options page
-
-Rationale for this order:
-- Clipboard (Phase C) is independent of AI launch — ships first to get early value
-- AI launch (Phase D) builds on clipboard's TSV writer — avoids duplicate code
-- Options page (Phase E) is a bonus; popup can list built-ins from catalog without it
-- Built-in prompts exist in code (prompt_types.ts) so the extension works immediately
-  even if the user never visits the options page
-```
-
-## Manifest Changes Required
+**Manifest change:**
 
 ```json
-{
-  "permissions": ["storage", "downloads"],
-  "options_page": "options.html"
+"commands": {
+  "_execute_action": {
+    "suggested_key": {
+      "default": "Ctrl+Shift+T",
+      "mac": "Command+Shift+T"
+    },
+    "description": "Open TrackPull popup"
+  }
 }
 ```
 
-Use `options_page` (opens in a full tab) rather than `options_ui` (embedded in chrome://extensions). Full tab gives layout freedom for the prompt management UI and allows access to the full Tabs API. The popup links to it via `chrome.runtime.openOptionsPage()`.
+**Key caveat:** These are "suggested" keys. Chrome may reject them if they conflict with existing browser shortcuts on the user's platform. Users can always reassign shortcuts via `chrome://extensions/shortcuts`. The `_execute_action` command name is special — it triggers the extension action (popup) without any `chrome.commands.onCommand` listener needed.
 
-No additional permissions are needed:
-- Clipboard write from popup: no permission required (user-initiated in DOM context)
-- Tab creation: no permission required (chrome.tabs.create for tab creation only)
-- storage.sync: covered by existing `"storage"` permission
+**Integration point with existing code:**
 
-## Scaling Considerations
+```
+manifest.json — only file that changes
+No popup.ts changes, no serviceWorker.ts changes
+```
 
-This is a single-user browser extension. "Scaling" means graceful behavior with large datasets and many prompt templates.
+**Build order position:** Manifest-only. Can be combined with the Gemini host_permissions manifest change in the same build.
 
-| Concern | Current State | With v1.3 Features |
-|---------|---------------|-------------------|
-| Storage — session data | Single session ~50-200 KB | Unchanged; clipboard reads from same blob |
-| Storage — prompts | None | 7 built-ins ~1-4 KB each + up to 20 custom = ~100 KB ceiling approached; cap at 20 custom |
-| Clipboard payload size | N/A | TSV of 200 shots across 10 clubs ≈ 50-150 KB as string; clipboard has no practical limit for this |
-| AI URL length | N/A | chatgpt.com/?q= with 150 KB payload will exceed browser URL limits (~2 MB theoretical, but server-imposed limits vary). For large sessions, clipboard fallback is safer |
-| Popup render | Instant | Adding a dropdown of 20-27 prompts adds negligible render time |
-| Options page load | N/A | chrome.storage.sync read of <100 KB is instant |
+---
 
-**AI URL length risk:** For large sessions (200+ shots across 10+ clubs), the encoded prompt+data payload can be 50-200 KB. URL-encoding adds overhead. ChatGPT's `?q=` parameter has no documented limit, but very large URLs may be truncated by the browser or rejected by the server. For large payloads, default to the clipboard-copy + open approach rather than URL params.
+### Feature 6: Dark Mode (Match System Theme)
 
-## Anti-Patterns
+**What it does:** The popup and options page automatically switch to a dark color scheme when the user's OS is set to dark mode. Uses CSS `prefers-color-scheme: dark` media query.
 
-### Anti-Pattern 1: Chrome API Calls in MAIN World Content Script
+**Integration analysis:** All CSS currently lives inline in `popup.html` and `options.html` `<style>` blocks. There is also a `src/shared/styles.css` file that is not referenced by either HTML file (it appears to be an artifact). The v1.5 dark mode implementation adds `@media (prefers-color-scheme: dark)` blocks to the inline styles in both HTML files. No JavaScript changes are needed — CSS handles the theme switching automatically.
 
-**What people do:** Call `chrome.storage.local.set()` directly from interceptor.ts to skip the bridge.
-**Why it's wrong:** Chrome extension APIs are unavailable in MAIN world — they throw at runtime.
-**Do this instead:** Keep interceptor.ts free of `chrome.*` calls. All Chrome APIs flow through bridge.ts → serviceWorker.ts.
+**Files modified:**
 
-### Anti-Pattern 2: Storing Derived or Converted Data
+| File | Change |
+|------|--------|
+| `src/popup/popup.html` | Add `@media (prefers-color-scheme: dark) { ... }` block in the existing `<style>` tag |
+| `src/options/options.html` | Add `@media (prefers-color-scheme: dark) { ... }` block in the existing `<style>` tag |
 
-**What people do:** Store converted (mph, yards) values in chrome.storage instead of raw API values.
-**Why it's wrong:** Unit preference can change after capture. Storing raw values allows re-conversion without re-scraping.
-**Do this instead:** Store raw metric values. Apply unit conversion only at export time in tsv_writer.ts or csv_writer.ts.
+**Files created:** None (the existing `src/shared/styles.css` is not currently used and should remain untouched).
 
-### Anti-Pattern 3: Logic in the Bridge
+**Storage schema changes:** None. System theme detection is CSS-native.
 
-**What people do:** Add data transformation, filtering, or merging logic to bridge.ts.
-**Why it's wrong:** Bridge is a thin relay — no Chrome APIs, no transformation logic.
-**Do this instead:** Bridge relays raw SessionData. All transformation goes in interceptor.ts or serviceWorker.ts / shared/.
+**TypeScript changes:** None.
 
-### Anti-Pattern 4: Synchronous Storage Calls in Service Worker
+**Dark mode color mapping:**
 
-**What people do:** Use `localStorage` from the service worker for convenience.
-**Why it's wrong:** `localStorage` is not available in MV3 service workers.
-**Do this instead:** `chrome.storage.local.get/set` for structured data. Return `true` from `onMessage` handlers that call async storage to keep the response channel open.
+The current light mode palette uses these semantic values that need dark counterparts:
 
-### Anti-Pattern 5: Using Offscreen Document for Clipboard
+| Token | Light value | Dark value |
+|-------|-------------|------------|
+| Body background | `#ffffff` | `#1a1a1a` |
+| Body text | `#333333` | `#e0e0e0` |
+| Secondary text | `#666666` | `#9e9e9e` |
+| H1 color | `#1a1a1a` | `#f0f0f0` |
+| Accent (borders, selects) | `#1976d2` | `#64b5f6` |
+| Card/panel background | `#f5f5f5` | `#2c2c2c` |
+| Input background | `#ffffff` | `#2c2c2c` |
+| Input border | `#ccc` | `#555` |
+| Shot count number | `#1976d2` | `#64b5f6` |
+| Icon button hover bg | `#f0f0f0` | `#333333` |
+| Section divider | `#e0e0e0` | `#3a3a3a` |
+| Built-in prompt row bg | `#f9f9f9` | `#2a2a2a` |
+| Success toast | `#388e3c` (unchanged) | `#388e3c` |
+| Error toast | `#d32f2f` (unchanged) | `#d32f2f` |
 
-**What people do:** Create an offscreen document with `CLIPBOARD` reason to handle clipboard writes.
-**Why it's wrong:** Unnecessary complexity. The popup is already a DOM context where `navigator.clipboard.writeText()` works directly on a user-initiated click event. Offscreen documents are only needed for clipboard access from a service worker.
-**Do this instead:** Call `navigator.clipboard.writeText()` directly in the popup's button click handler.
+**Example media query structure for popup.html:**
 
-### Anti-Pattern 6: Storing Built-in Prompts in chrome.storage
+```css
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+  }
+  h1, h2 {
+    color: #f0f0f0;
+  }
+  .shot-count-container {
+    background-color: #2c2c2c;
+  }
+  .shot-count {
+    color: #64b5f6;
+  }
+  .unit-selectors select,
+  .ai-group select {
+    background: #2c2c2c;
+    color: #e0e0e0;
+    border-color: #64b5f6;
+  }
+  .icon-btn {
+    color: #9e9e9e;
+  }
+  .icon-btn:hover {
+    background-color: #333;
+    color: #64b5f6;
+  }
+  .ai-section {
+    border-top-color: #3a3a3a;
+  }
+  /* ... additional rules */
+}
+```
 
-**What people do:** Write all built-in prompts to storage on first install, treating them like user data.
-**Why it's wrong:** Built-ins occupy sync storage quota, cannot be updated when the extension updates (user may have stale built-in text), and blur the line between user data and extension data.
-**Do this instead:** Bundle built-in prompts as a constant array in `prompt_types.ts`. At runtime, merge built-ins (from code) with user custom prompts (from storage.sync) to produce the full prompt list. Only custom prompts are written to storage. When the extension updates, built-ins are automatically updated too.
+**Constraint — popup.html inline styles:** Because both HTML files use inline `<style>` blocks (not external CSS files), the `@media` blocks must be added inside those same `<style>` blocks. This is straightforward but means maintaining color tokens in two separate files. For v1.5 this is acceptable — extracting to a shared CSS file would require build script changes and is out of scope.
 
-### Anti-Pattern 7: Depending on AI URL Parameters Without a Fallback
+**Integration point with existing code:**
 
-**What people do:** Hardcode `chatgpt.com/?q=` or `claude.ai/new?q=` without a fallback path.
-**Why it's wrong:** These are undocumented, unofficial URL schemes. Claude's `?q=` broke in late 2025. ChatGPT's may change. Gemini never supported it natively.
-**Do this instead:** Implement clipboard-copy + open-tab as the primary fallback for all services. Use URL params as the optimistic fast path for ChatGPT only. If the URL launch fails or the service is Claude/Gemini, show a "Prompt copied — paste it in the new tab" toast.
+```
+popup.html: <style> block — append dark mode media query
+options.html: <style> block — append dark mode media query
+No TypeScript changes, no storage changes, no manifest changes
+```
+
+**Build order position:** Build dark mode FIRST among the v1.5 UI changes. Reason: prompt preview, empty state, and export toggle all add new HTML elements. If dark mode CSS is written first, the new elements can be included in the same media query block during those features' implementation, avoiding a second pass through the CSS.
+
+---
+
+## File-Level Change Summary
+
+| File | Change Type | Features | Notes |
+|------|-------------|----------|-------|
+| `src/manifest.json` | Modified | Gemini (host_permissions), Keyboard shortcut (commands) | Two independent additions; can be one commit or two |
+| `src/shared/constants.ts` | Modified | Export toggle | Add `INCLUDE_AVERAGES` to STORAGE_KEYS |
+| `src/background/serviceWorker.ts` | Modified | Export toggle | Read `includeAverages` from storage; pass to writeCsv() |
+| `src/popup/popup.html` | Modified | Dark mode, Prompt preview, Empty state, Export toggle | Four features, all inline style/HTML additions |
+| `src/popup/popup.ts` | Modified | Prompt preview, Empty state, Export toggle | Three features; no new imports needed |
+| `src/options/options.html` | Modified | Dark mode | CSS media query only |
+| `src/shared/csv_writer.ts` | None | — | `includeAverages` param already exists |
+| `src/shared/prompt_builder.ts` | None | — | `assemblePrompt()` already used for preview |
+| `src/shared/tsv_writer.ts` | None | — | Already used; no changes needed |
+| `src/content/interceptor.ts` | None | — | Unchanged |
+| `src/content/bridge.ts` | None | — | Unchanged |
+| `src/background/serviceWorker.ts` | None (except export toggle) | — | Only EXPORT_CSV_REQUEST handler changes |
+
+**New files created:** None. All six v1.5 features integrate into existing files.
+
+---
+
+## Storage Schema Changes (v1.5 delta)
+
+Only one new storage key is added in v1.5:
+
+| Key | Store | Type | Default | Added by |
+|-----|-------|------|---------|----------|
+| `includeAverages` | local | boolean | `true` | Export toggle feature |
+
+No keys are removed or renamed. The default of `true` ensures zero behavior change for existing users on upgrade.
+
+---
+
+## Suggested Build Order
+
+The build order is driven by two constraints: (1) dark mode CSS should exist before UI features add new elements, so those elements can get dark mode styles in one pass; (2) manifest changes (Gemini + keyboard shortcut) are independent and can ship in isolation.
+
+```
+Step 1 — Manifest changes (independent, isolated release)
+  ├─ manifest.json: add host_permissions for Gemini
+  └─ manifest.json: add commands block for keyboard shortcut
+  → Build + verify + release as v1.5.0-gemini (or bundle both in one manifest PR)
+  Note: Keyboard shortcut and Gemini host_permissions in same manifest edit is fine
+        since they're non-conflicting additions.
+
+Step 2 — Dark mode CSS (foundation for UI features)
+  ├─ popup.html: add @media (prefers-color-scheme: dark) block
+  └─ options.html: add @media (prefers-color-scheme: dark) block
+  → Build + verify with system dark mode toggle
+  Rationale: Do dark mode before adding HTML elements so new elements get dark
+             styles in the same session, not as a retrofit.
+
+Step 3 — Empty state guidance (popup.html + popup.ts only)
+  ├─ popup.html: add #empty-state div with guidance text
+  └─ popup.ts: modify updateExportButtonVisibility() to toggle empty state
+  → Simple, self-contained; no storage changes.
+
+Step 4 — Export format toggle (constants.ts + popup.ts + popup.html + serviceWorker.ts)
+  ├─ constants.ts: add INCLUDE_AVERAGES storage key
+  ├─ popup.html: add checkbox in export section; add to dark mode query if Step 2 complete
+  ├─ popup.ts: read/persist includeAverages on load; wire checkbox listener
+  └─ serviceWorker.ts: read includeAverages from storage; pass to writeCsv()
+  → Cross-file change; serviceWorker and popup must be rebuilt together.
+
+Step 5 — Prompt preview (popup.html + popup.ts only)
+  ├─ popup.html: add preview toggle button + textarea; add to dark mode query
+  └─ popup.ts: add updatePromptPreview() function; wire to prompt/service change events
+  → No new imports; uses existing assemblePrompt() and writeTsv() already in scope.
+  Note: Build after export toggle so popup.ts changes are consolidated.
+
+Order rationale:
+- Manifest first (Gemini is already 99% wired; manifest is the only blocker)
+- Dark mode second (CSS foundation before HTML elements proliferate)
+- Empty state third (zero dependencies; quick win)
+- Export toggle fourth (requires storage key; cross-file coordination)
+- Prompt preview fifth (no dependencies; goes last to consolidate popup.ts edits)
+```
+
+---
+
+## Component Boundaries for v1.5
+
+### What stays unchanged
+
+- `interceptor.ts` — zero changes; data capture is unrelated to any v1.5 feature
+- `bridge.ts` — zero changes; relay is unrelated to any v1.5 feature
+- `csv_writer.ts` — zero changes; the `includeAverages` parameter already exists
+- `tsv_writer.ts` — zero changes; clipboard copy flow is already correct
+- `prompt_builder.ts` — zero changes; `assemblePrompt()` is already used for prompt preview
+- `prompt_types.ts` — zero changes; built-in prompts unchanged
+- `custom_prompts.ts` — zero changes; custom prompt storage unchanged
+- `unit_normalization.ts` — zero changes
+- `html_table_parser.ts` — zero changes
+- `types.ts` — zero changes
+
+### What changes
+
+| Component | Why it changes | Risk |
+|-----------|---------------|------|
+| `manifest.json` | Gemini host_permissions + keyboard commands | LOW — additive; no permissions removed |
+| `constants.ts` | New storage key `includeAverages` | LOW — purely additive |
+| `serviceWorker.ts` | Export toggle: read one extra storage key | LOW — single parameter change to existing writeCsv() call |
+| `popup.html` | Dark mode CSS + empty state + export toggle checkbox + prompt preview UI | MEDIUM — multiple additions to one file; order matters for readability |
+| `popup.ts` | Empty state toggle + export toggle persistence + prompt preview assembly | MEDIUM — modifies existing functions and adds new ones |
+| `options.html` | Dark mode CSS only | LOW — CSS-only addition |
+
+---
+
+## Integration Patterns
+
+### Pattern: Extend `updateExportButtonVisibility()` for Empty State
+
+The function already controls `#export-row` and `#ai-section` display. The empty state flag adds a third element (`#empty-state`) to the same conditional:
+
+```typescript
+function updateExportButtonVisibility(data: unknown): void {
+  const exportRow = document.getElementById("export-row");
+  const aiSection = document.getElementById("ai-section");
+  const emptyState = document.getElementById("empty-state");  // NEW
+
+  const hasValidData = data && typeof data === "object" &&
+    (data as Record<string, unknown>)["club_groups"];
+
+  if (exportRow) exportRow.style.display = hasValidData ? "flex" : "none";
+  if (aiSection) aiSection.style.display = hasValidData ? "block" : "none";
+  if (emptyState) emptyState.style.display = hasValidData ? "none" : "block";  // NEW
+}
+```
+
+### Pattern: Export Toggle Follows Existing Preference Storage
+
+The export toggle follows exactly the same pattern as `hittingSurface`: read on load, apply to UI element, wire change listener to persist.
+
+```typescript
+// In DOMContentLoaded — same pattern as hitting surface
+const includeAveragesResult = await new Promise<Record<string, unknown>>((resolve) => {
+  chrome.storage.local.get([STORAGE_KEYS.INCLUDE_AVERAGES], resolve);
+});
+const includeAveragesToggle = document.getElementById("include-averages-toggle") as HTMLInputElement | null;
+if (includeAveragesToggle) {
+  // Default true if not set (preserve existing behavior)
+  const savedIncludeAverages = includeAveragesResult[STORAGE_KEYS.INCLUDE_AVERAGES];
+  includeAveragesToggle.checked = savedIncludeAverages !== false;
+  includeAveragesToggle.addEventListener("change", () => {
+    chrome.storage.local.set({ [STORAGE_KEYS.INCLUDE_AVERAGES]: includeAveragesToggle.checked });
+  });
+}
+```
+
+### Pattern: Prompt Preview Uses Cached Data (No New Storage Reads)
+
+The preview assembles from already-cached module-level variables. No new `chrome.storage` reads are needed:
+
+```typescript
+function updatePromptPreview(): void {
+  const previewTextarea = document.getElementById("prompt-preview") as HTMLTextAreaElement | null;
+  if (!previewTextarea || !cachedData || !promptSelect) return;
+
+  const prompt = findPromptById(promptSelect.value);
+  if (!prompt) return;
+
+  const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
+  const metadata = {
+    date: cachedData.date,
+    shotCount: countSessionShots(cachedData),
+    unitLabel: buildUnitLabel(cachedUnitChoice),
+    hittingSurface: cachedSurface,
+  };
+  previewTextarea.value = assemblePrompt(prompt, tsvData, metadata);
+}
+```
+
+Wire to both `promptSelect` and `aiServiceSelect` change events:
+```typescript
+promptSelect.addEventListener("change", () => {
+  chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
+  updatePromptPreview();  // add this line
+});
+```
+
+---
+
+## Data Flow Summary for v1.5
+
+### Gemini launch flow (same as ChatGPT/Claude)
+```
+User selects "Gemini" + clicks "Open in AI"
+  → await navigator.clipboard.writeText(assembled)
+  → chrome.tabs.create({ url: "https://gemini.google.com" })
+  → showToast("Prompt + data copied — paste into Gemini", "success")
+```
+
+### Empty state flow
+```
+popup opens, cachedData = null
+  → updateExportButtonVisibility(null)
+  → exportRow hidden, aiSection hidden, emptyState shown
+User opens Trackman report, data captured
+  → DATA_UPDATED message
+  → cachedData = SessionData
+  → updateExportButtonVisibility(data)
+  → exportRow shown, aiSection shown, emptyState hidden
+```
+
+### Export toggle flow
+```
+popup loads
+  → chrome.storage.local.get([INCLUDE_AVERAGES])
+  → checkbox.checked = stored value (default true)
+User unchecks "Include averages"
+  → chrome.storage.local.set({ includeAverages: false })
+User clicks Export CSV
+  → serviceWorker reads includeAverages from storage
+  → writeCsv(data, false, undefined, unitChoice, surface)
+  → CSV contains only Shot rows, no Average/Consistency rows
+```
+
+### Keyboard shortcut flow
+```
+User presses Cmd+Shift+T (Mac) or Ctrl+Shift+T (Win/Linux)
+  → Chrome triggers _execute_action command
+  → Popup opens (same as clicking toolbar icon)
+  → No extension code needed
+```
+
+### Dark mode flow
+```
+OS switches to dark mode
+  → @media (prefers-color-scheme: dark) CSS activates automatically
+  → Popup and options page adopt dark palette
+  → No JavaScript involved
+```
+
+### Prompt preview flow
+```
+popup loads with cachedData
+  → updatePromptPreview() called after initial prompt + data cache
+  → preview textarea populated
+User changes prompt select
+  → updatePromptPreview() called from change listener
+  → preview textarea updated with new assembled text
+User clicks preview toggle
+  → preview container shown/hidden via style.display toggle
+```
+
+---
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern: Storing Theme Preference in chrome.storage
+
+**What to avoid:** Adding a `darkMode: "system" | "light" | "dark"` preference to storage.
+**Why wrong:** `prefers-color-scheme` CSS handles system theme automatically. Adding manual override creates a three-state toggle that's unnecessary complexity for v1.5.
+**Do instead:** Use `@media (prefers-color-scheme: dark)` CSS only. Ship system-match only.
+
+### Anti-Pattern: Generating Preview on Every Keystroke
+
+**What to avoid:** Wiring `input` event on the prompt textarea (if editable) or any per-keystroke update.
+**Why wrong:** Assembling TSV for large sessions on every keystroke causes jank.
+**Do instead:** Assemble preview on `change` events (prompt selection changes) and on initial load only.
+
+### Anti-Pattern: Manifest Permission Bundling
+
+**What to avoid:** Adding Gemini `host_permissions` in the same release as unrelated feature changes.
+**Why wrong:** Permission prompt appears to users when the extension updates. Bundling it with other features obscures the reason for the permission prompt.
+**Do instead:** Gemini `host_permissions` addition is its own isolated release (v1.5.x-gemini). Keyboard shortcut `commands` can be bundled with it since commands don't trigger a permission prompt.
+
+### Anti-Pattern: Hardcoding `includeAverages: true` After Feature Ships
+
+**What to avoid:** Leaving `writeCsv(data, true, ...)` hardcoded in serviceWorker.ts after the toggle UI is shipped.
+**Why wrong:** The UI shows a checkbox that appears to control the setting but the service worker ignores it.
+**Do instead:** Always read `includeAverages` from storage in the EXPORT_CSV_REQUEST handler. If the key is absent, default to `true` (preserves prior behavior). This is a single line change to an existing storage read.
+
+### Anti-Pattern: Sharing a CSS File Between popup.html and options.html via External Link
+
+**What to avoid:** Moving inline styles to `shared/styles.css` and referencing it with `<link rel="stylesheet">` from both HTML files.
+**Why wrong:** Requires build script changes (copy CSS to dist/), adds a network request per page load within the extension, and creates coupling between the two pages' style updates. For v1.5, inline is correct.
+**Do instead:** Keep styles inline in each HTML file. The existing `shared/styles.css` file is not used and should remain unused for v1.5.
+
+---
 
 ## Sources
 
-- Direct source code inspection: `/Users/kylelunter/claudeprojects/trackv3/src/` (HIGH confidence)
-- Chrome for Developers — chrome.tabs.create (no permission required): https://developer.chrome.com/docs/extensions/reference/api/tabs (HIGH confidence)
-- Chrome for Developers — chrome.offscreen API and CLIPBOARD reason: https://developer.chrome.com/docs/extensions/reference/api/offscreen (HIGH confidence)
-- Chrome for Developers — chrome.storage quotas (sync: 100 KB / 8 KB per item): https://developer.chrome.com/docs/extensions/reference/api/storage (HIGH confidence)
-- Chrome for Developers — options page declaration (options_page vs options_ui): https://developer.chrome.com/docs/extensions/develop/ui/options-page (HIGH confidence)
-- navigator.clipboard in popup context (no clipboardWrite permission needed for user-initiated write): MDN + Chrome community consensus (MEDIUM confidence — verified via multiple sources)
-- ChatGPT `?q=` URL parameter: OpenAI community discussion + GitHub (MEDIUM confidence — community-sourced, not officially documented)
-- Claude `?q=` URL parameter removal (Oct 2025): GitHub issue report (LOW confidence — single source; verify before shipping)
-- Gemini no native URL param support (injection required): Official Google AI developer forum + elliot79313/gemini-url-prompt README (MEDIUM confidence)
-- chrome.runtime.openOptionsPage(): Chrome for Developers API reference (HIGH confidence)
+- Direct source code inspection: `/Users/kylelunter/claudeprojects/trackv3/src/` — all TypeScript and HTML files read (HIGH confidence)
+- Chrome MV3 manifest `commands` documentation: https://developer.chrome.com/docs/extensions/reference/api/commands (HIGH confidence)
+- `_execute_action` reserved command name for triggering extension popup: official MV3 docs (HIGH confidence)
+- `prefers-color-scheme` CSS media query: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme (HIGH confidence)
+- Chrome MV3 `host_permissions` permission prompt behavior: https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions (HIGH confidence)
+- Prior ARCHITECTURE.md research (v1.3 build, 2026-03-02) — clipboard flow, storage patterns, anti-patterns (HIGH confidence, same codebase)
 
 ---
-*Architecture research for: TrackPull v1.3 — clipboard copy and AI prompt launch*
+*Architecture research for: TrackPull v1.5 — Polish & Quick Wins*
 *Researched: 2026-03-02*
+*Supersedes v1.3 ARCHITECTURE.md for this milestone's scope*

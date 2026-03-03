@@ -1,203 +1,167 @@
 # Project Research Summary
 
-**Project:** TrackPull v1.3 — Clipboard Export and AI Prompt Launch
-**Domain:** Chrome Extension (MV3) — golf data export tool
+**Project:** TrackPull v1.5 — Polish & Quick Wins
+**Domain:** Chrome Extension (MV3) — Golf data capture and AI prompt export
 **Researched:** 2026-03-02
-**Confidence:** HIGH for Chrome API mechanics; MEDIUM for AI service URL behavior
+**Confidence:** HIGH
 
 ## Executive Summary
 
-TrackPull v1.3 adds two new export surfaces to an already mature, zero-dependency Chrome extension: clipboard copy (tab-separated, paste-ready for Sheets/Excel) and AI prompt launch (open ChatGPT, Claude, or Gemini with session data and a pre-selected golf analysis prompt). The recommended approach is extension-native and conservative: use `navigator.clipboard.writeText()` directly from the popup context, open AI tabs with `chrome.tabs.create()`, bundle 8 pre-written golf prompts as TypeScript constants, and store user preferences in `chrome.storage.local`. No new production dependencies are required. The existing TypeScript + esbuild + vitest + zero-dependency stack is fully preserved.
+TrackPull v1.5 is a polish milestone for an existing, proven Chrome extension. The codebase already has a complete, zero-production-dependency architecture (TypeScript + esbuild + Chrome MV3 APIs) that works in production. All six v1.5 features — Gemini AI launch, prompt preview, empty state guidance, export format toggle, keyboard shortcut, and dark mode — are additive enhancements that extend existing files without requiring new dependencies, new modules, or architectural changes. The correct expert approach for this type of polish milestone is to build incrementally: manifest-first (isolated release for permission changes), CSS-foundation next (dark mode before UI elements proliferate), then UI logic changes in increasing complexity order.
 
-The primary design risk is treating AI URL pre-fill as a reliable mechanism. Claude removed its `?q=` parameter in October 2025; Gemini has no native URL support; ChatGPT's `?q=` is undocumented and community-discovered. The correct architecture is clipboard-first: copy the prompt+data to clipboard, open the AI service homepage, and show a toast instructing the user to paste. URL pre-fill for ChatGPT may be offered as a degradable enhancement but must never be the primary path. This design means the entire AI launch feature is implementable today with zero dependency on third-party URL behavior.
+The recommended approach is to ship Gemini host_permissions as a standalone release before bundling the remaining five features together. This is already the project's stated intent and is validated as technically correct: adding a new `host_permissions` entry disables the extension for all existing users pending re-approval, so isolating it minimizes the blast radius. The remaining five features carry zero permission changes and zero breaking changes to existing behavior. Every default is set to preserve backward compatibility (includeAverages defaults to true, dark mode follows the OS automatically, empty state only shows after storage resolves).
 
-A secondary risk is context confusion around Chrome APIs. `navigator.clipboard.writeText()` is a Web Platform API requiring a document context — it must live in the popup, not the service worker. Prompt templates must use `chrome.storage.local` (10 MB quota), not `chrome.storage.sync` (8 KB per-item, 100 KB total). These decisions must be made at architecture time, not discovered during debugging. The build order constraint is also firm: foundation modules (prompt_types, tsv_writer, prompt_builder) must exist before any popup UI work begins.
+The primary implementation risk is dark mode: the existing codebase sets colors via JavaScript inline styles (`element.style.color = "#d32f2f"`), which have higher CSS specificity than any `@media` query and cannot be overridden without a prior CSS custom properties refactor. The keyboard shortcut conflict (`Ctrl+Shift+T` is Chrome's reserved "reopen closed tab") is a silent failure — the manifest compiles cleanly but the shortcut never triggers. Both are well-understood and easily avoided with the patterns documented in this research.
 
 ## Key Findings
 
 ### Recommended Stack
 
-TrackPull v1.3 requires no new production dependencies. All new capabilities are built on Chrome built-in APIs and the Web Platform. The manifest gains exactly two additions: `"clipboardWrite"` permission and an `"options_ui"` block pointing to `options.html`. The build script gains one esbuild entry point for `options.ts`. No host permissions are added. The `"tabs"` permission must not be added — `chrome.tabs.create()` does not require it, and adding it would trigger a "Read your browsing history" warning that erodes user trust.
+TrackPull's existing stack — TypeScript compiled with esbuild, Chrome MV3 APIs, zero production dependencies — remains unchanged for v1.5. No new libraries, no new build tooling, no new frameworks are needed. All six features are implementable with APIs already in use or standard browser/CSS capabilities.
 
-**Core technologies (new for v1.3):**
-- `navigator.clipboard.writeText()`: Clipboard write from popup — accessible in extension page context; no offscreen document needed
-- `chrome.tabs.create({ url })`: AI service tab launch — no additional permissions required beyond existing manifest
-- `chrome.storage.local`: Prompt template storage — 10 MB quota, no per-item limit (use instead of storage.sync for template bodies)
-- `chrome.storage.sync`: User preferences only — default AI service preference (a single small string) fits within sync quota
-- `chrome.runtime.openOptionsPage()`: Open options page from popup — no manual URL construction needed
-- `options_ui` with `open_in_tab: true`: Full-tab options page — avoids embedded mode API limitations and layout constraints
-- `crypto.randomUUID()`: Template ID generation — built-in, available Chrome 92+, no UUID library needed
+**Core technologies (new for v1.5):**
+- `commands` manifest key (MV3): Keyboard shortcut via `_execute_action` — no TypeScript listener needed; manifest-only change; no new permissions
+- `@media (prefers-color-scheme: dark)` CSS: Dark mode matching system theme — pure CSS, no JavaScript, no new storage key, reads OS preference automatically
+- `chrome.storage.local` (new key `includeAverages`): Export format toggle persistence — one additive key with default `true` to preserve existing behavior; no schema migration
+- HTML `<details>/<summary>` element: Prompt preview disclosure widget — standard DOM, no library, fits popup layout constraints better than a modal overlay
 
 ### Expected Features
 
-The 8 pre-existing golf prompt `.md` files in `/prompts/` should be compiled into a TypeScript constant array (`BUILTIN_PROMPTS`) in `src/models/prompt_types.ts`. This is content packaging, not engineering, and unlocks the primary v1.3 differentiator: domain-specific AI analysis out of the box with no user setup.
+**Must have (table stakes for v1.5):**
+- Dark mode matching system theme — users with OS dark mode expect all UI to adapt; a white popup in dark mode is an obvious oversight
+- Empty state guidance replacing "0 shots" dead end — a bare zero count gives users no actionable path; standard UX requires a positive, instructional message
+- Keyboard shortcut to open popup — power users expect keyboard access; clicking the toolbar icon every time is unnecessary friction
 
-**Must have (table stakes for v1.3):**
-- Tab-separated clipboard copy with single button click — users expect paste-readiness in Sheets/Excel without a file download
-- Visual confirmation toast after clipboard copy — users cannot see the clipboard; feedback is mandatory
-- Open AI service tab (ChatGPT, Claude) — one-click launch is the stated value prop of the milestone
-- Prompt + data delivered via clipboard, tab opened to AI homepage, toast prompts user to paste
-- Built-in golf prompt library (8 prompts, beginner/intermediate/advanced tiers) — core differentiator; content already written
+**Should have (differentiators):**
+- Export format toggle (include/exclude averages and consistency rows) — advanced users doing their own analysis do not want summary rows mixed with shot-level data
+- Prompt preview before AI launch — builds user trust that the correct prompt and data will be sent; valuable for large sessions where data volume is not obvious
 
-**Should have (v1.3 polish, after core ships):**
-- Copy prompt+data to clipboard without opening a tab — corporate device users and users with existing AI sessions
-- Default AI service preference stored in `chrome.storage.sync` — skip service selection for repeat users
-- Skill-tier UI grouping in popup dropdown — beginner/intermediate/advanced grouping, already structured in filesystem
+**Verify first, then ship:**
+- Gemini AI launch — `AI_URLS["Gemini"]` already exists in popup.ts and Gemini is already in the HTML select; the only remaining action is confirming the URL is correct and adding the host_permissions entry in an isolated release
 
-**Defer to v1.4:**
-- Custom prompt templates + options page CRUD — higher complexity, options page scaffolding justifies its own milestone
-- Gemini support — requires `host_permissions` for `gemini.google.com`, which triggers update permission prompt for existing users; isolate this change
-- Prompt preview panel — nice-to-have UI, adds surface complexity; defer until AI launch pattern is validated
+**Defer to v1.6+:**
+- Manual dark mode toggle (user-controlled independent of OS) — adds unnecessary complexity over system-match; revisit only if users request it
+- Gemini content script injection for URL pre-fill — requires host_permissions and is brittle against Gemini's SPA architecture; clipboard-first is the correct permanent approach
+- User-configurable shortcut picker in extension UI — Chrome's `chrome://extensions/shortcuts` already provides this natively for all extensions
 
 ### Architecture Approach
 
-The existing five-layer architecture (MAIN world interceptor → ISOLATED world bridge → service worker → popup → storage) is entirely unchanged. v1.3 adds one new entry point (options page), three new shared modules, and modifies popup.ts to wire up the new buttons. The clipboard write and AI tab launch both originate from popup.ts directly and require no service worker involvement. Built-in prompts live as source constants; only user-created custom prompts are written to storage.
+All six features integrate into existing files with no new modules required. The architecture is purely additive. The shared modules (csv_writer.ts, prompt_builder.ts, tsv_writer.ts, unit_normalization.ts, interceptor.ts, bridge.ts) require zero changes. The core data capture pipeline is untouched.
 
-**Major components (v1.3 additions):**
-1. `src/models/prompt_types.ts` (NEW) — PromptTemplate interface, AiService type, BUILTIN_PROMPTS constant array; no dependencies
-2. `src/shared/tsv_writer.ts` (NEW) — pure function: SessionData → tab-separated string; testable with vitest; same shape as csv_writer.ts
-3. `src/shared/prompt_builder.ts` (NEW) — pure functions: assemble prompt+data payload, resolve AI service URL; fully testable
-4. `src/options/options.ts` + `options.html` (NEW) — prompt template CRUD UI, default AI service setting (v1.4 scope)
-5. `src/popup/popup.ts` + `popup.html` (MODIFIED) — clipboard button, prompt selector dropdown, AI service selector, AI launch button, "Manage prompts" link
-6. `src/shared/constants.ts` (MODIFIED) — add `STORAGE_KEYS.PROMPT_TEMPLATES`, `STORAGE_KEYS.DEFAULT_AI_SERVICE`
-7. `manifest.json` (MODIFIED) — add `clipboardWrite` permission, add `options_ui` block
-8. Build script (MODIFIED) — add esbuild step for `options.ts → options.js`
-
-**Build order (enforced by dependency graph):**
-Foundation (prompt_types → tsv_writer → prompt_builder) → Constants → Clipboard popup changes → AI launch popup changes → Options page
+**Major components and what changes:**
+1. `src/manifest.json` — Gemini `host_permissions` entry + keyboard shortcut `commands` block (manifest-only, two additive fields)
+2. `src/popup/popup.html` — dark mode CSS media query, empty state element, export toggle checkbox, prompt preview widget (HTML and CSS additions)
+3. `src/popup/popup.ts` — extend `updateExportButtonVisibility()` for empty state; add `updatePromptPreview()` function; wire export toggle persistence (function extension + one new function; no new imports)
+4. `src/options/options.html` — dark mode CSS media query only
+5. `src/background/serviceWorker.ts` — read `includeAverages` from storage in `EXPORT_CSV_REQUEST` handler, pass to `writeCsv()` (one-line parameter change; `includeAverages` param already exists in csv_writer.ts)
+6. `src/shared/constants.ts` — add `INCLUDE_AVERAGES` to STORAGE_KEYS (one additive constant)
 
 ### Critical Pitfalls
 
-1. **Clipboard write in service worker always fails** — `navigator.clipboard` is unavailable in service workers; route clipboard writes through popup.ts directly, never via message-passing to the service worker. This is the single most likely architectural mistake.
+1. **`Ctrl+Shift+T` keyboard shortcut is silently overridden by Chrome's "Reopen closed tab"** — The manifest compiles without error, the shortcut appears in `chrome://extensions/shortcuts`, but pressing it reopens a tab instead of opening the popup. Use `Ctrl+Shift+Y` / `Command+Shift+Y` instead. Chrome's native browser shortcuts always take priority; extensions cannot override them.
 
-2. **Async focus loss before clipboard write** — If popup loses focus between storage read and `writeText()` call, Chrome throws `DOMException: Document is not focused`. Pre-fetch and format TSV data on popup load; fire `writeText()` synchronously in the click handler using cached data, not inside an async storage fetch triggered by the click.
+2. **Dark mode is broken by JavaScript inline styles** — `element.style.color = "#d32f2f"` (used in `showStatusMessage()` and toast creation) has higher CSS specificity than any `@media` query. A `prefers-color-scheme` overlay alone produces a dark background with bright light-mode status text. Mitigation: refactor all JS color assignments to CSS class additions that use `var(--color-*)` custom properties, then write the media query.
 
-3. **AI URL pre-fill designed as primary mechanism** — Claude's `?q=` parameter was removed October 2025; Gemini has no native support; ChatGPT's is undocumented. Clipboard-first must be the primary design. URL pre-fill is enhancement-only for ChatGPT and must degrade gracefully (open page, show paste toast) when the parameter is ignored.
+3. **Gemini host_permissions addition disables the extension for all existing users pending re-approval** — Chrome's permission change detection triggers a re-prompt when any new host is added to `host_permissions`. The extension is disabled until the user explicitly re-approves. Ship Gemini host_permissions as its own isolated release with clear release notes.
 
-4. **Prompt templates in chrome.storage.sync** — sync quota is 8 KB per item, 100 KB total. A golf prompt at 2-3 KB with 7+ built-ins exceeds this ceiling. Use `chrome.storage.local` for all prompt template bodies. Only small preference values (default AI service string) belong in sync.
+4. **Empty state guidance flashes briefly on every popup open before storage resolves** — `chrome.storage.local.get` is async. Showing the empty state before the promise resolves means it displays momentarily even when the user has data. Show the empty state only after the storage read completes and the result is confirmed null.
 
-5. **clipboard.writeText race with chrome.tabs.create** — Popup auto-closes when a new tab opens. If `chrome.tabs.create()` fires before the clipboard Promise resolves, the write is aborted and the clipboard is empty. Always `await` the clipboard write, show the toast, then open the tab with a brief pause so the user sees the toast.
+5. **Export toggle has no effect if not threaded through the service worker's storage read** — The export flow crosses a message boundary (popup sends `EXPORT_CSV_REQUEST`; service worker handles it and calls `writeCsv()`). The `includeAverages` preference must be read by the service worker from `chrome.storage.local`, not passed via message payload. Service worker already reads all other export preferences (speed unit, distance unit, surface) from storage — add `STORAGE_KEYS.INCLUDE_AVERAGES` to that same `storage.local.get` call.
 
 ## Implications for Roadmap
 
-The dependency graph and pitfall map together suggest three phases: a shared foundation, the clipboard+AI core features, and a deferred options page.
+Build order is driven by two hard constraints: (1) Gemini host_permissions must ship in isolation because it triggers a user-facing re-approval prompt; (2) dark mode CSS must be established before other UI elements are added so new elements inherit dark styles in a single pass.
 
-### Phase 1: Foundation Modules
+### Phase 1: Manifest Changes (Isolated Release)
 
-**Rationale:** Two of the three new popup features (clipboard copy and AI launch) share `tsv_writer.ts` and `prompt_builder.ts`. Building these pure shared modules first, with unit tests, creates a verified foundation before any UI work begins. The built-in prompt catalog (`prompt_types.ts`) must exist before anything in the popup can reference prompts. No Chrome API involvement in this phase means it is fully testable and entirely safe to build first.
+**Rationale:** Gemini host_permissions is the only v1.5 change that disables the extension for existing users on update. Isolating it to its own release limits blast radius and gives users a clear signal about what changed. The keyboard shortcut `commands` block carries no permission prompt and can be bundled here since it is also manifest-only with no user impact.
+**Delivers:** Gemini confirmed as a working AI service option; keyboard shortcut declared and testable in `chrome://extensions/shortcuts`
+**Addresses:** Gemini AI launch support, keyboard shortcut (manifest entry)
+**Avoids:** Pitfall V2 (permission re-prompt mixed with unrelated features), Pitfall V1 (wrong shortcut key — use Ctrl+Shift+Y), Pitfall V8 (no onCommand listener needed for `_execute_action`)
+**Research flag:** Not needed — manifest-only; Chrome Commands and host_permissions APIs are well-documented
 
-**Delivers:** `prompt_types.ts` with built-in catalog; `tsv_writer.ts` with vitest coverage; `prompt_builder.ts` with vitest coverage; updated `constants.ts` with new storage keys.
+### Phase 2: Dark Mode CSS Foundation
 
-**Addresses:** Built-in prompt library (FEATURES.md P1), establishes TSV formatting and prompt assembly as tested shared modules.
+**Rationale:** Dark mode must be built before the other four UI features add HTML elements to popup.html. Building dark mode first means each subsequent phase naturally includes dark mode styles for new elements in the same pass, rather than requiring a retroactive audit.
+**Delivers:** Popup and options page automatically switch to dark palette when OS dark mode is active; no user action required
+**Uses:** CSS custom properties refactor (`:root` color variables) + `@media (prefers-color-scheme: dark)` media query blocks in popup.html and options.html
+**Avoids:** Pitfall V3 (JS inline styles bypass the CSS cascade — CSS variable refactor is the prerequisite step), Pitfall V7 (dynamically created toast elements need explicit dark mode class overrides)
+**Research flag:** Not needed — CSS approach is well-documented and verified against Chrome extension popup behavior
 
-**Avoids:** TSV data containing tabs/newlines (PITFALLS.md Pitfall 10) — addressed by a unit test with edge-case string values in this phase.
+### Phase 3: Empty State Guidance
 
-**Research flag:** Standard patterns — skip phase research. Pure TypeScript functions with no Chrome API surface; well-documented domain.
+**Rationale:** Self-contained, zero dependencies on other v1.5 features. Minor change to one existing function and one new HTML element. Quick win after the heavier dark mode work.
+**Delivers:** Users opening the popup with no data see "Open a Trackman report to capture shots" instead of a bare "0"
+**Implements:** Extend `updateExportButtonVisibility()` to toggle a new `#empty-state` div; add dark mode styles for the new element (already have the media query in place from Phase 2)
+**Avoids:** Pitfall V6 (empty state must display only after storage read resolves — implement as a three-state model: loading / no-data / has-data)
+**Research flag:** Not needed — implementation path is trivial and fully traced through existing code
 
-### Phase 2: Clipboard Copy and AI Launch
+### Phase 4: Export Format Toggle
 
-**Rationale:** With foundation modules in place, the popup UI changes for both clipboard copy and AI launch can be built in one phase. They share the same data flow (read storage → format → dispatch), the same toast feedback pattern, and the same pre-fetch-on-load strategy. Delivering them together avoids two separate rounds of popup.ts/popup.html modification. This is the v1.3 headline release.
+**Rationale:** Requires coordination across four files (constants.ts, popup.html, popup.ts, serviceWorker.ts). Comes after simpler phases so popup.ts and popup.html modifications are consolidated. Storage key and default value must be established before wiring the UI.
+**Delivers:** Checkbox in popup letting users export raw shot data only or include averages/consistency rows; state persists across sessions
+**Uses:** `chrome.storage.local` (new `includeAverages` key, default `true`); `writeCsv()` `includeAverages` param (already exists — zero changes to csv_writer.ts)
+**Avoids:** Pitfall V5 (use `?? true` not `=== false` to handle absent storage key), Pitfall V9 (service worker must read preference from storage directly, not rely on popup to pass it in the message)
+**Research flag:** Not needed — storage and message patterns are established in the existing codebase
 
-**Delivers:** Clipboard "Copy to Clipboard" button with TSV output and toast feedback; prompt selector dropdown (built-in prompts, skill-tier grouped); AI service selector (ChatGPT, Claude); "Open in AI" button with clipboard-first delivery and paste toast; default AI service preference in `chrome.storage.sync`; manifest changes (`clipboardWrite`, `options_ui`).
+### Phase 5: Prompt Preview
 
-**Addresses:** All P1 features from FEATURES.md (clipboard copy, clipboard feedback, built-in prompt library UI, AI launch for ChatGPT and Claude, copy prompt+data without tab).
-
-**Avoids:**
-- Clipboard in service worker (PITFALLS.md Pitfall 1) — write happens in popup.ts click handler.
-- Async focus loss (PITFALLS.md Pitfall 2) — data pre-fetched on popup load, write is synchronous in handler.
-- AI URL pre-fill as primary (PITFALLS.md Pitfall 3) — clipboard-first design; URL param is enhancement only for ChatGPT.
-- URL payload size (PITFALLS.md Pitfall 4) — URL carries prompt template text only if used; data always via clipboard.
-- Race condition clipboard vs. tab open (PITFALLS.md Pitfall 8) — `await` clipboard write, show toast, then open tab.
-- "tabs" permission added unnecessarily (PITFALLS.md Pitfall 9) — `chrome.tabs.create()` requires no tabs permission.
-
-**Research flag:** Standard patterns — skip phase research. All Chrome APIs verified; clipboard-first design eliminates dependency on AI service URL behavior.
-
-### Phase 3: Options Page and Custom Prompts (v1.4)
-
-**Rationale:** Custom prompt CRUD requires a new page, a separate esbuild entry point, and a more complex storage pattern (`chrome.storage.local` for template bodies). Splitting this into its own milestone isolates the `options_ui` manifest addition from the core v1.3 features and allows v1.3 to ship without options page complexity. The popup will show a "Manage prompts" link that opens the options page once it exists.
-
-**Delivers:** Full-tab options page (`options.ts` + `options.html`) with prompt CRUD; create/edit/delete for custom prompts; built-in prompts visible, not editable; auto-save with 500ms debounce to prevent data loss on navigate-away; build script update for `options.ts`.
-
-**Uses:** `chrome.storage.local` for template bodies (verified via STACK.md and PITFALLS.md), `chrome.storage.sync` for preference values only, `chrome.runtime.openOptionsPage()` from popup.
-
-**Avoids:**
-- Built-in prompts in storage (PITFALLS.md Pitfall 6) — built-ins are source constants; storage holds only user-created templates.
-- Sync quota exceeded (PITFALLS.md Pitfall 5) — all template bodies go to `chrome.storage.local`.
-- Options page tab-open in embedded mode (PITFALLS.md Pitfall 7) — using `open_in_tab: true` eliminates this class of issue.
-- Options page losing unsaved changes (PITFALLS.md Pitfall 12) — auto-save on input with debounce.
-
-**Research flag:** Light research recommended during planning. Confirm auto-save debounce interaction with `chrome.storage.local` concurrent writes; verify the `open_in_tab: true` option page is accessible from `chrome.runtime.openOptionsPage()` (confirmed HIGH confidence in STACK.md).
-
-### Phase 4: Gemini Support (v1.4+)
-
-**Rationale:** Gemini requires adding `gemini.google.com` to `host_permissions`, which triggers a permission update prompt for all existing users. Isolating this to its own release minimizes disruption and prevents permission anxiety from overshadowing the core AI launch feature. Gemini also requires a content script for DOM injection since it has no native URL parameter support.
-
-**Delivers:** Gemini as a selectable AI service in the popup; content script on `gemini.google.com` that injects prompt text via simulated DOM input events after page load.
-
-**Uses:** New `host_permissions` entry; content script in ISOLATED world targeting `gemini.google.com`.
-
-**Research flag:** Needs research at implementation time. Gemini's frontend may change between now and when this phase is scheduled. Verify the content script injection approach against the live Gemini interface before designing the implementation.
+**Rationale:** Goes last among UI features to consolidate all popup.ts changes into one editing pass. Uses only existing imports (`assemblePrompt`, `writeTsv`) and existing cached data variables — zero new dependencies. Building after export toggle means popup.ts is opened only once for both features.
+**Delivers:** Collapsible `<details>/<summary>` disclosure widget in popup showing assembled prompt + data text before clicking "Open in AI"
+**Uses:** Existing `assemblePrompt()` from prompt_builder.ts, existing `cachedData` / `cachedUnitChoice` / `cachedSurface` already in popup.ts module scope
+**Avoids:** Pitfall V4 (full modal overlay exceeds 600px popup height limit — use `<details>/<summary>` with `max-height: 120px; overflow-y: auto` textarea, not `position:fixed` overlay)
+**Research flag:** Not needed — implementation path is fully clear from source inspection; `<details>/<summary>` is the standard pattern for space-constrained popups
 
 ### Phase Ordering Rationale
 
-- Foundation modules first: both clipboard and AI launch depend on `tsv_writer.ts` and `prompt_builder.ts`; building them in isolation with full test coverage prevents regressions when popup changes land.
-- Clipboard and AI launch together in Phase 2: they share the same data flow, the same pre-fetch pattern, and the same popup modifications; delivering them separately would require two rounds of popup.ts churn.
-- Options page deferred: custom prompt CRUD is UI-heavy and has no blockers on v1.3 value delivery; isolating it prevents scope creep from delaying the headline features.
-- Gemini last: host permissions addition should never be bundled with a feature release; isolate it to manage the user update experience.
+- Manifest first because Gemini host_permissions must be isolated from all other changes to limit the re-approval prompt blast radius
+- Dark mode second because it creates the CSS foundation that all subsequent UI phases build on without requiring a second pass
+- Empty state third because it is the simplest UI change and validates the three-state display logic before more complex phases
+- Export toggle fourth because it spans multiple files and requires the storage key to be established before the UI is wired
+- Prompt preview last to consolidate popup.ts edits; stable popup layout from prior phases means no layout retrofitting
 
 ### Research Flags
 
-Phases with standard, well-documented patterns (skip research-phase):
-- **Phase 1 (Foundation Modules):** Pure TypeScript functions, no Chrome APIs; fully testable; no research needed.
-- **Phase 2 (Clipboard and AI Launch):** All Chrome APIs verified via official docs; clipboard-first design removes dependency on undocumented AI service URLs.
-
-Phases that may benefit from research during planning:
-- **Phase 3 (Options Page):** Auto-save interaction with storage writes; confirm `open_in_tab: true` behavior. Low risk, light research only.
-- **Phase 4 (Gemini):** Content script injection approach requires live verification at implementation time. Gemini frontend may change.
+No phases require `/gsd:research-phase` during planning. All research was completed in this round with HIGH confidence across all six features. The Chrome MV3 APIs in use are official and well-documented; the implementation paths are all traced through actual source code, not inferred.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All new APIs verified against official Chrome docs; zero-dependency constraint confirmed maintainable; version compatibility table in STACK.md |
-| Features | HIGH | Table stakes are clear; differentiator (prompt library) is pre-existing content in repo; anti-features are well-reasoned with concrete alternatives |
-| Architecture | HIGH | Based on direct source code inspection + official MV3 docs; all integration boundaries are explicit; build order is verified against component dependency graph |
-| Pitfalls | HIGH for MV3 mechanics; MEDIUM for AI URLs | Chromium issue tracker verified clipboard/service worker constraints; AI URL stability is inherently MEDIUM-to-LOW |
+| Stack | HIGH | Zero new dependencies; all APIs are official Chrome MV3 or standard CSS/HTML; verified against official documentation |
+| Features | HIGH | Features directly specified in PROJECT.md; implementation paths traced through actual source code inspection; no speculative features |
+| Architecture | HIGH | Based on direct source code inspection of all files in `src/`; no assumptions about function signatures or file layout |
+| Pitfalls | HIGH | Shortcut conflict verified against official Chrome Commands docs; dark mode inline style problem verified against CSS cascade specification; permission re-prompt behavior documented against official Chrome permission model |
 
-**Overall confidence:** HIGH for the implementation plan; MEDIUM specifically for ChatGPT `?q=` URL pre-fill stability (undocumented, subject to change without notice).
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Claude `?q=` parameter removal:** Reported via a single indirect GitHub issue reference (October 2025). Before shipping AI launch, verify current behavior manually by opening `claude.ai/new?q=test` in a browser. Expected outcome: no pre-fill, confirming clipboard-only approach is the correct design. Low-effort, high-value verification.
-
-- **ChatGPT `?q=` auto-submit behavior:** Community sources confirm `?q=` both pre-fills AND auto-submits without user review. Decision needed: offer URL pre-fill for ChatGPT as an enhancement, or default to clipboard-only for consistency across all services. Research recommendation is clipboard-only (simpler, consistent, no auto-submit risk). Flag this during Phase 2 planning.
-
-- **Storage choice discrepancy:** STACK.md recommends `chrome.storage.local` for prompt templates; ARCHITECTURE.md Pattern 4 initially describes `chrome.storage.sync` for preferences then corrects to local for template bodies. This is internally consistent — sync for preferences, local for template bodies — but the wording is worth clarifying in the constants.ts storage key comments during Phase 1.
-
-- **Gemini support timing:** Content script approach requires live verification at implementation time. Do not research or plan Gemini until Phase 3 (options page) is shipped and Gemini's frontend state can be verified.
+- **Gemini URL verification:** `AI_URLS["Gemini"] = "https://gemini.google.com"` already exists in popup.ts. Before Phase 1 ships, manually verify this URL lands on the Gemini chat input and not a marketing page or redirect. Low risk — 30-second manual check.
+- **Dark mode color audit scope:** The complete set of CSS classes and JS inline style assignments requiring dark mode overrides must be inventoried from the actual source files at implementation time. Research identifies the pattern and key known instances (showStatusMessage, toast creation) but implementation should begin with a full audit pass through popup.ts, popup.html, options.ts, and options.html.
+- **Popup current rendered height:** The 600px Chrome popup height cap is a hard limit. Research estimates current popup height at approximately 400-450px, leaving adequate headroom for the prompt preview `<details>` widget. Verify by measuring the actual built popup before committing to the preview widget's expanded height.
+- **Keyboard shortcut final key selection:** STACK.md and FEATURES.md both recommend `Ctrl+Shift+Y` / `Command+Shift+Y`; PITFALLS.md also suggests `Ctrl+Shift+G` as a "G for Golf" mnemonic alternative. Both are technically correct. The roadmapper should make a final call and be consistent across all files.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Chrome Offscreen API Reference — confirmed popup does NOT need offscreen document for clipboard writes
-- Chrome Tabs API Reference — confirmed `chrome.tabs.create` requires no `tabs` permission for URL-only tab creation
-- Chrome Storage API Reference — confirmed sync (8 KB/item, 100 KB total) vs local (10 MB) quotas; Chrome 113+ for 10 MB
-- Chrome Permissions Reference — confirmed `clipboardWrite` purpose; `tabs` permission warning text
-- Chromium Issue Tracker #40738001 — confirmed service workers cannot use `navigator.clipboard`
-- Chrome for Developers — options page declaration (`options_page` vs `options_ui`)
-- Project source code inspection: `src/` directory — existing architecture baseline and component boundaries
+- Chrome Tabs API Reference — `chrome.tabs.create` requires no host_permissions for URL-only tab creation: https://developer.chrome.com/docs/extensions/reference/api/tabs
+- Chrome Commands API Reference — `_execute_action` syntax, modifier key rules, shortcut conflicts: https://developer.chrome.com/docs/extensions/reference/api/commands
+- Chrome Declare Permissions Reference — host_permissions re-prompt behavior on extension update: https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions
+- MDN prefers-color-scheme — CSS media query specification: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme
+- w3c/webextensions issue #242 — Chrome propagates OS `prefers-color-scheme` consistently to extension popup and options pages: https://github.com/w3c/webextensions/issues/242
+- Chrome keyboard shortcuts reference — Ctrl+Shift+T / Cmd+Shift+T reserved as "Reopen closed tab": https://support.google.com/chrome/answer/157179
+- Direct source code inspection — all TypeScript and HTML files in `src/` read and analyzed for function signatures, storage patterns, and color assignments
+- csv_writer.ts lines 134-161 — `includeAverages` param already gates both Average and Consistency rows; no csv_writer.ts changes needed for v1.5
 
 ### Secondary (MEDIUM confidence)
-- treyhunner.com — ChatGPT and Claude `?q=` URL parameters confirmed (third-party, cross-verified with OpenAI community)
-- OpenAI community thread — ChatGPT `?q=` auto-submit behavior and undocumented status
-- elliot79313/gemini-url-prompt GitHub — Gemini content script injection approach confirmed
-- Tenable security research TRA-2025-22 — ChatGPT `?q=` auto-submission and `sec-fetch-site` protections
-- zenn.dev MV3 clipboard pitfalls article — real-world clipboard extension pitfall patterns
-- Andy's Golf Blog / AmateurGolf — real-world golf AI prompt patterns; paste workflow is standard user behavior
+- elliot79313/gemini-url-prompt GitHub — confirmed Gemini requires content script injection for URL pre-fill; no native URL parameter support: https://github.com/elliot79313/gemini-url-prompt
+- Google AI Developers Forum — no official Google confirmation of native Gemini URL pre-fill; community workarounds only: https://discuss.ai.google.dev/t/can-the-gemini-api-enable-a-website-to-open-the-gemini-site-with-a-text-prompt-pre-filled-by-that-website/73828
+- NN/g — Designing Empty States — positive phrasing + single actionable step UX pattern: https://www.nngroup.com/articles/empty-state-interface-design/
+- CSS light-dark() function — available Chrome 123+ as a single-declaration alternative to separate media query blocks: https://medium.com/front-end-weekly/forget-javascript-achieve-dark-mode-effortlessly-with-brand-new-css-function-light-dark-2024-94981c61756b
 
 ### Tertiary (LOW confidence)
-- GitHub issue reference (indirect) — Claude `?q=` parameter removal October 2025; single source, needs manual verification before shipping Phase 2
-- Gemini URL Prompt Chrome Web Store extension — no native URL support; injection-only; single source
+- AI service URL stability — `gemini.google.com`, `chat.openai.com`, `claude.ai` URLs are undocumented product URLs subject to change without notice; must be verified manually at implementation time
 
 ---
 *Research completed: 2026-03-02*
