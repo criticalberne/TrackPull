@@ -14,7 +14,7 @@ Requirements for v1.5 Polish & Quick Wins. Each maps to roadmap phases.
 
 ### UI Polish
 
-- [ ] **UI-01**: Popup and options page automatically match the system dark/light theme
+- [x] **UI-01**: Popup and options page automatically match the system dark/light theme
 - [ ] **UI-02**: User sees actionable guidance (not a bare "0") when no shot data is available
 
 ### Export
@@ -60,7 +60,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | AI-01 | Phase 8 | Complete |
 | NAV-01 | Phase 8 | Complete |
-| UI-01 | Phase 9 | Pending |
+| UI-01 | Phase 9 | Complete |
 | UI-02 | Phase 10 | Pending |
 | EXP-01 | Phase 11 | Pending |
 | AI-02 | Phase 12 | Pending |
