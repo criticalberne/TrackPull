@@ -271,11 +271,35 @@
     .btn-outline:hover {
       background-color: rgba(25, 118, 210, 0.08);
     }
+
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .icon-btn {
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: #666;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .icon-btn:hover {
+      background-color: #f0f0f0;
+      color: #1976d2;
+    }
   </style>
   <script src="./popup.js"></script>
 </head>
 <body>
-  <h1>TrackPull</h1>
+  <div class="header-row">
+    <h1>TrackPull</h1>
+    <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
+      &#9881;
+    </button>
+  </div>
   <div id="shot-count-container">
     <h2>Shot Count</h2>
     <div id="shot-count" class="shot-count">Loading...</div>
@@ -305,22 +329,7 @@
     <div class="ai-controls">
       <div class="ai-group">
         <label for="prompt-select">Prompt</label>
-        <select id="prompt-select">
-          <optgroup label="Beginner">
-            <option value="quick-summary-beginner">Quick Session Summary</option>
-            <option value="session-overview-beginner">Session Overview</option>
-            <option value="distance-gapping-beginner">Distance Gapping Report</option>
-          </optgroup>
-          <optgroup label="Intermediate">
-            <option value="club-breakdown-intermediate">Club-by-Club Breakdown</option>
-            <option value="launch-spin-intermediate">Launch &amp; Spin Optimization</option>
-            <option value="shot-shape-intermediate">Shot Shape &amp; Dispersion</option>
-          </optgroup>
-          <optgroup label="Advanced">
-            <option value="consistency-analysis-advanced">Consistency Analysis</option>
-            <option value="club-delivery-advanced">Club Delivery Analysis</option>
-          </optgroup>
-        </select>
+        <select id="prompt-select"></select>
       </div>
       <div class="ai-group">
         <label for="ai-service-select">AI Service</label>
