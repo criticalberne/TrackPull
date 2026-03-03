@@ -213,7 +213,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (copyTsvBtn) {
       copyTsvBtn.addEventListener("click", async () => {
         if (!cachedData) return;
-        const tsvText = writeTsv(cachedData, cachedUnitChoice);
+        const tsvText = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
         try {
           await navigator.clipboard.writeText(tsvText);
           showToast("Shot data copied!", "success");
@@ -235,11 +235,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         const prompt = findPromptById(selectedPromptId);
         if (!prompt) return;
 
-        const tsvData = writeTsv(cachedData, cachedUnitChoice);
+        const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
         const metadata = {
           date: cachedData.date,
           shotCount: countSessionShots(cachedData),
           unitLabel: buildUnitLabel(cachedUnitChoice),
+          hittingSurface: cachedSurface,
         };
         const assembled = assemblePrompt(prompt, tsvData, metadata);
 
@@ -265,11 +266,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         const prompt = findPromptById(selectedPromptId);
         if (!prompt) return;
 
-        const tsvData = writeTsv(cachedData, cachedUnitChoice);
+        const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
         const metadata = {
           date: cachedData.date,
           shotCount: countSessionShots(cachedData),
           unitLabel: buildUnitLabel(cachedUnitChoice),
+          hittingSurface: cachedSurface,
         };
         const assembled = assemblePrompt(prompt, tsvData, metadata);
 

@@ -14,6 +14,8 @@ export interface PromptMetadata {
   shotCount: number;
   /** Human-readable unit description, e.g. "mph + yards" or "m/s + meters" */
   unitLabel: string;
+  /** Hitting surface selection, e.g. "Mat" or "Grass" */
+  hittingSurface?: "Grass" | "Mat";
 }
 
 /**
@@ -33,7 +35,10 @@ export function assemblePrompt(
   let dataBlock: string;
 
   if (metadata !== undefined) {
-    const contextHeader = `Session: ${metadata.date} | ${metadata.shotCount} shots | Units: ${metadata.unitLabel}`;
+    let contextHeader = `Session: ${metadata.date} | ${metadata.shotCount} shots | Units: ${metadata.unitLabel}`;
+    if (metadata.hittingSurface !== undefined) {
+      contextHeader += ` | Surface: ${metadata.hittingSurface}`;
+    }
     dataBlock = contextHeader + "\n\n" + tsvData;
   } else {
     dataBlock = tsvData;

@@ -79,7 +79,8 @@ export function writeCsv(
   session: SessionData,
   includeAverages = true,
   metricOrder?: string[],
-  unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE
+  unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE,
+  hittingSurface?: "Grass" | "Mat"
 ): string {
   const orderedMetrics = orderMetricsByPriority(
     session.metric_names,
@@ -183,10 +184,16 @@ export function writeCsv(
     }
   }
 
-  const csvContent = [
-    headerRow.join(","),
-    ...rows.map((row) => {
-      return headerRow
+  const lines: string[] = [];
+
+  if (hittingSurface !== undefined) {
+    lines.push(`Hitting Surface: ${hittingSurface}`);
+  }
+
+  lines.push(headerRow.join(","));
+  for (const row of rows) {
+    lines.push(
+      headerRow
         .map((col) => {
           const value = row[col] ?? "";
           if (value.includes(",") || value.includes('"') || value.includes("\n")) {
@@ -194,9 +201,9 @@ export function writeCsv(
           }
           return value;
         })
-        .join(",");
-    }),
-  ].join("\n");
+        .join(",")
+    );
+  }
 
-  return csvContent;
+  return lines.join("\n");
 }

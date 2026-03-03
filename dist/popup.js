@@ -8,7 +8,7 @@
   };
 
   // src/shared/constants.ts
-  var METRIC_DISPLAY_NAMES, STORAGE_KEYS;
+  var METRIC_DISPLAY_NAMES, CUSTOM_PROMPT_KEY_PREFIX, CUSTOM_PROMPT_IDS_KEY, STORAGE_KEYS;
   var init_constants = __esm({
     "src/shared/constants.ts"() {
       METRIC_DISPLAY_NAMES = {
@@ -42,12 +42,15 @@
         ImpactOffset: "Impact Offset",
         Tempo: "Tempo"
       };
+      CUSTOM_PROMPT_KEY_PREFIX = "customPrompt_";
+      CUSTOM_PROMPT_IDS_KEY = "customPromptIds";
       STORAGE_KEYS = {
         TRACKMAN_DATA: "trackmanData",
         SPEED_UNIT: "speedUnit",
         DISTANCE_UNIT: "distanceUnit",
         SELECTED_PROMPT_ID: "selectedPromptId",
-        AI_SERVICE: "aiService"
+        AI_SERVICE: "aiService",
+        HITTING_SURFACE: "hittingSurface"
       };
     }
   });
@@ -285,7 +288,7 @@
     }
     return result;
   }
-  function writeTsv(session, unitChoice = DEFAULT_UNIT_CHOICE) {
+  function writeTsv(session, unitChoice = DEFAULT_UNIT_CHOICE, hittingSurface) {
     const orderedMetrics = orderMetricsByPriority(
       session.metric_names,
       METRIC_COLUMN_ORDER
@@ -323,7 +326,12 @@
       }
     }
     const headerRow = headerFields.map(escapeTsvField).join("	");
-    return [headerRow, ...rows].join("\n");
+    const parts = [];
+    if (hittingSurface !== void 0) {
+      parts.push(`Hitting Surface: ${hittingSurface}`);
+    }
+    parts.push(headerRow, ...rows);
+    return parts.join("\n");
   }
   var METRIC_COLUMN_ORDER;
   var init_tsv_writer = __esm({
@@ -556,7 +564,10 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
   function assemblePrompt(prompt, tsvData, metadata) {
     let dataBlock;
     if (metadata !== void 0) {
-      const contextHeader = `Session: ${metadata.date} | ${metadata.shotCount} shots | Units: ${metadata.unitLabel}`;
+      let contextHeader = `Session: ${metadata.date} | ${metadata.shotCount} shots | Units: ${metadata.unitLabel}`;
+      if (metadata.hittingSurface !== void 0) {
+        contextHeader += ` | Surface: ${metadata.hittingSurface}`;
+      }
       dataBlock = contextHeader + "\n\n" + tsvData;
     } else {
       dataBlock = tsvData;
@@ -574,6 +585,21 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     }
   });
 
+  // src/shared/custom_prompts.ts
+  async function loadCustomPrompts() {
+    const idsResult = await chrome.storage.sync.get([CUSTOM_PROMPT_IDS_KEY]);
+    const ids = idsResult[CUSTOM_PROMPT_IDS_KEY] ?? [];
+    if (ids.length === 0) return [];
+    const keys = ids.map((id) => CUSTOM_PROMPT_KEY_PREFIX + id);
+    const promptsResult = await chrome.storage.sync.get(keys);
+    return ids.map((id) => promptsResult[CUSTOM_PROMPT_KEY_PREFIX + id]).filter((p) => p !== void 0);
+  }
+  var init_custom_prompts = __esm({
+    "src/shared/custom_prompts.ts"() {
+      init_constants();
+    }
+  });
+
   // src/popup/popup.ts
   var require_popup = __commonJS({
     "src/popup/popup.ts"() {
@@ -583,13 +609,53 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
       init_tsv_writer();
       init_prompt_types();
       init_prompt_builder();
+      init_custom_prompts();
       var cachedData = null;
       var cachedUnitChoice = DEFAULT_UNIT_CHOICE;
+      var cachedSurface = "Mat";
+      var cachedCustomPrompts = [];
       var AI_URLS = {
         "ChatGPT": "https://chatgpt.com",
         "Claude": "https://claude.ai",
         "Gemini": "https://gemini.google.com"
       };
+      async function renderPromptSelect(select) {
+        const customPrompts = await loadCustomPrompts();
+        cachedCustomPrompts = customPrompts;
+        select.innerHTML = "";
+        if (customPrompts.length > 0) {
+          const myGroup = document.createElement("optgroup");
+          myGroup.label = "My Prompts";
+          for (const cp of customPrompts) {
+            const opt = document.createElement("option");
+            opt.value = cp.id;
+            opt.textContent = cp.name;
+            myGroup.appendChild(opt);
+          }
+          select.appendChild(myGroup);
+        }
+        const tiers = [
+          { label: "Beginner", value: "beginner" },
+          { label: "Intermediate", value: "intermediate" },
+          { label: "Advanced", value: "advanced" }
+        ];
+        for (const tier of tiers) {
+          const group = document.createElement("optgroup");
+          group.label = tier.label;
+          for (const p of BUILTIN_PROMPTS.filter((b) => b.tier === tier.value)) {
+            const opt = document.createElement("option");
+            opt.value = p.id;
+            opt.textContent = p.name;
+            group.appendChild(opt);
+          }
+          select.appendChild(group);
+        }
+      }
+      function findPromptById(id) {
+        const builtIn = BUILTIN_PROMPTS.find((p) => p.id === id);
+        if (builtIn) return builtIn;
+        return cachedCustomPrompts.find((p) => p.id === id);
+      }
       document.addEventListener("DOMContentLoaded", async () => {
         console.log("TrackPull popup initialized");
         try {
@@ -602,7 +668,7 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           updateShotCount(data);
           updateExportButtonVisibility(data);
           const unitResult = await new Promise((resolve) => {
-            chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, "unitPreference"], resolve);
+            chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, "unitPreference"], resolve);
           });
           let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT];
           let distanceUnit = unitResult[STORAGE_KEYS.DISTANCE_UNIT];
@@ -620,6 +686,8 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
             speed: speedUnit,
             distance: distanceUnit
           };
+          const surface = unitResult[STORAGE_KEYS.HITTING_SURFACE] ?? "Mat";
+          cachedSurface = surface;
           const speedSelect = document.getElementById("speed-unit");
           const distanceSelect = document.getElementById("distance-unit");
           if (speedSelect) {
@@ -634,6 +702,14 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
             distanceSelect.addEventListener("change", () => {
               chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
               cachedUnitChoice = { ...cachedUnitChoice, distance: distanceSelect.value };
+            });
+          }
+          const surfaceSelect = document.getElementById("surface-select");
+          if (surfaceSelect) {
+            surfaceSelect.value = surface;
+            surfaceSelect.addEventListener("change", () => {
+              chrome.storage.local.set({ [STORAGE_KEYS.HITTING_SURFACE]: surfaceSelect.value });
+              cachedSurface = surfaceSelect.value;
             });
           }
           chrome.runtime.onMessage.addListener((message) => {
@@ -652,14 +728,25 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           if (clearBtn) {
             clearBtn.addEventListener("click", handleClearClick);
           }
+          const settingsBtn = document.getElementById("settings-btn");
+          if (settingsBtn) {
+            settingsBtn.addEventListener("click", () => {
+              chrome.runtime.openOptionsPage();
+            });
+          }
           const promptSelect = document.getElementById("prompt-select");
           if (promptSelect) {
+            await renderPromptSelect(promptSelect);
             const promptResult = await new Promise((resolve) => {
               chrome.storage.local.get([STORAGE_KEYS.SELECTED_PROMPT_ID], resolve);
             });
             const savedPromptId = promptResult[STORAGE_KEYS.SELECTED_PROMPT_ID];
             if (savedPromptId) {
               promptSelect.value = savedPromptId;
+              if (promptSelect.value !== savedPromptId) {
+                promptSelect.value = "quick-summary-beginner";
+                chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: "quick-summary-beginner" });
+              }
             }
             promptSelect.addEventListener("change", () => {
               chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
@@ -682,7 +769,7 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           if (copyTsvBtn) {
             copyTsvBtn.addEventListener("click", async () => {
               if (!cachedData) return;
-              const tsvText = writeTsv(cachedData, cachedUnitChoice);
+              const tsvText = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
               try {
                 await navigator.clipboard.writeText(tsvText);
                 showToast("Shot data copied!", "success");
@@ -698,13 +785,14 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
               if (!cachedData || !promptSelect || !aiServiceSelect) return;
               const selectedPromptId = promptSelect.value;
               const selectedService = aiServiceSelect.value;
-              const prompt = BUILTIN_PROMPTS.find((p) => p.id === selectedPromptId);
+              const prompt = findPromptById(selectedPromptId);
               if (!prompt) return;
-              const tsvData = writeTsv(cachedData, cachedUnitChoice);
+              const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
               const metadata = {
                 date: cachedData.date,
                 shotCount: countSessionShots(cachedData),
-                unitLabel: buildUnitLabel(cachedUnitChoice)
+                unitLabel: buildUnitLabel(cachedUnitChoice),
+                hittingSurface: cachedSurface
               };
               const assembled = assemblePrompt(prompt, tsvData, metadata);
               try {
@@ -722,13 +810,14 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
             copyPromptBtn.addEventListener("click", async () => {
               if (!cachedData || !promptSelect) return;
               const selectedPromptId = promptSelect.value;
-              const prompt = BUILTIN_PROMPTS.find((p) => p.id === selectedPromptId);
+              const prompt = findPromptById(selectedPromptId);
               if (!prompt) return;
-              const tsvData = writeTsv(cachedData, cachedUnitChoice);
+              const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
               const metadata = {
                 date: cachedData.date,
                 shotCount: countSessionShots(cachedData),
-                unitLabel: buildUnitLabel(cachedUnitChoice)
+                unitLabel: buildUnitLabel(cachedUnitChoice),
+                hittingSurface: cachedSurface
               };
               const assembled = assemblePrompt(prompt, tsvData, metadata);
               try {

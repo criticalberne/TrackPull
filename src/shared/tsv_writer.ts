@@ -72,7 +72,8 @@ export function orderMetricsByPriority(
 
 export function writeTsv(
   session: SessionData,
-  unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE
+  unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE,
+  hittingSurface?: "Grass" | "Mat"
 ): string {
   const orderedMetrics = orderMetricsByPriority(
     session.metric_names,
@@ -125,5 +126,11 @@ export function writeTsv(
 
   const headerRow = headerFields.map(escapeTsvField).join("\t");
 
-  return [headerRow, ...rows].join("\n");
+  const parts: string[] = [];
+  if (hittingSurface !== undefined) {
+    parts.push(`Hitting Surface: ${hittingSurface}`);
+  }
+  parts.push(headerRow, ...rows);
+
+  return parts.join("\n");
 }
