@@ -79,6 +79,50 @@
 
 ---
 
+## Milestone: v1.5 — Polish & Quick Wins
+
+**Shipped:** 2026-03-03
+**Phases:** 5 | **Plans:** 6 | **Sessions:** ~2
+
+### What Was Built
+- Gemini AI launch support with Cmd+Shift+G keyboard shortcut via Chrome Commands API
+- Dark mode CSS foundation with custom property tokens across popup and options pages
+- Status message refactored from inline styles to CSS class toggling for dark mode
+- Empty state guidance replacing bare "0 shots" with actionable instructions
+- Export format toggle for including/excluding averages and consistency rows
+- Collapsible prompt preview widget showing assembled prompt before AI launch
+
+### What Worked
+- Batching 6 small features into one milestone — avoided v1.4's "ceremony overhead" lesson
+- Sequential phase dependencies (8→9→10→11→12) meant each phase built cleanly on the previous
+- CSS custom property tokens (Phase 9) reused across Phases 10, 12 — foundation investment paid off
+- Native HTML elements (details/summary, checkbox) over JS state management — less code, fewer bugs
+- All 6 plans executed with zero blocking deviations — research phase caught every constraint upfront
+
+### What Was Inefficient
+- Phase details in ROADMAP.md accumulated (50+ lines of success criteria) for phases that were all completed — archival could be triggered earlier
+- SUMMARY.md frontmatter formats varied (some used tasks_completed in metrics, others used **Tasks:** in body) — inconsistency slows automation
+
+### Patterns Established
+- CSS class toggling over inline styles for theme-sensitive UI (classList.add/remove vs style.color)
+- Container class pattern for state-driven child visibility (add class to parent, CSS descendants respond)
+- style=display:none on HTML elements that should be hidden before async storage resolves
+- textContent (not innerHTML) for user-defined content to prevent XSS
+- Default true for new boolean storage keys — backward compatible with existing users
+
+### Key Lessons
+1. Batch small features into a single milestone — 6 features in v1.5 was far more efficient than v1.4's single-feature milestone
+2. CSS custom property tokens should be established early — they became a shared foundation for 3 subsequent phases
+3. Native HTML elements (details/summary, checkboxes) are the right default — reach for JS state management only when native falls short
+4. Research phase consistently catches Chrome-specific gotchas (Cmd+Shift+T reserved, _execute_action naming, clipboard focus-loss) — never skip research
+
+### Cost Observations
+- Model mix: ~60% sonnet (execution), ~30% opus (orchestration/verification), ~10% haiku (research)
+- Sessions: ~2
+- Notable: 5 phases in a single day — small, well-scoped plans with clear success criteria enable rapid execution
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -87,6 +131,7 @@
 |-----------|----------|--------|------------|
 | v1.3 | ~3 | 3 | First GSD-managed milestone; established foundation-first pattern |
 | v1.4 | 1 | 1 | Single-feature milestone; optional param pattern for extensibility |
+| v1.5 | ~2 | 5 | Batched polish features; CSS token foundation reused across 3 phases |
 
 ### Cumulative Quality
 
@@ -94,9 +139,12 @@
 |-----------|-------|----------|-------------------|
 | v1.3 | 236 | N/A | 0 (Chrome APIs only) |
 | v1.4 | 247 | N/A | 0 (Chrome APIs only) |
+| v1.5 | 247 | N/A | 0 (Chrome APIs only) |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. Foundation modules first — test and ship reusable code before wiring UI
-2. Pre-fetch pattern for Chrome extension popups — clipboard requires synchronous focus
-3. Optional last params for backward-compatible feature additions — verified across v1.3 (TSV) and v1.4 (surface)
+1. Foundation modules first — test and ship reusable code before wiring UI (v1.3, v1.5 Phase 9 tokens)
+2. Pre-fetch pattern for Chrome extension popups — clipboard requires synchronous focus (v1.3, v1.4, v1.5)
+3. Optional last params for backward-compatible feature additions — verified across v1.3 (TSV), v1.4 (surface), v1.5 (includeAverages)
+4. Research phase catches platform gotchas — never skip; saves rework every time (v1.3 quota limits, v1.5 reserved shortcuts)
+5. Batch small features into one milestone — v1.5's 6-feature batch was far more efficient than v1.4's single-feature approach
