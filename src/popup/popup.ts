@@ -388,7 +388,8 @@ function showStatusMessage(message: string, isError: boolean = false): void {
   if (!statusElement) return;
 
   statusElement.textContent = message;
-  statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
+  statusElement.classList.remove("status-error", "status-success");
+  statusElement.classList.add(isError ? "status-error" : "status-success");
 }
 
 async function handleClearClick(): Promise<void> {
