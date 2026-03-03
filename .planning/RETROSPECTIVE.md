@@ -45,6 +45,40 @@
 
 ---
 
+## Milestone: v1.4 — Surface Metadata
+
+**Shipped:** 2026-03-03
+**Phases:** 1 | **Plans:** 2 | **Sessions:** 1
+
+### What Was Built
+- Surface dropdown (Mat/Grass) in popup alongside existing unit selectors
+- Metadata auto-injected into CSV exports, TSV clipboard, and AI prompt context
+- 11 unit tests covering surface presence/absence across all output paths
+
+### What Worked
+- Optional last parameter pattern — zero existing caller/test breakage across all writer functions
+- Batched storage.get for surface alongside speed/distance — single read, no extra async calls
+- Single-phase milestone kept scope tight; discuss → plan → execute → verify in one session
+- UAT tested all 6 user-observable behaviors end-to-end in Chrome
+
+### What Was Inefficient
+- Milestone completion overhead is disproportionate for a single-phase feature — archival/retrospective/tag ceremony designed for larger milestones
+
+### Patterns Established
+- Optional metadata params as last function argument for backward-compatible feature additions
+- cachedSurface follows cachedUnitChoice pattern: resolved on load, updated on change event
+
+### Key Lessons
+1. Single-feature milestones work fine for small scope but the completion ceremony is heavy — consider batching related small features into one milestone
+2. Optional last param pattern makes output functions extensible without breaking callers
+
+### Cost Observations
+- Model mix: ~70% sonnet (execution/verification), ~30% opus (orchestration)
+- Sessions: 1
+- Notable: End-to-end in a single session — discuss, plan, execute, verify, complete
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -52,14 +86,17 @@
 | Milestone | Sessions | Phases | Key Change |
 |-----------|----------|--------|------------|
 | v1.3 | ~3 | 3 | First GSD-managed milestone; established foundation-first pattern |
+| v1.4 | 1 | 1 | Single-feature milestone; optional param pattern for extensibility |
 
 ### Cumulative Quality
 
 | Milestone | Tests | Coverage | Zero-Dep Additions |
 |-----------|-------|----------|-------------------|
 | v1.3 | 236 | N/A | 0 (Chrome APIs only) |
+| v1.4 | 247 | N/A | 0 (Chrome APIs only) |
 
 ### Top Lessons (Verified Across Milestones)
 
 1. Foundation modules first — test and ship reusable code before wiring UI
 2. Pre-fetch pattern for Chrome extension popups — clipboard requires synchronous focus
+3. Optional last params for backward-compatible feature additions — verified across v1.3 (TSV) and v1.4 (surface)
