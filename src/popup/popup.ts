@@ -9,17 +9,64 @@ import type { UnitChoice } from "../shared/unit_normalization";
 import { DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import { writeTsv } from "../shared/tsv_writer";
 import { BUILTIN_PROMPTS } from "../shared/prompt_types";
+import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
 import { assemblePrompt, buildUnitLabel, countSessionShots } from "../shared/prompt_builder";
+import { loadCustomPrompts } from "../shared/custom_prompts";
 
 // Pre-fetched data for synchronous clipboard access (avoids focus-loss errors)
 let cachedData: SessionData | null = null;
 let cachedUnitChoice: UnitChoice = DEFAULT_UNIT_CHOICE;
+let cachedCustomPrompts: CustomPrompt[] = [];
 
 const AI_URLS: Record<string, string> = {
   "ChatGPT": "https://chatgpt.com",
   "Claude": "https://claude.ai",
   "Gemini": "https://gemini.google.com",
 };
+
+async function renderPromptSelect(select: HTMLSelectElement): Promise<void> {
+  const customPrompts = await loadCustomPrompts();
+  cachedCustomPrompts = customPrompts;
+
+  select.innerHTML = "";
+
+  // "My Prompts" group at top (only if custom prompts exist) -- per user decision
+  if (customPrompts.length > 0) {
+    const myGroup = document.createElement("optgroup");
+    myGroup.label = "My Prompts";
+    for (const cp of customPrompts) {
+      const opt = document.createElement("option");
+      opt.value = cp.id;
+      opt.textContent = cp.name;
+      myGroup.appendChild(opt);
+    }
+    select.appendChild(myGroup);
+  }
+
+  // Built-in groups by tier
+  const tiers: Array<{ label: string; value: "beginner" | "intermediate" | "advanced" }> = [
+    { label: "Beginner", value: "beginner" },
+    { label: "Intermediate", value: "intermediate" },
+    { label: "Advanced", value: "advanced" },
+  ];
+  for (const tier of tiers) {
+    const group = document.createElement("optgroup");
+    group.label = tier.label;
+    for (const p of BUILTIN_PROMPTS.filter(b => b.tier === tier.value)) {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      group.appendChild(opt);
+    }
+    select.appendChild(group);
+  }
+}
+
+function findPromptById(id: string): PromptItem | undefined {
+  const builtIn = BUILTIN_PROMPTS.find(p => p.id === id);
+  if (builtIn) return builtIn;
+  return cachedCustomPrompts.find(p => p.id === id);
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("TrackPull popup initialized");
@@ -100,17 +147,31 @@ document.addEventListener("DOMContentLoaded", async () => {
       clearBtn.addEventListener("click", handleClearClick);
     }
 
-    // Restore last-selected prompt
+    const settingsBtn = document.getElementById("settings-btn");
+    if (settingsBtn) {
+      settingsBtn.addEventListener("click", () => {
+        chrome.runtime.openOptionsPage();
+      });
+    }
+
     const promptSelect = document.getElementById("prompt-select") as HTMLSelectElement | null;
     if (promptSelect) {
+      await renderPromptSelect(promptSelect);
+
+      // Restore last-selected prompt
       const promptResult = await new Promise<Record<string, unknown>>((resolve) => {
         chrome.storage.local.get([STORAGE_KEYS.SELECTED_PROMPT_ID], resolve);
       });
       const savedPromptId = promptResult[STORAGE_KEYS.SELECTED_PROMPT_ID] as string | undefined;
       if (savedPromptId) {
         promptSelect.value = savedPromptId;
-        // If the saved ID doesn't match any option (e.g., removed prompt), select falls back to first option automatically
+        // If the saved ID doesn't match any option (deleted custom prompt), fall back
+        if (promptSelect.value !== savedPromptId) {
+          promptSelect.value = "quick-summary-beginner";
+          chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: "quick-summary-beginner" });
+        }
       }
+
       // Auto-save on change
       promptSelect.addEventListener("change", () => {
         chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
@@ -157,7 +218,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const selectedPromptId = promptSelect.value;
         const selectedService = aiServiceSelect.value;
-        const prompt = BUILTIN_PROMPTS.find(p => p.id === selectedPromptId);
+        const prompt = findPromptById(selectedPromptId);
         if (!prompt) return;
 
         const tsvData = writeTsv(cachedData, cachedUnitChoice);
@@ -187,7 +248,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!cachedData || !promptSelect) return;
 
         const selectedPromptId = promptSelect.value;
-        const prompt = BUILTIN_PROMPTS.find(p => p.id === selectedPromptId);
+        const prompt = findPromptById(selectedPromptId);
         if (!prompt) return;
 
         const tsvData = writeTsv(cachedData, cachedUnitChoice);
