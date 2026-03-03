@@ -57,26 +57,26 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HIST-01 | — | Pending |
-| HIST-02 | — | Pending |
-| HIST-03 | — | Pending |
-| HIST-04 | — | Pending |
-| HIST-05 | — | Pending |
-| HIST-06 | — | Pending |
-| HIST-07 | — | Pending |
-| HIST-08 | — | Pending |
-| HIST-09 | — | Pending |
-| VIS-01 | — | Pending |
-| VIS-02 | — | Pending |
-| VIS-03 | — | Pending |
-| PROMPT-01 | — | Pending |
-| PROMPT-02 | — | Pending |
+| HIST-01 | Phase 14 | Pending |
+| HIST-02 | Phase 14 | Pending |
+| HIST-03 | Phase 15 | Pending |
+| HIST-04 | Phase 15 | Pending |
+| HIST-05 | Phase 15 | Pending |
+| HIST-06 | Phase 15 | Pending |
+| HIST-07 | Phase 14 | Pending |
+| HIST-08 | Phase 15 | Pending |
+| HIST-09 | Phase 15 | Pending |
+| VIS-01 | Phase 13 | Pending |
+| VIS-02 | Phase 13 | Pending |
+| VIS-03 | Phase 13 | Pending |
+| PROMPT-01 | Phase 16 | Pending |
+| PROMPT-02 | Phase 16 | Pending |
 
 **Coverage:**
 - v1.6 requirements: 14 total
-- Mapped to phases: 0
-- Unmapped: 14 ⚠️
+- Mapped to phases: 14
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-03*
-*Last updated: 2026-03-03 after initial definition*
+*Last updated: 2026-03-03 after roadmap creation — all 14 requirements mapped to phases 13-16*

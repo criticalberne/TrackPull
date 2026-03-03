@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Data Intelligence
-status: defining-requirements
+status: ready-to-plan
 last_updated: "2026-03-03T16:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -18,14 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** v1.6 Data Intelligence — defining requirements
+**Current focus:** v1.6 Data Intelligence — Phase 13: Visual Stat Card
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-03 — Milestone v1.6 started
+Phase: 13 of 16 (Visual Stat Card)
+Plan: — (not yet planned)
+Status: Ready to plan
+Last activity: 2026-03-03 — Roadmap created for v1.6 (phases 13-16)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -38,7 +40,13 @@ Last activity: 2026-03-03 — Milestone v1.6 started
 
 ### Decisions
 
-See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03 after v1.6 milestone start)
+See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03)
+
+Recent decisions relevant to v1.6:
+- Session history cap: 20 sessions (HIST-07) — both 10 and 20 are safe; 20 at ~90 KB = 1.8 MB, well under 10 MB local quota
+- raw_api_data must be stripped before saving to history — a single session with raw payload can reach 700+ KB
+- SessionSnapshot type (Omit<SessionData, 'raw_api_data'>) — exact definition to be locked in during Phase 14
+- History UI placement (popup inline vs. options page) — measure actual v1.5 popup height before committing; research flags this as needing a concrete UX decision
 
 ### Pending Todos
 
@@ -46,7 +54,11 @@ None.
 
 ### Blockers/Concerns
 
-- Trackman CSS class selectors for HTML fallback are brittle — undocumented private API
-- StrokeGroups JSON schema can change without notice — inspect live API before touching parsing
-- Stale dist/ risk: build step is manual with no enforcement; always rebuild before commit
-- chrome.storage.sync quota: 102,400 bytes total, 8,192 bytes per item — session history will need storage strategy
+- Phase 15 (History UI): popup 600px height hard limit may force routing full session list to options page — measure actual popup height after Phase 13 stat card is added before designing the history list widget
+- Phase 15 (History UI): club name normalization rules needed before implementing comparison — review actual Trackman DOM output for edge cases
+
+## Session Continuity
+
+Last session: 2026-03-03
+Stopped at: Roadmap created — Phase 13 ready to plan
+Resume file: None
