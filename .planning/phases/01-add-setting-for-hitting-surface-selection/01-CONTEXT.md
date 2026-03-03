@@ -17,7 +17,7 @@ Add a user-selectable hitting surface preference (Grass or Mat) to the extension
 - Two surfaces: Grass, Mat
 - Simple display labels (no descriptions/parentheticals)
 - Global default only — no per-session override
-- Default on install: Grass
+- Default on install: Mat
 
 ### Setting location
 - Popup only — dropdown grouped with existing speed/distance unit dropdowns
@@ -32,7 +32,7 @@ Add a user-selectable hitting surface preference (Grass or Mat) to the extension
 ### Storage & defaults
 - chrome.storage.local (same as speed/distance units)
 - Always set — no "None" / unset option
-- Default: Grass
+- Default: Mat
 
 ### Claude's Discretion
 - Exact placement order within the unit dropdowns group
@@ -45,7 +45,7 @@ Add a user-selectable hitting surface preference (Grass or Mat) to the extension
 <specifics>
 ## Specific Ideas
 
-No specific requirements — open to standard approaches matching existing patterns.
+- Mat is the default because hitting off mats affects the data (ball flight, turf interaction) and thus the AI prompt analysis output. Most Trackman users practice on mats at indoor ranges, so this is the more common and impactful surface to flag.
 
 </specifics>
 
