@@ -121,7 +121,7 @@
 | 9. Dark Mode CSS Foundation | 2/2 | Complete   | 2026-03-03 | - |
 | 10. Empty State Guidance | 1/1 | Complete    | 2026-03-03 | - |
 | 11. Export Format Toggle | 1/1 | Complete    | 2026-03-03 | - |
-| 12. Prompt Preview | 1/1 | Complete   | 2026-03-03 | - |
+| 12. Prompt Preview | 1/1 | Complete    | 2026-03-03 | - |
 
 ---
 *Roadmap created: 2026-03-02*
