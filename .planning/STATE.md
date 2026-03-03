@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: milestone
-status: unknown
-last_updated: "2026-03-03T03:10:56.184Z"
+milestone: v1.4
+milestone_name: Surface Metadata
+status: milestone_complete
+last_updated: "2026-03-03T03:30:00.000Z"
 progress:
   total_phases: 1
   completed_phases: 1
@@ -18,7 +18,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** v1.3 shipped — planning next milestone
+**Current focus:** v1.4 shipped — planning next milestone
 
 ## Current Position
 
@@ -26,7 +26,7 @@ Phase: 01-add-setting-for-hitting-surface-selection
 Plan: 2 of 2 complete
 Status: Phase 01 complete — all plans done
 Last activity: 2026-03-03 - Completed Plan 01-02: Write hitting surface unit tests and rebuild extension
-Next action: Phase complete — run `/gsd:execute-phase` for next phase or `/gsd:new-milestone` if done
+Next action: v1.4 milestone complete — run `/gsd:new-milestone` for next milestone
 
 Progress: [##########] Phase 01 Plan 2/2 complete
 

@@ -31,6 +31,8 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 - ✓ Set default AI service preference — v1.3
 - ✓ Prompt management in options page, quick access in popup — v1.3
 
+- ✓ User-selectable hitting surface (Grass/Mat) in popup with metadata in CSV, TSV, and AI prompts — v1.4
+
 ### Active
 
 (None — awaiting next milestone definition)
@@ -45,10 +47,9 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 
 ## Context
 
-Shipped v1.3 with ~49,800 LOC TypeScript.
+Shipped v1.4 with ~50,600 LOC TypeScript.
 Tech stack: Chrome MV3 extension, esbuild, vitest. Zero production dependencies.
-236 tests across 11 test files, all passing.
-Current version: 1.2.1 (version bump needed for v1.3 release).
+247 tests across 12 test files, all passing.
 `dist/` tracked in git; `production.zip` gitignored.
 
 ## Constraints
@@ -73,6 +74,8 @@ Current version: 1.2.1 (version bump needed for v1.3 release).
 | Per-key chrome.storage.sync for custom prompts | Individual keys avoid 8 KB single-item quota limit | ✓ Good |
 | Pre-fetch data pattern in popup | Cache storage reads at DOMContentLoaded; avoids async focus-loss clipboard errors | ✓ Good |
 | Gemini deferred to v1.4+ | host_permissions addition triggers permission prompt for all users; isolate to own release | ✓ Good |
+| Optional last param for surface metadata | All writer functions accept optional hittingSurface — zero caller breakage | ✓ Good |
+| Mat as default surface | Most Trackman users practice on mats at indoor ranges; flags most impactful surface | ✓ Good |
 
 ---
-*Last updated: 2026-03-03 after v1.3 milestone*
+*Last updated: 2026-03-03 after v1.4 milestone*

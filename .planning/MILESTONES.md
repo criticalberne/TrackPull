@@ -1,5 +1,21 @@
 # Milestones
 
+## v1.4 Surface Metadata (Shipped: 2026-03-03)
+
+**Phases:** 1 (1 phase, 2 plans, 4 tasks)
+**Timeline:** 1 day (2026-03-02 → 2026-03-03)
+**Files changed:** 17 (826 insertions, 77 deletions)
+
+**Delivered:** User-selectable hitting surface preference (Mat/Grass) with metadata injected into CSV exports, TSV clipboard, and AI prompt context.
+
+**Key accomplishments:**
+1. Surface dropdown (Mat/Grass) in popup alongside Speed and Distance selectors
+2. Surface metadata auto-injected as first line in CSV and TSV output
+3. AI prompt context header extended with pipe-separated surface metadata
+4. 11 unit tests covering all output paths (247 total passing)
+
+---
+
 ## v1.3 Export & AI (Shipped: 2026-03-03)
 
 **Phases:** 5-7 (3 phases, 8 plans, 22 tasks)
