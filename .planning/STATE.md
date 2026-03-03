@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.5
-milestone_name: Polish & Quick Wins
-status: shipped
-last_updated: "2026-03-03T15:00:00.000Z"
+milestone: v1.6
+milestone_name: Data Intelligence
+status: defining-requirements
+last_updated: "2026-03-03T16:00:00.000Z"
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** Planning next milestone
+**Current focus:** v1.6 Data Intelligence — defining requirements
 
 ## Current Position
 
-Milestone: v1.5 Polish & Quick Wins — SHIPPED 2026-03-03
-All 5 phases (8-12) complete, 6 plans executed, 14 tasks completed.
-
-Progress: [############] 100% — milestone shipped
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-03 — Milestone v1.6 started
 
 ## Performance Metrics
 
@@ -34,34 +34,19 @@ Progress: [############] 100% — milestone shipped
 - v1.4: 2 plans, 4 tasks, 1 day
 - v1.5: 6 plans, 14 tasks, 1 day
 
-**By Phase (v1.5):**
-
-| Phase | Plans | Tasks | Files |
-|-------|-------|-------|-------|
-| 8. Gemini Launch and Keyboard Shortcut | 1 | 3 | 3 |
-| 9. Dark Mode CSS Foundation | 2 | 5 | 6 |
-| 10. Empty State Guidance | 1 | 2 | 4 |
-| 11. Export Format Toggle | 1 | 2 | 5 |
-| 12. Prompt Preview | 1 | 2 | 3 |
-
 ## Accumulated Context
 
 ### Decisions
 
-See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03 after v1.5 milestone)
+See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03 after v1.6 milestone start)
 
 ### Pending Todos
 
 None.
-
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 1 | Fix build script to work when run from any directory | 2026-03-03 | 4a4de28 | [1-fix-build-script-to-work-when-run-from-a](./quick/1-fix-build-script-to-work-when-run-from-a/) |
 
 ### Blockers/Concerns
 
 - Trackman CSS class selectors for HTML fallback are brittle — undocumented private API
 - StrokeGroups JSON schema can change without notice — inspect live API before touching parsing
 - Stale dist/ risk: build step is manual with no enforcement; always rebuild before commit
+- chrome.storage.sync quota: 102,400 bytes total, 8,192 bytes per item — session history will need storage strategy

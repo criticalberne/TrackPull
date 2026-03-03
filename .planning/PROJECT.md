@@ -32,7 +32,7 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 - ✓ Prompt management in options page, quick access in popup — v1.3
 - ✓ User-selectable hitting surface (Grass/Mat) in popup with metadata in CSV, TSV, and AI prompts — v1.4
 - ✓ Gemini AI launch support via clipboard-first flow — v1.5
-- ✓ Keyboard shortcut (Cmd+Shift+G / Ctrl+Shift+G) to open popup — v1.5
+- ✗ ~~Keyboard shortcut (Cmd+Shift+G / Ctrl+Shift+G) to open popup~~ — v1.5, removed: conflicted with macOS system shortcuts
 - ✓ Dark mode matching system theme across popup and options — v1.5
 - ✓ Empty state guidance replacing bare "0 shots" dead end — v1.5
 - ✓ Export format toggle for averages/consistency rows — v1.5
@@ -40,16 +40,16 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 
 ### Active
 
-(None — planning next milestone)
+<!-- v1.6 Data Intelligence -->
+
+- [ ] Session history — persist sessions in chrome.storage, browse/re-export from popup
+- [ ] Session comparison — delta columns comparing club averages across sessions
+- [ ] Visual shot summary — stat card in popup (avg carry, avg club speed, shot count by club)
+- [ ] Smart prompt suggestions — highlighted label on data-matched prompt in dropdown
 
 ### Future
 
-<!-- Planned for v1.6 Data Intelligence -->
-
-- Session history — persist sessions in chrome.storage, browse/re-export from popup
-- Session comparison — delta columns comparing club averages across sessions
-- Visual shot summary — stat card in popup (avg carry, avg club speed, shot count by club)
-- Smart prompt suggestions — highlighted label on data-matched prompt in dropdown
+(None)
 
 ### Out of Scope
 
@@ -61,6 +61,7 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 - Manual dark mode toggle — system-match is sufficient; revisit only if users request override
 - Gemini URL pre-fill via content script — brittle against Gemini's SPA; clipboard-first is permanent approach
 - User-configurable shortcut picker — Chrome's chrome://extensions/shortcuts provides this natively
+- Keyboard shortcut to open popup — Cmd+Shift+G conflicted with macOS; removed in v1.5
 
 ## Context
 
@@ -92,12 +93,22 @@ Tech stack: Chrome MV3 extension, esbuild, vitest. Zero production dependencies.
 | Pre-fetch data pattern in popup | Cache storage reads at DOMContentLoaded; avoids async focus-loss clipboard errors | ✓ Good |
 | Optional last param for surface metadata | All writer functions accept optional hittingSurface — zero caller breakage | ✓ Good |
 | Mat as default surface | Most Trackman users practice on mats at indoor ranges; flags most impactful surface | ✓ Good |
-| _execute_action for keyboard shortcut | Chrome handles popup open natively; no background.js handler needed | ✓ Good |
+| _execute_action for keyboard shortcut | Chrome handles popup open natively; no background.js handler needed | ✗ Removed — conflicted with macOS |
 | CSS custom property tokens for theming | var(--color-*) tokens enable dark mode via @media query without JS | ✓ Good |
 | classList toggling over inline styles | Status messages use CSS classes for dark mode support instead of style.color | ✓ Good |
 | Native details/summary for prompt preview | No JS state management needed; browser handles expand/collapse | ✓ Good |
 | textContent (not innerHTML) for preview | Prevents XSS from user-defined prompts in preview widget | ✓ Good |
 | includeAverages default true | Backward compatible — existing users continue getting averages in exports | ✓ Good |
 
+## Current Milestone: v1.6 Data Intelligence
+
+**Goal:** Add session persistence, cross-session comparison, visual summaries, and intelligent prompt matching.
+
+**Target features:**
+- Session history — persist sessions in chrome.storage, browse/re-export from popup
+- Session comparison — delta columns comparing club averages across sessions
+- Visual shot summary — stat card in popup (avg carry, avg club speed, shot count by club)
+- Smart prompt suggestions — highlighted label on data-matched prompt in dropdown
+
 ---
-*Last updated: 2026-03-03 after v1.5 milestone*
+*Last updated: 2026-03-03 after starting v1.6 milestone*
