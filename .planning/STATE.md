@@ -1,34 +1,31 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.4
-milestone_name: Surface Metadata
-status: milestone_complete
-last_updated: "2026-03-03T03:30:00.000Z"
+milestone: v1.5
+milestone_name: Polish & Quick Wins
+status: active
+last_updated: "2026-03-02T00:00:00.000Z"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-03)
+See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** v1.4 shipped — planning next milestone
+**Current focus:** v1.5 Polish & Quick Wins
 
 ## Current Position
 
-Phase: 01-add-setting-for-hitting-surface-selection
-Plan: 2 of 2 complete
-Status: Phase 01 complete — all plans done
-Last activity: 2026-03-03 - Completed Plan 01-02: Write hitting surface unit tests and rebuild extension
-Next action: v1.4 milestone complete — run `/gsd:new-milestone` for next milestone
-
-Progress: [##########] Phase 01 Plan 2/2 complete
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-02 — Milestone v1.5 started
 
 ## Performance Metrics
 

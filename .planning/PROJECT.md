@@ -35,7 +35,23 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 
 ### Active
 
-(None — awaiting next milestone definition)
+<!-- Current milestone: v1.5 Polish & Quick Wins -->
+
+- [ ] Gemini AI launch support with isolated host_permissions release
+- [ ] Prompt preview before sending to AI
+- [ ] Empty state guidance replacing "0 shots" dead end
+- [ ] Export format toggle for averages/consistency rows
+- [ ] Keyboard shortcut (Cmd+Shift+T) to open popup
+- [ ] Dark mode matching system theme
+
+### Future
+
+<!-- Planned for v1.6 Data Intelligence -->
+
+- Session history — persist sessions in chrome.storage, browse/re-export from popup
+- Session comparison — delta columns comparing club averages across sessions
+- Visual shot summary — stat card in popup (avg carry, avg club speed, shot count by club)
+- Smart prompt suggestions — highlighted label on data-matched prompt in dropdown
 
 ### Out of Scope
 
@@ -44,6 +60,18 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 - Cloud sync — no backend; extension is local-only by design
 - Direct AI API integration — requires API key management, billing
 - Prompt sharing / community library — requires backend, moderation, user accounts
+
+## Current Milestone: v1.5 Polish & Quick Wins
+
+**Goal:** Ship 6 low-effort, high-impact features that polish the existing experience — Gemini support, prompt preview, empty states, export toggle, keyboard shortcut, and dark mode.
+
+**Target features:**
+- Gemini AI launch support (isolated release for permission prompt)
+- Prompt preview before sending to AI
+- Empty state guidance (actionable messages instead of "0 shots")
+- Export format toggle (include/exclude averages+consistency rows)
+- Keyboard shortcut (Cmd+Shift+T to open popup)
+- Dark mode (match system theme)
 
 ## Context
 
@@ -78,4 +106,4 @@ Tech stack: Chrome MV3 extension, esbuild, vitest. Zero production dependencies.
 | Mat as default surface | Most Trackman users practice on mats at indoor ranges; flags most impactful surface | ✓ Good |
 
 ---
-*Last updated: 2026-03-03 after v1.4 milestone*
+*Last updated: 2026-03-02 after v1.5 milestone start*
