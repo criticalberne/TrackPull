@@ -93,6 +93,38 @@
       margin-top: 10px;
     }
 
+    /* Empty state guidance — hidden by default, shown via .empty-state class on container */
+    #empty-guidance {
+      display: none;
+    }
+
+    #shot-count-container.empty-state #empty-guidance {
+      display: block;
+    }
+
+    #shot-count-container.empty-state #shot-count {
+      display: none;
+    }
+
+    #shot-count-container.empty-state #shot-count-heading {
+      display: none;
+    }
+
+    .empty-guidance-primary {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--color-text-primary);
+      margin: 0 0 6px 0;
+      line-height: 1.4;
+    }
+
+    .empty-guidance-hint {
+      font-size: 13px;
+      color: var(--color-text-muted);
+      margin: 0;
+      line-height: 1.4;
+    }
+
     .toast {
       position: fixed;
       top: 20px;
@@ -358,8 +390,12 @@
     </button>
   </div>
   <div id="shot-count-container">
-    <h2>Shot Count</h2>
+    <h2 id="shot-count-heading">Shot Count</h2>
     <div id="shot-count" class="shot-count">Loading...</div>
+    <div id="empty-guidance">
+      <p class="empty-guidance-primary">Open a Trackman report to capture shots</p>
+      <p class="empty-guidance-hint">Shot data is captured automatically when you view a report</p>
+    </div>
   </div>
   <div class="unit-selectors">
     <div class="unit-group">
@@ -409,7 +445,7 @@
       <button id="copy-prompt-btn" class="btn-outline">Copy Prompt + Data</button>
     </div>
   </div>
-  <button id="clear-btn">Clear Session Data</button>
+  <button id="clear-btn" style="display:none">Clear Session Data</button>
   <div id="status-message"></div>
   <div id="toast-container" style="position: fixed; top: 0; left: 0; right: 0; z-index: 1000;"></div>
 </body>
