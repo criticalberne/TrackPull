@@ -131,7 +131,7 @@ Plans:
 | 4. Popup UI | v1.x | 2/2 | Complete | Pre-existing |
 | 5. Foundation Modules | 3/3 | Complete    | 2026-03-02 | - |
 | 6. Clipboard Copy and AI Launch | 2/2 | Complete   | 2026-03-02 | - |
-| 7. Options Page and Custom Prompts | v1.3 | 0/3 | Not started | - |
+| 7. Options Page and Custom Prompts | 1/3 | In Progress|  | - |
 
 ---
 *Roadmap created: 2026-03-02*
