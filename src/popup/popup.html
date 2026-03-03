@@ -243,6 +243,27 @@
       outline-offset: -1px;
     }
 
+    .toggle-row {
+      margin: 12px 0;
+    }
+
+    .toggle-row label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--color-text-body);
+      cursor: pointer;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--color-accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
     /* Section dividers */
     .ai-section {
       margin-top: 20px;
@@ -419,6 +440,12 @@
         <option value="Grass">Grass</option>
       </select>
     </div>
+  </div>
+  <div class="toggle-row">
+    <label>
+      <input type="checkbox" id="include-averages-checkbox">
+      Include averages and consistency in export
+    </label>
   </div>
   <div id="export-row" class="export-row" style="display:none;">
     <button id="export-btn">Export CSV</button>

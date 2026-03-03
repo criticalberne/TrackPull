@@ -62,7 +62,7 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
   }
 
   if (message.type === "EXPORT_CSV_REQUEST") {
-    chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA, STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, "unitPreference"], (result) => {
+    chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA, STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, STORAGE_KEYS.INCLUDE_AVERAGES, "unitPreference"], (result) => {
       const data = result[STORAGE_KEYS.TRACKMAN_DATA] as SessionData | undefined;
       if (!data || !data.club_groups || data.club_groups.length === 0) {
         sendResponse({ success: false, error: "No data to export" });
@@ -80,7 +80,10 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
           unitChoice = migrateLegacyPref(result["unitPreference"] as string | undefined);
         }
         const surface = (result[STORAGE_KEYS.HITTING_SURFACE] as "Grass" | "Mat") ?? "Mat";
-        const csvContent = writeCsv(data, true, undefined, unitChoice, surface);
+        const includeAverages = result[STORAGE_KEYS.INCLUDE_AVERAGES] === undefined
+          ? true
+          : Boolean(result[STORAGE_KEYS.INCLUDE_AVERAGES]);
+        const csvContent = writeCsv(data, includeAverages, undefined, unitChoice, surface);
         const filename = `ShotData_${data.date || "unknown"}.csv`;
 
         chrome.downloads.download(

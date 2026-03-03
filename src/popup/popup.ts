@@ -87,7 +87,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Unit dropdowns: read saved values, migrate from legacy key if needed
     const unitResult = await new Promise<Record<string, unknown>>((resolve) => {
-      chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, "unitPreference"], resolve);
+      chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, STORAGE_KEYS.INCLUDE_AVERAGES, "unitPreference"], resolve);
     });
 
     let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT] as string | undefined;
@@ -139,6 +139,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       surfaceSelect.addEventListener("change", () => {
         chrome.storage.local.set({ [STORAGE_KEYS.HITTING_SURFACE]: surfaceSelect.value });
         cachedSurface = surfaceSelect.value as "Grass" | "Mat";
+      });
+    }
+
+    const includeAveragesCheckbox = document.getElementById("include-averages-checkbox") as HTMLInputElement | null;
+    if (includeAveragesCheckbox) {
+      const stored = unitResult[STORAGE_KEYS.INCLUDE_AVERAGES];
+      includeAveragesCheckbox.checked = stored === undefined ? true : Boolean(stored);
+      includeAveragesCheckbox.addEventListener("change", () => {
+        chrome.storage.local.set({ [STORAGE_KEYS.INCLUDE_AVERAGES]: includeAveragesCheckbox.checked });
       });
     }
 
