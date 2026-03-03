@@ -49,7 +49,7 @@
 - [x] **PRMT-01**: Extension ships with 7+ built-in golf analysis prompts bundled as code constants
 - [x] **PRMT-02**: Built-in prompts are organized by skill tier (beginner/intermediate/advanced) in the popup
 - [x] **PRMT-03**: User can create and save custom prompt templates
-- [ ] **PRMT-04**: User can edit and delete their custom prompt templates
+- [x] **PRMT-04**: User can edit and delete their custom prompt templates
 
 ### Preferences
 
@@ -114,7 +114,7 @@ All v1.3 requirements are mapped to phases 5-7.
 | PRMT-02 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
 | PREF-01 | Phase 6 (Clipboard Copy and AI Launch) | Complete |
 | PRMT-03 | Phase 7 (Options Page and Custom Prompts) | Complete |
-| PRMT-04 | Phase 7 (Options Page and Custom Prompts) | Pending |
+| PRMT-04 | Phase 7 (Options Page and Custom Prompts) | Complete |
 | PREF-02 | Phase 7 (Options Page and Custom Prompts) | Complete |
 
 **Coverage:**
