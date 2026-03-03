@@ -50,6 +50,10 @@ npx --yes esbuild src/popup/popup.ts --bundle --outfile="$DIST_DIR/popup.js" --f
 
 echo "Popup script bundled to $DIST_DIR/popup.js"
 
+npx --yes esbuild src/options/options.ts --bundle --outfile="$DIST_DIR/options.js" --format=iife || { echo 'Error: Failed to build options.js' >&2; exit 1; }
+
+echo "Options page script bundled to $DIST_DIR/options.js"
+
 mkdir -p "$DIST_DIR/icons"
 if compgen -G "src/icons/*.png" > /dev/null; then
     cp src/icons/*.png "$DIST_DIR/icons/"
@@ -57,12 +61,15 @@ else
     echo 'Warning: No icon files found in src/icons/' >&2
 fi
 cp src/popup/popup.html "$DIST_DIR/popup.html" || echo 'Warning: popup.html not found' >&2
+cp src/options/options.html "$DIST_DIR/options.html" || echo 'Warning: options.html not found' >&2
 
 echo "Validating HTML references bundled JS..."
-if grep -q '\.ts"' "$DIST_DIR/popup.html"; then
-    echo "Error: popup.html references .ts files, must reference .js bundles only" >&2
+for html_file in popup.html options.html; do
+  if [ -f "$DIST_DIR/$html_file" ] && grep -q '\.ts"' "$DIST_DIR/$html_file"; then
+    echo "Error: $html_file references .ts files, must reference .js bundles only" >&2
     exit 1
-fi
+  fi
+done
 
 echo "HTML validation passed - no TypeScript source references found"
 
