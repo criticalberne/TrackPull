@@ -1,20 +1,20 @@
 # Architecture Research
 
-**Domain:** Chrome Extension — TrackPull v1.5 Polish & Quick Wins
-**Researched:** 2026-03-02
-**Confidence:** HIGH (based on direct source code inspection of all current files + MV3 official documentation)
+**Domain:** Chrome Extension — TrackPull v1.6 Data Intelligence
+**Researched:** 2026-03-03
+**Confidence:** HIGH (based on direct source code inspection of all current files; chrome.storage quota verified against official Chrome API documentation)
 
 ---
 
 ## Scope
 
-This document supersedes the v1.3 ARCHITECTURE.md and covers v1.5 integration only. The existing system architecture is documented fully in the prior version and in `.claude/projects/memory/architecture.md`. This file answers: **which files get modified, which are new, how each feature integrates, and what order to build them.**
+This document supersedes the v1.5 ARCHITECTURE.md and covers the v1.6 milestone only. The existing baseline architecture is stable and fully documented in the prior version. This file answers: **which files get modified, which new files are required, how each of the four new features integrates into the existing system, and what order to build them.**
 
 ---
 
-## Current Architecture Baseline (v1.4)
+## Current Architecture Baseline (v1.5)
 
-Before documenting changes, the system as it stands after v1.4:
+The system after v1.5:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -38,30 +38,31 @@ Before documenting changes, the system as it stands after v1.4:
                  │ chrome.storage.local + chrome.runtime.onMessage
 ┌────────────────▼───────────────────┐   ┌────────────────────────────────┐
 │  popup.ts / popup.html             │   │  options.ts / options.html      │
-│  - shot count display              │   │  - custom prompt CRUD           │
+│  - shot count + stat card          │   │  - custom prompt CRUD           │
 │  - export CSV                      │   │  - built-in prompts (read-only) │
 │  - copy TSV to clipboard           │   │  - default AI service setting   │
-│  - open in AI (ChatGPT/Claude/     │   └────────────────────────────────┘
-│    Gemini already in HTML select)  │
+│  - open in AI                      │   └────────────────────────────────┘
 │  - prompt selector dropdown        │
-│  - AI service selector dropdown    │
+│  - prompt preview (details/summary)│
+│  - AI service selector             │
 │  - hitting surface selector        │
 │  - unit selectors                  │
+│  - include averages checkbox       │
 └────────────────────────────────────┘
 
 Shared modules (no Chrome APIs):
-  shared/constants.ts         — STORAGE_KEYS, METRIC_DISPLAY_NAMES, CSS selectors
-  shared/csv_writer.ts        — SessionData → CSV string; includeAverages flag
-  shared/tsv_writer.ts        — SessionData → TSV string (clipboard)
+  shared/constants.ts          — STORAGE_KEYS, METRIC_DISPLAY_NAMES, CSS selectors
+  shared/csv_writer.ts         — SessionData → CSV string
+  shared/tsv_writer.ts         — SessionData → TSV string (clipboard)
   shared/unit_normalization.ts — conversion math, UnitChoice types
-  shared/prompt_builder.ts    — assemble prompt + data payload
-  shared/prompt_types.ts      — BuiltInPrompt, CustomPrompt types + BUILTIN_PROMPTS catalog
-  shared/custom_prompts.ts    — loadCustomPrompts/saveCustomPrompt/deleteCustomPrompt
-  shared/html_table_parser.ts — DOM table extraction utility
-  models/types.ts             — SessionData, ClubGroup, Shot interfaces
+  shared/prompt_builder.ts     — assembles prompt + data payload
+  shared/prompt_types.ts       — BuiltInPrompt, CustomPrompt, BUILTIN_PROMPTS
+  shared/custom_prompts.ts     — loadCustomPrompts/saveCustomPrompt/deleteCustomPrompt
+  shared/html_table_parser.ts  — DOM table extraction utility
+  models/types.ts              — SessionData, ClubGroup, Shot interfaces
 ```
 
-**Storage layout (v1.4):**
+**Storage layout (v1.5):**
 
 | Key | Store | Type | Set by |
 |-----|-------|------|--------|
@@ -70,650 +71,708 @@ Shared modules (no Chrome APIs):
 | `distanceUnit` | local | `"yards" \| "meters"` | popup |
 | `hittingSurface` | local | `"Grass" \| "Mat"` | popup |
 | `selectedPromptId` | local | string | popup |
+| `includeAverages` | local | boolean | popup |
 | `aiService` | sync | string | popup + options |
 | `customPrompt_{id}` | sync | CustomPrompt | options |
 | `customPromptIds` | sync | string[] | options |
 
 ---
 
-## v1.5 Feature Integration Map
+## v1.6 System Overview
 
-Each feature is analyzed independently: what files it touches, whether any new files are needed, what storage changes (if any) are required, and what the data flow looks like.
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                    trackmangolf.com page                                │
+│  interceptor.ts → bridge.ts                (unchanged)                  │
+└────────────────────────┬───────────────────────────────────────────────┘
+                         │ SAVE_DATA (unchanged)
+┌────────────────────────▼───────────────────────────────────────────────┐
+│  serviceWorker.ts                                                        │
+│  SAVE_DATA: now appends to sessionHistory[] instead of replacing        │
+│             trackmanData; enforces MAX_HISTORY cap                      │
+│  EXPORT_CSV_REQUEST: no change                                          │
+│  NEW: EXPORT_HISTORY_CSV_REQUEST — export a specific past session       │
+│  NEW: GET_HISTORY — return sessionHistory[] to popup                    │
+└────────────────┬───────────────────────────────────────────────────────┘
+                 │
+┌────────────────▼───────────────────────────────────────────────────────┐
+│  popup.ts / popup.html                                                   │
+│  NEW: stat card section (avg carry, avg club speed, shot count by club) │
+│  NEW: session history panel (list past sessions, re-export any)         │
+│  NEW: session comparison view (select two sessions → delta table)       │
+│  MODIFIED: renderPromptSelect() → applies "recommended" badge           │
+└────────────────────────────────────────────────────────────────────────┘
+
+New shared modules:
+  shared/session_stats.ts      — compute stat card values from SessionData (pure)
+  shared/session_comparison.ts — compute delta table from two SessionData (pure)
+  shared/prompt_matcher.ts     — match SessionData metrics → best-fit prompt ID (pure)
+```
 
 ---
 
-### Feature 1: Gemini AI Launch Support
+## Feature Integration Map
 
-**What it does:** Gemini is already in the AI service selector HTML (`<option value="Gemini">Gemini</option>`) and in the `AI_URLS` record in popup.ts. The tab opens correctly. The issue is that Gemini has no native URL parameter support — the tab opens to `gemini.google.com` but no prompt is pre-filled. v1.5 ships Gemini as a working option via the clipboard-first flow, which already works (paste into Gemini after clipboard copy). The isolated host_permissions release means adding `"https://gemini.google.com/*"` to the manifest in a dedicated release so the permission prompt doesn't alarm existing users.
-
-**Confidence in approach:** HIGH — Gemini clipboard-first flow is already the architecture for all AI services. The only manifest change is host_permissions, not a new permission type.
-
-**Files modified:**
-
-| File | Change |
-|------|--------|
-| `src/manifest.json` | Add `"https://gemini.google.com/*"` to `host_permissions` array |
-
-**Files created:** None.
-
-**Storage schema changes:** None.
-
-**Data flow:** No change to data flow. The existing clipboard-first flow (`await navigator.clipboard.writeText(assembled)` → `chrome.tabs.create({ url: AI_URLS[selectedService] })`) works for Gemini. `AI_URLS["Gemini"]` is already `"https://gemini.google.com"` in popup.ts.
-
-**Why host_permissions for Gemini?** Chrome MV3 requires `host_permissions` for a domain before a content script can inject into it. Even though v1.5 uses clipboard-first (not content script injection), adding Gemini to host_permissions is the prerequisite for any future content script approach and signals intent. The isolated release requirement exists because any addition to `host_permissions` triggers a permission prompt for existing users. This must be its own version bump to control the rollout.
-
-**Integration point with existing code:**
-
-```
-popup.ts — AI_URLS record already has "Gemini": "https://gemini.google.com"
-popup.html — Gemini already in <select> options
-manifest.json — ONLY file that changes for this feature
-```
-
-**Build order position:** Can ship first — manifest-only change, rebuild, release as a standalone version bump.
+Each feature is analyzed independently: what files it touches, whether any new files are needed, what storage changes are required, and the data flow.
 
 ---
 
-### Feature 2: Prompt Preview Before Sending to AI
+### Feature 1: Visual Shot Summary (Stat Card)
 
-**What it does:** User selects a prompt and sees a preview of the assembled prompt + data text before clicking "Open in AI." Builds trust that the correct prompt and data will be sent.
+**What it does:** Display a compact stat card in the popup showing the three most useful at-a-glance values for the current session: average carry distance, average club speed, and shot count per club.
 
-**Integration analysis:** The prompt assembly logic already exists in `shared/prompt_builder.ts` as `assemblePrompt()`. The `cachedData`, `cachedUnitChoice`, `cachedSurface`, and `cachedCustomPrompts` are already in popup.ts module scope. Preview needs: (1) a UI element in popup.html to show the assembled text, (2) a trigger in popup.ts to assemble and display it when the prompt or AI service selection changes.
+**Integration analysis:** All required data is already in `cachedData` (the `SessionData` in popup module scope). No new storage reads are needed. The computation is a pure function over `SessionData.club_groups`. The result is rendered as a small table or list in the popup below the shot count display.
 
-**Constraint:** The popup is 320px minimum width. A full-text prompt preview would overflow the popup. The correct UX is a collapsible/expandable preview section or a character-limited preview (first N characters with a "..." indicator). A `<textarea readonly>` element that expands on click is the simplest implementation requiring no new dependencies.
+**New file required:**
 
-**Files modified:**
+`src/shared/session_stats.ts` — pure, no Chrome API dependencies.
 
-| File | Change |
-|------|--------|
-| `src/popup/popup.html` | Add a `<div id="prompt-preview-container">` section below the prompt/service selectors, containing a `<button id="preview-toggle-btn">` and a `<textarea id="prompt-preview" readonly>` (initially hidden) |
-| `src/popup/popup.ts` | Add `updatePromptPreview()` function that calls `assemblePrompt()` and sets the textarea value; call it when `promptSelect` or `aiServiceSelect` changes; wire toggle button; call on initial load |
-
-**Files created:** None.
-
-**Storage schema changes:** None. Preview is ephemeral, generated from cached data in memory, not persisted.
-
-**Data flow:**
-
-```
-User changes prompt select or AI service select
-        ↓
-popup.ts: promptSelect.addEventListener("change", updatePromptPreview)
-        ↓
-updatePromptPreview() {
-  if (!cachedData || !promptSelect) return;
-  const prompt = findPromptById(promptSelect.value);
-  if (!prompt) return;
-  const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
-  const metadata = { date, shotCount, unitLabel, hittingSurface };
-  const assembled = assemblePrompt(prompt, tsvData, metadata);
-  previewTextarea.value = assembled;
+```typescript
+export interface SessionStats {
+  totalShots: number;
+  avgCarry: number | null;        // yards or meters, in stored raw units
+  avgClubSpeed: number | null;    // m/s, in stored raw units
+  clubShotCounts: Array<{ clubName: string; shotCount: number }>;
 }
-        ↓
-User clicks toggle button → show/hide previewTextarea
+
+export function computeSessionStats(session: SessionData): SessionStats;
 ```
 
-**Key constraint — pre-assembled preview can be slow for large sessions:** `writeTsv()` and `assemblePrompt()` are pure synchronous functions. For a 200-shot session, TSV generation takes under 5ms — not a UX concern. Generating on every select change (not on every keystroke) is safe.
-
-**Key constraint — popup height:** Chrome popup windows have a maximum recommended height. A visible `<textarea>` with 10+ lines of preview text may push the popup height to an awkward dimension. Use `max-height: 120px; overflow-y: auto` on the preview textarea to contain it.
-
-**Integration point with existing code:**
-
-```
-popup.ts imports assemblePrompt from shared/prompt_builder.ts — already imported
-popup.ts imports writeTsv from shared/tsv_writer.ts — already imported
-popup.ts has cachedData, cachedUnitChoice, cachedSurface, cachedCustomPrompts — already in scope
-popup.ts has findPromptById() — already exists
-No new imports needed in popup.ts
-```
-
-**Build order position:** Build after dark mode CSS is finalized (dark mode affects preview textarea styling). Otherwise independent of other features.
-
----
-
-### Feature 3: Empty State Guidance
-
-**What it does:** Instead of showing "0 shots" and hiding all export/AI buttons (the current `updateExportButtonVisibility()` behavior), show an actionable message explaining how to get data: "Open a Trackman report in this tab to capture shots."
-
-**Integration analysis:** `updateExportButtonVisibility()` in popup.ts already controls the `#export-row` and `#ai-section` display via `style.display`. `updateShotCount()` already sets the `#shot-count` text. The empty state replaces the current "0 shots" + hidden buttons with a visible guidance message. No data flow changes required.
+The function iterates `club_groups`, averaging the `Carry` and `ClubSpeed` metrics across all shots. Returns `null` for a metric if no shots contain it (some reports omit speed metrics). `clubShotCounts` is ordered by club as they appear in the session.
 
 **Files modified:**
 
 | File | Change |
 |------|--------|
-| `src/popup/popup.html` | Add `<div id="empty-state">` element with guidance text and a link to trackmangolf.com; position it inside `#shot-count-container` or below it; hide by default |
-| `src/popup/popup.ts` | Modify `updateExportButtonVisibility()` to also toggle `#empty-state` visibility (show when no data, hide when data present); update `updateShotCount()` to show "0" count more gracefully or suppress the count in empty state |
+| `src/popup/popup.html` | Add `<div id="stat-card">` section below the shot count container; contains avg carry, avg speed, and per-club shot count rows |
+| `src/popup/popup.ts` | Import `computeSessionStats` from `shared/session_stats.ts`; call after `cachedData` is set; call again on `DATA_UPDATED` message |
 
-**Files created:** None.
+**Files created:**
 
-**Storage schema changes:** None.
+| File | Purpose |
+|------|---------|
+| `src/shared/session_stats.ts` | Pure function: `SessionData → SessionStats` |
+
+**Storage schema changes:** None. All data for stat card is computed from `cachedData` in memory.
 
 **Data flow:**
 
 ```
-popup.ts DOMContentLoaded:
-  cachedData = null → updateExportButtonVisibility(null)
+DOMContentLoaded → storage.local.get([TRACKMAN_DATA])
         ↓
-updateExportButtonVisibility(data):
-  if hasValidData:
-    exportRow.display = "flex"
-    aiSection.display = "block"
-    emptyState.display = "none"
-  else:
-    exportRow.display = "none"
-    aiSection.display = "none"
-    emptyState.display = "block"   ← NEW
+cachedData = SessionData
+        ↓
+computeSessionStats(cachedData) → SessionStats
+        ↓
+render stat card in #stat-card DOM element
+
+DATA_UPDATED event → cachedData updated → re-render stat card
 ```
 
-**Empty state content decision:** The guidance text should be specific and actionable: "Visit a Trackman report at web-dynamic-reports.trackmangolf.com and TrackPull will automatically capture your shots." A direct link is a nice addition but requires knowing if the user is already on the right domain. A static message is sufficient for v1.5.
+**Unit display:** Raw values from the API are in m/s and meters. Apply `normalizeMetricValue` from `unit_normalization.ts` with `cachedUnitChoice` to display in the user's selected units. The stat card respects the same speed and distance unit toggles as the CSV export.
 
-**Integration point with existing code:**
-
-```
-popup.ts: updateExportButtonVisibility() — modify existing function
-popup.html: add #empty-state div in existing layout
-No new imports, no storage changes, no service worker changes
-```
-
-**Build order position:** Can be built first or second — no dependencies on other v1.5 features.
+**Build order position:** Build first. Pure function new file + HTML/CSS only. Zero cross-feature dependencies. Validates the `session_stats.ts` module before it is potentially used by comparison.
 
 ---
 
-### Feature 4: Export Format Toggle (Averages/Consistency Rows)
+### Feature 2: Session History
 
-**What it does:** Add a UI control (checkbox or toggle) in the popup that lets the user choose whether the exported CSV includes or excludes the "Average" and "Consistency" rows per club. The `writeCsv()` function in `csv_writer.ts` already has an `includeAverages` boolean parameter (currently always passed as `true` from `serviceWorker.ts`).
+**What it does:** Every time a Trackman report is captured, the session is added to a persistent history list (up to a configurable cap). Users can browse past sessions from the popup and re-export any of them as CSV.
 
-**Integration analysis:** The `includeAverages` parameter in `writeCsv()` is the right hook — no changes to `csv_writer.ts` are needed. The only changes are: (1) persist the user's toggle preference to storage, (2) pass the preference when the service worker calls `writeCsv()`.
+**Integration analysis:** This is the largest architectural change in v1.6. Currently `SAVE_DATA` overwrites `trackmanData` with the new `SessionData`. For history, the service worker must instead append to a `sessionHistory` array and trim it to `MAX_HISTORY` entries. The popup needs a new panel to list past sessions with date/shot-count labels and "Export CSV" actions for each.
+
+**Storage design:**
+
+The current `trackmanData` key holds the most recently captured session and is used by `EXPORT_CSV_REQUEST`. Both behaviors must remain intact for v1.6 (the current session export must continue to work unchanged).
+
+Two storage strategies were considered:
+
+- **Option A: Single key `sessionHistory[]`** — an array of all past sessions including the current one. `trackmanData` becomes redundant and is removed. Risk: single 10MB key limit per item in chrome.storage.local is not the constraint (total quota is 10MB, not per-key), but large arrays become harder to partially update.
+
+- **Option B: Keep `trackmanData` for current session + new `sessionHistory[]` for historical archive** — `SAVE_DATA` writes to both: updates `trackmanData` (existing behavior, zero regression risk) and appends to `sessionHistory[]`. When the popup browses history, it reads `sessionHistory`. When the user exports the current session, it uses `trackmanData` (existing `EXPORT_CSV_REQUEST` path). When the user exports a past session, a new `EXPORT_HISTORY_CSV_REQUEST` reads the specific entry from `sessionHistory`.
+
+**Recommended: Option B.** It preserves backward compatibility exactly. The existing `EXPORT_CSV_REQUEST` path is unchanged. No regression risk to any v1.5 feature.
+
+**Storage quota:** chrome.storage.local quota is 10MB (raised from 5MB in Chrome 113). A typical session with 50 shots and 28 metrics stringifies to approximately 30-60KB. Capping history at 10 sessions costs at most 600KB — well within the 10MB quota. `MAX_HISTORY = 10` is a safe default. Add a `SESSION_HISTORY` key to `STORAGE_KEYS`.
+
+**New message types in serviceWorker.ts:**
+
+```typescript
+interface GetHistoryRequest {
+  type: "GET_HISTORY";
+}
+
+interface ExportHistoryCsvRequest {
+  type: "EXPORT_HISTORY_CSV_REQUEST";
+  sessionIndex: number;  // index into sessionHistory array (0 = oldest)
+}
+```
 
 **Files modified:**
 
 | File | Change |
 |------|--------|
-| `src/shared/constants.ts` | Add `INCLUDE_AVERAGES: "includeAverages"` to `STORAGE_KEYS` |
-| `src/popup/popup.html` | Add a checkbox `<input type="checkbox" id="include-averages-toggle" checked>` with label "Include averages" in the export section |
-| `src/popup/popup.ts` | Read `includeAverages` from `chrome.storage.local` on load; set checkbox state; wire `change` listener to persist to storage |
-| `src/background/serviceWorker.ts` | In the `EXPORT_CSV_REQUEST` handler, read `STORAGE_KEYS.INCLUDE_AVERAGES` from storage; pass the boolean to `writeCsv()` instead of hardcoded `true` |
+| `src/shared/constants.ts` | Add `SESSION_HISTORY: "sessionHistory"` and `MAX_HISTORY = 10` to `STORAGE_KEYS` |
+| `src/background/serviceWorker.ts` | Modify `SAVE_DATA` handler: after saving `trackmanData`, read `sessionHistory`, append new session, trim to `MAX_HISTORY`, save back; add `GET_HISTORY` handler returning the array; add `EXPORT_HISTORY_CSV_REQUEST` handler reading `sessionHistory[sessionIndex]` and calling `writeCsv()` |
+| `src/popup/popup.html` | Add `<div id="history-panel">` section with a session list; each row shows date + shot count + "Export" button |
+| `src/popup/popup.ts` | On DOMContentLoaded: send `GET_HISTORY` to service worker, render history list; wire each row's "Export" button to send `EXPORT_HISTORY_CSV_REQUEST` with the index |
 
-**Files created:** None.
+**Files created:** None (all changes are to existing files).
 
 **Storage schema changes:**
 
 | Key | Store | Type | Default | Set by |
 |-----|-------|------|---------|--------|
-| `includeAverages` | local | boolean | `true` | popup |
-
-The default is `true` so existing users see no behavior change on upgrade.
+| `sessionHistory` | local | `SessionData[]` | `[]` | serviceWorker |
 
 **Data flow:**
 
 ```
-User toggles "Include averages" checkbox in popup
+Interceptor captures new session
         ↓
-popup.ts: chrome.storage.local.set({ includeAverages: checkbox.checked })
+SAVE_DATA → serviceWorker
         ↓
-User clicks "Export CSV"
+chrome.storage.local.get(["trackmanData", "sessionHistory"])
         ↓
-popup.ts → chrome.runtime.sendMessage({ type: "EXPORT_CSV_REQUEST" })
+Set trackmanData = newSession  (existing behavior preserved)
+Append newSession to sessionHistory[]
+Trim sessionHistory to MAX_HISTORY (remove oldest if over cap)
+chrome.storage.local.set({ trackmanData, sessionHistory })
         ↓
-serviceWorker.ts: reads includeAverages from storage (default true if absent)
+DATA_UPDATED emitted → popup updates current session display
+
+Popup opens → sends GET_HISTORY
         ↓
-writeCsv(data, includeAverages, undefined, unitChoice, surface)
+serviceWorker returns sessionHistory[]
         ↓
-CSV written with or without Average/Consistency rows
+popup renders history panel (date, shot count, Export button per row)
+
+User clicks Export on history row
+        ↓
+EXPORT_HISTORY_CSV_REQUEST { sessionIndex: N }
+        ↓
+serviceWorker reads sessionHistory[N] + preferences from storage
+        ↓
+writeCsv(sessionHistory[N], ...) → chrome.downloads.download()
 ```
 
-**Key implementation note:** The `includeAverages` flag also controls whether consistency rows appear (see `csv_writer.ts` lines 134 and 160 — both `includeAverages && ...`). This is the correct behavior: the toggle covers both Average and Consistency rows as a unit. No changes to csv_writer.ts logic are needed.
+**Key constraint — deduplication:** If the user navigates between pages of the same Trackman report (which triggers multiple `SAVE_DATA` messages with the same `report_id`), each navigation adds a duplicate entry. Solution: before appending to `sessionHistory`, check if the last entry has the same `report_id`. If yes, replace it (same session updated with more metrics) rather than appending. This mirrors the existing `mergeSessionData` pattern from `models/types.ts`.
 
-**Integration point with existing code:**
-
-```
-serviceWorker.ts: EXPORT_CSV_REQUEST handler at line 65
-  — already reads: TRACKMAN_DATA, SPEED_UNIT, DISTANCE_UNIT, HITTING_SURFACE, "unitPreference"
-  — add read of: STORAGE_KEYS.INCLUDE_AVERAGES
-  — change writeCsv call at line 83 from writeCsv(data, true, ...) to writeCsv(data, includeAverages, ...)
-
-popup.ts: DOMContentLoaded already reads from chrome.storage.local
-  — add includeAverages to the storage.local.get call
-  — wire checkbox change listener (same pattern as surface, speed, distance selectors)
-
-csv_writer.ts: no changes needed — includeAverages parameter already exists
-```
-
-**Build order position:** Service worker changes and popup changes are independent of other v1.5 features. Can build at any point.
+**Build order position:** Build second, after stat card. The history list's "Export" button follows the same pattern as the existing export button. The `EXPORT_HISTORY_CSV_REQUEST` handler in serviceWorker.ts is straightforward — it shares all the unit/surface preference reading code with the existing `EXPORT_CSV_REQUEST` handler.
 
 ---
 
-### Feature 5: Keyboard Shortcut (Cmd+Shift+T)
+### Feature 3: Session Comparison
 
-**What it does:** Add a keyboard shortcut `Cmd+Shift+T` (Mac) / `Ctrl+Shift+T` (Windows/Linux) that opens the TrackPull popup from any tab, allowing users to launch the popup without clicking the toolbar icon.
+**What it does:** User selects two sessions from the history list and the popup shows a delta table comparing club averages: for each club present in both sessions, show the change in avg carry, avg club speed, and avg spin rate (most meaningful comparison metrics).
 
-**Integration analysis:** Chrome MV3 provides `commands` in `manifest.json` to declare keyboard shortcuts. The `_execute_action` reserved command name triggers the extension's action (popup open) without any code. This requires zero TypeScript changes.
+**Integration analysis:** This is a pure computation over two `SessionData` objects retrieved from `sessionHistory`. No new Chrome API usage. The comparison UI lives in the popup (either inline in the history panel or as a separate expandable section). A "Compare" button in the history panel lets users select two sessions. The comparison result is rendered as a table.
 
-**Constraint — `Ctrl+Shift+T` conflict on Windows:** `Ctrl+Shift+T` is the "reopen closed tab" shortcut in Chrome on Windows/Linux. Chrome will not let extensions override browser reserved shortcuts. The correct approach is to use a different modifier combo on Windows or just use `Ctrl+Shift+Y` (or similar). Alternatively, use `Ctrl+Shift+T` on Mac (not a reserved shortcut there) and a different combo on Windows. Chrome's command system supports platform-specific bindings.
+**New file required:**
 
-**Safer alternative:** Use `Alt+T` which is not reserved on any platform. The PROJECT.md specifies `Cmd+Shift+T` — use that as the Mac binding and `Ctrl+Shift+T` as the Windows/Linux fallback (Chrome will ignore it if reserved; users can manually reassign in chrome://extensions/shortcuts).
+`src/shared/session_comparison.ts` — pure, no Chrome API dependencies.
+
+```typescript
+export interface ClubDelta {
+  clubName: string;
+  avgCarryA: number | null;
+  avgCarryB: number | null;
+  avgCarryDelta: number | null;      // B - A (positive = improved carry)
+  avgClubSpeedA: number | null;
+  avgClubSpeedB: number | null;
+  avgClubSpeedDelta: number | null;
+  avgSpinRateA: number | null;
+  avgSpinRateB: number | null;
+  avgSpinRateDelta: number | null;
+}
+
+export interface ComparisonResult {
+  sessionADate: string;
+  sessionBDate: string;
+  clubDeltas: ClubDelta[];           // clubs present in at least one session
+}
+
+export function compareSessions(
+  sessionA: SessionData,
+  sessionB: SessionData
+): ComparisonResult;
+```
+
+The function computes per-club averages for each metric by iterating shots, then diffs the two sessions for each club. Clubs present in only one session have `null` for all values from the missing session.
 
 **Files modified:**
 
 | File | Change |
 |------|--------|
-| `src/manifest.json` | Add `"commands"` block with `_execute_action` command and suggested key bindings |
+| `src/popup/popup.html` | Add comparison selection UI (two `<select>` dropdowns populated with history entries by date+index, or checkboxes on history rows) and a `<div id="comparison-result">` table container |
+| `src/popup/popup.ts` | Import `compareSessions` from `shared/session_comparison.ts`; wire selection UI → call `compareSessions(sessionA, sessionB)` → render delta table in `#comparison-result`; apply unit normalization using `cachedUnitChoice` for display |
 
-**Files created:** None.
+**Files created:**
 
-**Storage schema changes:** None.
+| File | Purpose |
+|------|---------|
+| `src/shared/session_comparison.ts` | Pure function: `(SessionData, SessionData) → ComparisonResult` |
 
-**TypeScript changes:** None.
+**Storage schema changes:** None. Comparison is computed in memory from `sessionHistory` already loaded by the history panel.
 
-**Manifest change:**
-
-```json
-"commands": {
-  "_execute_action": {
-    "suggested_key": {
-      "default": "Ctrl+Shift+T",
-      "mac": "Command+Shift+T"
-    },
-    "description": "Open TrackPull popup"
-  }
-}
-```
-
-**Key caveat:** These are "suggested" keys. Chrome may reject them if they conflict with existing browser shortcuts on the user's platform. Users can always reassign shortcuts via `chrome://extensions/shortcuts`. The `_execute_action` command name is special — it triggers the extension action (popup) without any `chrome.commands.onCommand` listener needed.
-
-**Integration point with existing code:**
+**Data flow:**
 
 ```
-manifest.json — only file that changes
-No popup.ts changes, no serviceWorker.ts changes
+User selects two sessions in history panel
+        ↓
+popup.ts: look up sessionHistory[indexA] and sessionHistory[indexB]
+          (already in memory from GET_HISTORY response)
+        ↓
+compareSessions(sessionA, sessionB) → ComparisonResult
+        ↓
+render delta table in #comparison-result
+Apply normalizeMetricValue() to display in user's unit choice
 ```
 
-**Build order position:** Manifest-only. Can be combined with the Gemini host_permissions manifest change in the same build.
+**UX design constraint:** The comparison UI must not require a page reload or new storage read. Both sessions are in the `sessionHistory[]` array already fetched at popup open. The comparison is purely in-memory. This keeps the popup responsive.
+
+**Delta sign convention:** Delta = sessionB − sessionA. A positive carry delta means more distance in the newer session. Display positive deltas with a "+" prefix and a green color token; negative with a "−" prefix and a red color token. Use CSS classes (`delta-positive`, `delta-negative`) rather than inline style colors so dark mode overrides apply.
+
+**Build order position:** Build third, after session history (depends on the `sessionHistory[]` being available in popup memory).
 
 ---
 
-### Feature 6: Dark Mode (Match System Theme)
+### Feature 4: Smart Prompt Suggestions
 
-**What it does:** The popup and options page automatically switch to a dark color scheme when the user's OS is set to dark mode. Uses CSS `prefers-color-scheme: dark` media query.
+**What it does:** When session data is loaded, automatically detect which built-in prompt is most relevant based on the metrics present. Apply a "Recommended" badge to that prompt's `<option>` in the dropdown. This is visual only — the user's selection is not changed.
 
-**Integration analysis:** All CSS currently lives inline in `popup.html` and `options.html` `<style>` blocks. There is also a `src/shared/styles.css` file that is not referenced by either HTML file (it appears to be an artifact). The v1.5 dark mode implementation adds `@media (prefers-color-scheme: dark)` blocks to the inline styles in both HTML files. No JavaScript changes are needed — CSS handles the theme switching automatically.
+**Integration analysis:** Smart matching is a pure function of the current `SessionData`. It needs to inspect which metrics are present in the session (`session.metric_names`) and apply heuristic rules against the built-in prompt catalog (`BUILTIN_PROMPTS` from `prompt_types.ts`). The popup's `renderPromptSelect()` function builds the `<option>` elements — this is where the badge is applied.
+
+**New file required:**
+
+`src/shared/prompt_matcher.ts` — pure, no Chrome API dependencies.
+
+```typescript
+export interface MatchResult {
+  promptId: string;
+  reason: string;   // human-readable rationale (for debug; not displayed in UI)
+  confidence: "high" | "medium";
+}
+
+export function matchPromptToSession(
+  session: SessionData,
+  prompts: readonly BuiltInPrompt[]
+): MatchResult | null;
+```
+
+**Matching heuristic rules (in priority order):**
+
+1. If session has `FaceAngle`, `ClubPath`, `FaceToPath` AND 3+ clubs: → `shot-shape-intermediate` ("Shot Shape & Dispersion") — presence of shape data + multiple clubs screams "compare my shot pattern"
+2. If session has `Carry` AND 3+ distinct clubs: → `distance-gapping-beginner` ("Distance Gapping Report") — multiple clubs + carry data = classic gap analysis session
+3. If session has `LaunchAngle` AND `SpinRate` AND `SpinAxis`: → `launch-spin-intermediate` ("Launch & Spin Optimization") — launch/spin data explicitly captured
+4. If session has `AttackAngle` AND `DynamicLoft` AND `ClubPath`: → `club-delivery-advanced` ("Club Delivery Analysis") — advanced delivery metrics present
+5. If session has any metrics (fallback): → `quick-summary-beginner` ("Quick Session Summary") — safe default for any session with data
+
+Return `null` if session is empty (no club_groups or no shots). The popup ignores a null result and renders the prompt dropdown without any badge.
 
 **Files modified:**
 
 | File | Change |
 |------|--------|
-| `src/popup/popup.html` | Add `@media (prefers-color-scheme: dark) { ... }` block in the existing `<style>` tag |
-| `src/options/options.html` | Add `@media (prefers-color-scheme: dark) { ... }` block in the existing `<style>` tag |
+| `src/popup/popup.ts` | Import `matchPromptToSession` from `shared/prompt_matcher.ts`; call after `cachedData` is set; pass result to `renderPromptSelect()`; in `renderPromptSelect()`, check if a prompt's ID matches the recommended ID and append `" ★ Recommended"` (or equivalent label) to that `<option>`'s `textContent`; clear the badge when cachedData is null |
 
-**Files created:** None (the existing `src/shared/styles.css` is not currently used and should remain untouched).
+**Files created:**
 
-**Storage schema changes:** None. System theme detection is CSS-native.
+| File | Purpose |
+|------|---------|
+| `src/prompt_matcher.ts` → `src/shared/prompt_matcher.ts` | Pure function: `(SessionData, BuiltInPrompt[]) → MatchResult \| null` |
 
-**TypeScript changes:** None.
+**Storage schema changes:** None. Match result is computed in memory on every `cachedData` update. Not persisted.
 
-**Dark mode color mapping:**
+**Data flow:**
 
-The current light mode palette uses these semantic values that need dark counterparts:
+```
+cachedData set (DOMContentLoaded or DATA_UPDATED)
+        ↓
+matchPromptToSession(cachedData, BUILTIN_PROMPTS) → MatchResult | null
+        ↓
+renderPromptSelect(select, recommendedId)
+  - for each option: if option.value === recommendedId → append " ★ Recommended" suffix
+        ↓
+User sees badge on the recommended prompt in dropdown
+```
 
-| Token | Light value | Dark value |
-|-------|-------------|------------|
-| Body background | `#ffffff` | `#1a1a1a` |
-| Body text | `#333333` | `#e0e0e0` |
-| Secondary text | `#666666` | `#9e9e9e` |
-| H1 color | `#1a1a1a` | `#f0f0f0` |
-| Accent (borders, selects) | `#1976d2` | `#64b5f6` |
-| Card/panel background | `#f5f5f5` | `#2c2c2c` |
-| Input background | `#ffffff` | `#2c2c2c` |
-| Input border | `#ccc` | `#555` |
-| Shot count number | `#1976d2` | `#64b5f6` |
-| Icon button hover bg | `#f0f0f0` | `#333333` |
-| Section divider | `#e0e0e0` | `#3a3a3a` |
-| Built-in prompt row bg | `#f9f9f9` | `#2a2a2a` |
-| Success toast | `#388e3c` (unchanged) | `#388e3c` |
-| Error toast | `#d32f2f` (unchanged) | `#d32f2f` |
+**Key constraint — `<option>` text in optgroup:** Chrome (and all browsers) allow `textContent` modification of `<option>` elements in grouped `<select>` elements. The existing `renderPromptSelect()` sets `opt.textContent = p.name` for each built-in prompt. The badge is appended by checking the recommended ID during the same loop:
 
-**Example media query structure for popup.html:**
-
-```css
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #1a1a1a;
-    color: #e0e0e0;
+```typescript
+async function renderPromptSelect(
+  select: HTMLSelectElement,
+  recommendedId?: string
+): Promise<void> {
+  // ... existing group/option creation ...
+  opt.textContent = p.name;
+  if (recommendedId && opt.value === recommendedId) {
+    opt.textContent = `${p.name} ★`;  // compact; tooltip explains via title attr
+    opt.title = "Recommended for this session";
   }
-  h1, h2 {
-    color: #f0f0f0;
-  }
-  .shot-count-container {
-    background-color: #2c2c2c;
-  }
-  .shot-count {
-    color: #64b5f6;
-  }
-  .unit-selectors select,
-  .ai-group select {
-    background: #2c2c2c;
-    color: #e0e0e0;
-    border-color: #64b5f6;
-  }
-  .icon-btn {
-    color: #9e9e9e;
-  }
-  .icon-btn:hover {
-    background-color: #333;
-    color: #64b5f6;
-  }
-  .ai-section {
-    border-top-color: #3a3a3a;
-  }
-  /* ... additional rules */
 }
 ```
 
-**Constraint — popup.html inline styles:** Because both HTML files use inline `<style>` blocks (not external CSS files), the `@media` blocks must be added inside those same `<style>` blocks. This is straightforward but means maintaining color tokens in two separate files. For v1.5 this is acceptable — extracting to a shared CSS file would require build script changes and is out of scope.
+The `★` character is universally supported. Avoid emoji (may render inconsistently across OSes). Do not auto-select the recommended prompt — user selection is preserved.
 
-**Integration point with existing code:**
+**Key constraint — recommended badge persists across prompt re-renders:** The badge is applied during `renderPromptSelect()`, which is called once on DOMContentLoaded. If `cachedData` updates later (via `DATA_UPDATED`), `renderPromptSelect()` is not called again by the current popup.ts code. Solution: call `renderPromptSelect()` again after a `DATA_UPDATED` event when `matchPromptToSession` returns a different recommended ID than the current one. Or, simpler: expose a `updateRecommendedBadge(select, recommendedId)` function that walks existing options and sets/clears the `★` suffix without rebuilding the DOM. The latter avoids resetting the user's current selection.
 
-```
-popup.html: <style> block — append dark mode media query
-options.html: <style> block — append dark mode media query
-No TypeScript changes, no storage changes, no manifest changes
-```
-
-**Build order position:** Build dark mode FIRST among the v1.5 UI changes. Reason: prompt preview, empty state, and export toggle all add new HTML elements. If dark mode CSS is written first, the new elements can be included in the same media query block during those features' implementation, avoiding a second pass through the CSS.
+**Build order position:** Build fourth (last). Depends only on `cachedData` being populated (already true in v1.5). The `prompt_matcher.ts` module is fully independent. The popup.ts change is minimal.
 
 ---
 
-## File-Level Change Summary
+## New Files Created in v1.6
+
+| File | Type | Purpose | Pure? |
+|------|------|---------|-------|
+| `src/shared/session_stats.ts` | New | `SessionData → SessionStats` stat card values | Yes |
+| `src/shared/session_comparison.ts` | New | `(SessionData, SessionData) → ComparisonResult` delta table | Yes |
+| `src/shared/prompt_matcher.ts` | New | `(SessionData, BuiltInPrompt[]) → MatchResult \| null` | Yes |
+
+All three new modules are pure functions. They have no `chrome.*` API calls. They can be tested with vitest without any mock setup.
+
+---
+
+## Modified Files in v1.6
 
 | File | Change Type | Features | Notes |
 |------|-------------|----------|-------|
-| `src/manifest.json` | Modified | Gemini (host_permissions), Keyboard shortcut (commands) | Two independent additions; can be one commit or two |
-| `src/shared/constants.ts` | Modified | Export toggle | Add `INCLUDE_AVERAGES` to STORAGE_KEYS |
-| `src/background/serviceWorker.ts` | Modified | Export toggle | Read `includeAverages` from storage; pass to writeCsv() |
-| `src/popup/popup.html` | Modified | Dark mode, Prompt preview, Empty state, Export toggle | Four features, all inline style/HTML additions |
-| `src/popup/popup.ts` | Modified | Prompt preview, Empty state, Export toggle | Three features; no new imports needed |
-| `src/options/options.html` | Modified | Dark mode | CSS media query only |
-| `src/shared/csv_writer.ts` | None | — | `includeAverages` param already exists |
-| `src/shared/prompt_builder.ts` | None | — | `assemblePrompt()` already used for preview |
-| `src/shared/tsv_writer.ts` | None | — | Already used; no changes needed |
-| `src/content/interceptor.ts` | None | — | Unchanged |
-| `src/content/bridge.ts` | None | — | Unchanged |
-| `src/background/serviceWorker.ts` | None (except export toggle) | — | Only EXPORT_CSV_REQUEST handler changes |
+| `src/shared/constants.ts` | Modified | Session history | Add `SESSION_HISTORY` key + `MAX_HISTORY` constant |
+| `src/background/serviceWorker.ts` | Modified | Session history | Append-to-history in SAVE_DATA; new GET_HISTORY handler; new EXPORT_HISTORY_CSV_REQUEST handler |
+| `src/popup/popup.html` | Modified | All four features | Stat card section, history panel, comparison section, prompt badge (CSS only for badge) |
+| `src/popup/popup.ts` | Modified | All four features | Stat card render, history list render, comparison trigger, prompt badge application |
+| `src/models/types.ts` | Modified | Session history | Add `savedAt` timestamp field to `SessionData` (optional, for display) |
 
-**New files created:** None. All six v1.5 features integrate into existing files.
-
----
-
-## Storage Schema Changes (v1.5 delta)
-
-Only one new storage key is added in v1.5:
-
-| Key | Store | Type | Default | Added by |
-|-----|-------|------|---------|----------|
-| `includeAverages` | local | boolean | `true` | Export toggle feature |
-
-No keys are removed or renamed. The default of `true` ensures zero behavior change for existing users on upgrade.
+**Unchanged files:**
+- `src/content/interceptor.ts` — data capture pipeline is unrelated to any v1.6 feature
+- `src/content/bridge.ts` — relay is unrelated to any v1.6 feature
+- `src/shared/csv_writer.ts` — export logic unchanged; reused for history export
+- `src/shared/tsv_writer.ts` — unchanged
+- `src/shared/unit_normalization.ts` — unchanged; stat card and comparison display reuse it
+- `src/shared/prompt_builder.ts` — unchanged
+- `src/shared/prompt_types.ts` — unchanged; prompt_matcher.ts imports from it
+- `src/shared/custom_prompts.ts` — unchanged
+- `src/options/options.ts` / `options.html` — unchanged
+- `src/shared/html_table_parser.ts` — unchanged
 
 ---
 
-## Suggested Build Order
+## Storage Schema Changes (v1.6 delta)
 
-The build order is driven by two constraints: (1) dark mode CSS should exist before UI features add new elements, so those elements can get dark mode styles in one pass; (2) manifest changes (Gemini + keyboard shortcut) are independent and can ship in isolation.
+| Key | Store | Type | Default | Added by | Notes |
+|-----|-------|------|---------|----------|-------|
+| `sessionHistory` | local | `SessionData[]` | `[]` | serviceWorker | Max 10 entries; oldest trimmed on overflow |
 
-```
-Step 1 — Manifest changes (independent, isolated release)
-  ├─ manifest.json: add host_permissions for Gemini
-  └─ manifest.json: add commands block for keyboard shortcut
-  → Build + verify + release as v1.5.0-gemini (or bundle both in one manifest PR)
-  Note: Keyboard shortcut and Gemini host_permissions in same manifest edit is fine
-        since they're non-conflicting additions.
+`trackmanData` is retained unchanged — it still holds the most recently captured session. `EXPORT_CSV_REQUEST` continues to use it. Zero regression.
 
-Step 2 — Dark mode CSS (foundation for UI features)
-  ├─ popup.html: add @media (prefers-color-scheme: dark) block
-  └─ options.html: add @media (prefers-color-scheme: dark) block
-  → Build + verify with system dark mode toggle
-  Rationale: Do dark mode before adding HTML elements so new elements get dark
-             styles in the same session, not as a retrofit.
-
-Step 3 — Empty state guidance (popup.html + popup.ts only)
-  ├─ popup.html: add #empty-state div with guidance text
-  └─ popup.ts: modify updateExportButtonVisibility() to toggle empty state
-  → Simple, self-contained; no storage changes.
-
-Step 4 — Export format toggle (constants.ts + popup.ts + popup.html + serviceWorker.ts)
-  ├─ constants.ts: add INCLUDE_AVERAGES storage key
-  ├─ popup.html: add checkbox in export section; add to dark mode query if Step 2 complete
-  ├─ popup.ts: read/persist includeAverages on load; wire checkbox listener
-  └─ serviceWorker.ts: read includeAverages from storage; pass to writeCsv()
-  → Cross-file change; serviceWorker and popup must be rebuilt together.
-
-Step 5 — Prompt preview (popup.html + popup.ts only)
-  ├─ popup.html: add preview toggle button + textarea; add to dark mode query
-  └─ popup.ts: add updatePromptPreview() function; wire to prompt/service change events
-  → No new imports; uses existing assemblePrompt() and writeTsv() already in scope.
-  Note: Build after export toggle so popup.ts changes are consolidated.
-
-Order rationale:
-- Manifest first (Gemini is already 99% wired; manifest is the only blocker)
-- Dark mode second (CSS foundation before HTML elements proliferate)
-- Empty state third (zero dependencies; quick win)
-- Export toggle fourth (requires storage key; cross-file coordination)
-- Prompt preview fifth (no dependencies; goes last to consolidate popup.ts edits)
-```
+**Estimated storage cost:** One session (50 shots × 28 metrics) ≈ 40–60KB stringified. 10 sessions ≈ 400–600KB. chrome.storage.local quota is 10MB. Safe margin.
 
 ---
 
-## Component Boundaries for v1.5
+## Component Boundaries for v1.6
 
 ### What stays unchanged
 
-- `interceptor.ts` — zero changes; data capture is unrelated to any v1.5 feature
-- `bridge.ts` — zero changes; relay is unrelated to any v1.5 feature
-- `csv_writer.ts` — zero changes; the `includeAverages` parameter already exists
-- `tsv_writer.ts` — zero changes; clipboard copy flow is already correct
-- `prompt_builder.ts` — zero changes; `assemblePrompt()` is already used for prompt preview
-- `prompt_types.ts` — zero changes; built-in prompts unchanged
-- `custom_prompts.ts` — zero changes; custom prompt storage unchanged
-- `unit_normalization.ts` — zero changes
-- `html_table_parser.ts` — zero changes
-- `types.ts` — zero changes
+- `interceptor.ts`, `bridge.ts` — capture pipeline unaffected
+- `csv_writer.ts`, `tsv_writer.ts` — reused without modification
+- `unit_normalization.ts`, `prompt_builder.ts`, `prompt_types.ts`, `custom_prompts.ts` — unchanged; new modules import from these
+- `options.ts`, `options.html` — no options page changes in v1.6
 
 ### What changes
 
 | Component | Why it changes | Risk |
 |-----------|---------------|------|
-| `manifest.json` | Gemini host_permissions + keyboard commands | LOW — additive; no permissions removed |
-| `constants.ts` | New storage key `includeAverages` | LOW — purely additive |
-| `serviceWorker.ts` | Export toggle: read one extra storage key | LOW — single parameter change to existing writeCsv() call |
-| `popup.html` | Dark mode CSS + empty state + export toggle checkbox + prompt preview UI | MEDIUM — multiple additions to one file; order matters for readability |
-| `popup.ts` | Empty state toggle + export toggle persistence + prompt preview assembly | MEDIUM — modifies existing functions and adds new ones |
-| `options.html` | Dark mode CSS only | LOW — CSS-only addition |
+| `constants.ts` | New storage key + cap constant | LOW — purely additive |
+| `serviceWorker.ts` | History append logic + two new message handlers | MEDIUM — modify existing SAVE_DATA handler; must not break current session export |
+| `models/types.ts` | Add optional `savedAt?: string` to SessionData | LOW — optional field; zero caller breakage |
+| `popup.html` | Four new UI sections + CSS for badges and delta colors | MEDIUM — multiple additions; popup height grows |
+| `popup.ts` | Stat card render + history list + comparison trigger + prompt badge | HIGH — most code change in one file; careful function boundaries needed |
 
 ---
 
-## Integration Patterns
+## Data Flow Summary for v1.6
 
-### Pattern: Extend `updateExportButtonVisibility()` for Empty State
+### Stat card flow
 
-The function already controls `#export-row` and `#ai-section` display. The empty state flag adds a third element (`#empty-state`) to the same conditional:
-
-```typescript
-function updateExportButtonVisibility(data: unknown): void {
-  const exportRow = document.getElementById("export-row");
-  const aiSection = document.getElementById("ai-section");
-  const emptyState = document.getElementById("empty-state");  // NEW
-
-  const hasValidData = data && typeof data === "object" &&
-    (data as Record<string, unknown>)["club_groups"];
-
-  if (exportRow) exportRow.style.display = hasValidData ? "flex" : "none";
-  if (aiSection) aiSection.style.display = hasValidData ? "block" : "none";
-  if (emptyState) emptyState.style.display = hasValidData ? "none" : "block";  // NEW
-}
+```
+DOMContentLoaded → cachedData = SessionData
+        ↓
+computeSessionStats(cachedData) → { avgCarry, avgClubSpeed, clubShotCounts }
+        ↓
+Apply normalizeMetricValue() with cachedUnitChoice for display
+        ↓
+Render #stat-card (updates on DATA_UPDATED)
 ```
 
-### Pattern: Export Toggle Follows Existing Preference Storage
+### Session history — save flow
 
-The export toggle follows exactly the same pattern as `hittingSurface`: read on load, apply to UI element, wire change listener to persist.
-
-```typescript
-// In DOMContentLoaded — same pattern as hitting surface
-const includeAveragesResult = await new Promise<Record<string, unknown>>((resolve) => {
-  chrome.storage.local.get([STORAGE_KEYS.INCLUDE_AVERAGES], resolve);
-});
-const includeAveragesToggle = document.getElementById("include-averages-toggle") as HTMLInputElement | null;
-if (includeAveragesToggle) {
-  // Default true if not set (preserve existing behavior)
-  const savedIncludeAverages = includeAveragesResult[STORAGE_KEYS.INCLUDE_AVERAGES];
-  includeAveragesToggle.checked = savedIncludeAverages !== false;
-  includeAveragesToggle.addEventListener("change", () => {
-    chrome.storage.local.set({ [STORAGE_KEYS.INCLUDE_AVERAGES]: includeAveragesToggle.checked });
-  });
-}
+```
+Interceptor captures new SessionData
+        ↓
+SAVE_DATA message → serviceWorker
+        ↓
+storage.local.get(["trackmanData", "sessionHistory"])
+        ↓
+Check: sessionHistory.last.report_id === newSession.report_id?
+  YES → replace last entry (same report, new page of metrics)
+  NO  → append newSession; trim to MAX_HISTORY
+        ↓
+storage.local.set({ trackmanData: newSession, sessionHistory: updated })
+        ↓
+DATA_UPDATED emitted (existing behavior)
 ```
 
-### Pattern: Prompt Preview Uses Cached Data (No New Storage Reads)
+### Session history — browse + export flow
 
-The preview assembles from already-cached module-level variables. No new `chrome.storage` reads are needed:
-
-```typescript
-function updatePromptPreview(): void {
-  const previewTextarea = document.getElementById("prompt-preview") as HTMLTextAreaElement | null;
-  if (!previewTextarea || !cachedData || !promptSelect) return;
-
-  const prompt = findPromptById(promptSelect.value);
-  if (!prompt) return;
-
-  const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
-  const metadata = {
-    date: cachedData.date,
-    shotCount: countSessionShots(cachedData),
-    unitLabel: buildUnitLabel(cachedUnitChoice),
-    hittingSurface: cachedSurface,
-  };
-  previewTextarea.value = assemblePrompt(prompt, tsvData, metadata);
-}
+```
+popup opens → sends GET_HISTORY
+        ↓
+serviceWorker returns sessionHistory[]
+        ↓
+popup renders history list: date, shot count, "Export" button per row
+        ↓
+User clicks Export on row N
+        ↓
+EXPORT_HISTORY_CSV_REQUEST { sessionIndex: N }
+        ↓
+serviceWorker: reads sessionHistory[N], reads unit/surface prefs from storage
+        ↓
+writeCsv(sessionHistory[N], includeAverages, undefined, unitChoice, surface)
+        ↓
+chrome.downloads.download()
 ```
 
-Wire to both `promptSelect` and `aiServiceSelect` change events:
-```typescript
-promptSelect.addEventListener("change", () => {
-  chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
-  updatePromptPreview();  // add this line
-});
+### Session comparison flow
+
+```
+User picks two sessions from history panel (A and B)
+        ↓
+popup.ts: retrieve sessionHistory[indexA], sessionHistory[indexB]
+          (from in-memory array — no new storage read)
+        ↓
+compareSessions(sessionA, sessionB) → ComparisonResult
+        ↓
+Apply normalizeMetricValue() with cachedUnitChoice
+        ↓
+Render #comparison-result delta table
+  - positive delta → .delta-positive CSS class (green token)
+  - negative delta → .delta-negative CSS class (red token)
+```
+
+### Smart prompt matching flow
+
+```
+cachedData set (DOMContentLoaded or DATA_UPDATED)
+        ↓
+matchPromptToSession(cachedData, BUILTIN_PROMPTS) → MatchResult | null
+        ↓
+If match: updateRecommendedBadge(promptSelect, match.promptId)
+          — walks existing <option> elements, appends ★ suffix to match
+          — clears ★ suffix from all others
+If null: clear all ★ suffixes
+        ↓
+User sees badge on recommended prompt; selection is NOT changed automatically
 ```
 
 ---
 
-## Data Flow Summary for v1.5
+## Architectural Patterns for v1.6
 
-### Gemini launch flow (same as ChatGPT/Claude)
-```
-User selects "Gemini" + clicks "Open in AI"
-  → await navigator.clipboard.writeText(assembled)
-  → chrome.tabs.create({ url: "https://gemini.google.com" })
-  → showToast("Prompt + data copied — paste into Gemini", "success")
-```
+### Pattern 1: Pure Module per Feature (session_stats, session_comparison, prompt_matcher)
 
-### Empty state flow
-```
-popup opens, cachedData = null
-  → updateExportButtonVisibility(null)
-  → exportRow hidden, aiSection hidden, emptyState shown
-User opens Trackman report, data captured
-  → DATA_UPDATED message
-  → cachedData = SessionData
-  → updateExportButtonVisibility(data)
-  → exportRow shown, aiSection shown, emptyState hidden
-```
+**What:** Each new computation lives in its own pure TypeScript module under `shared/`. No Chrome API calls. No side effects. Single exported function per module.
 
-### Export toggle flow
-```
-popup loads
-  → chrome.storage.local.get([INCLUDE_AVERAGES])
-  → checkbox.checked = stored value (default true)
-User unchecks "Include averages"
-  → chrome.storage.local.set({ includeAverages: false })
-User clicks Export CSV
-  → serviceWorker reads includeAverages from storage
-  → writeCsv(data, false, undefined, unitChoice, surface)
-  → CSV contains only Shot rows, no Average/Consistency rows
+**When to use:** Any computation that maps data to data without needing storage or messaging.
+
+**Trade-offs:** Adds three new files. Each file is independently testable with zero mocking. Keeps `popup.ts` from becoming a computation monolith.
+
+**Example:**
+
+```typescript
+// src/shared/session_stats.ts
+export function computeSessionStats(session: SessionData): SessionStats {
+  const totalShots = session.club_groups.reduce(
+    (n, g) => n + g.shots.length, 0
+  );
+  // ... aggregate Carry and ClubSpeed across all shots ...
+  return { totalShots, avgCarry, avgClubSpeed, clubShotCounts };
+}
 ```
 
-### Keyboard shortcut flow
-```
-User presses Cmd+Shift+T (Mac) or Ctrl+Shift+T (Win/Linux)
-  → Chrome triggers _execute_action command
-  → Popup opens (same as clicking toolbar icon)
-  → No extension code needed
+### Pattern 2: Append-with-Cap for History Storage
+
+**What:** `SAVE_DATA` handler in serviceWorker reads current history array, appends new entry, trims to `MAX_HISTORY`, writes back atomically in a single `storage.local.set` call.
+
+**When to use:** Any time a bounded persistent log is needed with no server-side storage.
+
+**Trade-offs:** The full history array is read and written on every capture. At 10 entries × 60KB each, that is a 600KB read/write per capture — acceptable for this use pattern. Avoids individual session keys (which would require an index key like the custom prompts pattern).
+
+**Example:**
+
+```typescript
+// In SAVE_DATA handler
+const result = await chrome.storage.local.get([
+  STORAGE_KEYS.TRACKMAN_DATA,
+  STORAGE_KEYS.SESSION_HISTORY
+]);
+const history: SessionData[] = result[STORAGE_KEYS.SESSION_HISTORY] ?? [];
+
+// Deduplication: replace last entry if same report_id
+const lastEntry = history[history.length - 1];
+if (lastEntry && lastEntry.report_id === sessionData.report_id) {
+  history[history.length - 1] = sessionData;
+} else {
+  history.push(sessionData);
+  if (history.length > MAX_HISTORY) {
+    history.shift(); // remove oldest
+  }
+}
+
+await chrome.storage.local.set({
+  [STORAGE_KEYS.TRACKMAN_DATA]: sessionData,
+  [STORAGE_KEYS.SESSION_HISTORY]: history,
+});
 ```
 
-### Dark mode flow
-```
-OS switches to dark mode
-  → @media (prefers-color-scheme: dark) CSS activates automatically
-  → Popup and options page adopt dark palette
-  → No JavaScript involved
-```
+### Pattern 3: In-Memory Data for Comparison (No Extra Storage Reads)
 
-### Prompt preview flow
-```
-popup loads with cachedData
-  → updatePromptPreview() called after initial prompt + data cache
-  → preview textarea populated
-User changes prompt select
-  → updatePromptPreview() called from change listener
-  → preview textarea updated with new assembled text
-User clicks preview toggle
-  → preview container shown/hidden via style.display toggle
-```
+**What:** The comparison computation uses `sessionHistory[]` already fetched by the history panel's `GET_HISTORY` call. No second `chrome.storage.local.get` is needed for the comparison.
+
+**When to use:** When multiple features share the same underlying data. Fetch once, use many times.
+
+**Trade-offs:** Popup must hold up to 10 sessions in JavaScript memory (up to ~600KB). This is negligible for a popup process.
 
 ---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern: Storing Theme Preference in chrome.storage
+### Anti-Pattern 1: Storing One Session Per Key in History
 
-**What to avoid:** Adding a `darkMode: "system" | "light" | "dark"` preference to storage.
-**Why wrong:** `prefers-color-scheme` CSS handles system theme automatically. Adding manual override creates a three-state toggle that's unnecessary complexity for v1.5.
-**Do instead:** Use `@media (prefers-color-scheme: dark)` CSS only. Ship system-match only.
+**What people do:** Use individual storage keys like `session_0`, `session_1`, ... with a `sessionIds[]` index — mirroring the custom prompts pattern.
 
-### Anti-Pattern: Generating Preview on Every Keystroke
+**Why it's wrong:** Sessions are much larger than custom prompts (~50KB vs ~1KB). The per-key pattern works for small objects where individual updates are common. For session history, the whole array is replaced on every capture anyway — the overhead of managing individual keys is net negative. The single-key append-with-cap pattern is simpler and safer.
 
-**What to avoid:** Wiring `input` event on the prompt textarea (if editable) or any per-keystroke update.
-**Why wrong:** Assembling TSV for large sessions on every keystroke causes jank.
-**Do instead:** Assemble preview on `change` events (prompt selection changes) and on initial load only.
+**Do this instead:** One `sessionHistory` key holding `SessionData[]`. Bounded at 10 entries. Replace the whole array on write.
 
-### Anti-Pattern: Manifest Permission Bundling
+### Anti-Pattern 2: Passing sessionHistory Data Through Message Payload
 
-**What to avoid:** Adding Gemini `host_permissions` in the same release as unrelated feature changes.
-**Why wrong:** Permission prompt appears to users when the extension updates. Bundling it with other features obscures the reason for the permission prompt.
-**Do instead:** Gemini `host_permissions` addition is its own isolated release (v1.5.x-gemini). Keyboard shortcut `commands` can be bundled with it since commands don't trigger a permission prompt.
+**What people do:** When the user requests export of a history item, pass the full `SessionData` in the `EXPORT_HISTORY_CSV_REQUEST` message to the service worker.
 
-### Anti-Pattern: Hardcoding `includeAverages: true` After Feature Ships
+**Why it's wrong:** Chrome's `chrome.runtime.sendMessage` has a serialization overhead and a practical size limit (messages are serialized to JSON and deserialized). A 60KB session object as a message payload is wasteful when the service worker already has access to storage directly.
 
-**What to avoid:** Leaving `writeCsv(data, true, ...)` hardcoded in serviceWorker.ts after the toggle UI is shipped.
-**Why wrong:** The UI shows a checkbox that appears to control the setting but the service worker ignores it.
-**Do instead:** Always read `includeAverages` from storage in the EXPORT_CSV_REQUEST handler. If the key is absent, default to `true` (preserves prior behavior). This is a single line change to an existing storage read.
+**Do this instead:** Pass only the `sessionIndex` (integer) in `EXPORT_HISTORY_CSV_REQUEST`. The service worker reads `sessionHistory[sessionIndex]` from storage itself. This is the same pattern used by `EXPORT_CSV_REQUEST` (which reads `trackmanData` from storage rather than receiving it in the message).
 
-### Anti-Pattern: Sharing a CSS File Between popup.html and options.html via External Link
+### Anti-Pattern 3: Auto-Selecting the Recommended Prompt
 
-**What to avoid:** Moving inline styles to `shared/styles.css` and referencing it with `<link rel="stylesheet">` from both HTML files.
-**Why wrong:** Requires build script changes (copy CSS to dist/), adds a network request per page load within the extension, and creates coupling between the two pages' style updates. For v1.5, inline is correct.
-**Do instead:** Keep styles inline in each HTML file. The existing `shared/styles.css` file is not used and should remain unused for v1.5.
+**What people do:** When a match is found, change `promptSelect.value` to the recommended prompt ID automatically.
+
+**Why it's wrong:** The user may have deliberately selected a different prompt. Auto-selection overrides user intent without warning, and it resets the selection every time data updates. This is unexpected behavior that damages trust.
+
+**Do this instead:** Visual badge only. The `★` suffix (or "Recommended" label) signals the recommendation without changing the selection. The user retains full control.
+
+### Anti-Pattern 4: Computing Stats/Comparison Inline in popup.ts
+
+**What people do:** Put the averaging/delta logic directly in popup.ts event handlers or render functions.
+
+**Why it's wrong:** popup.ts is already the largest file in the project. Adding complex data computation inline makes it harder to test (popup.ts has Chrome API dependencies that require mocking in tests) and harder to reason about.
+
+**Do this instead:** Pure modules in `shared/`. Each computation is a named export that can be imported and tested with `npx vitest run` without any Chrome API setup.
+
+### Anti-Pattern 5: Reloading sessionHistory from Storage on Every Comparison
+
+**What people do:** On each comparison trigger, send another `GET_HISTORY` message to the service worker and wait for the response.
+
+**Why it's wrong:** Creates unnecessary async latency for a user interaction that should feel instant. The history data is already in memory from the initial `GET_HISTORY` call at popup open.
+
+**Do this instead:** Cache the `sessionHistory[]` array in a popup module-level variable (same pattern as `cachedData`) at DOMContentLoaded. Comparison reads from that cached array synchronously.
+
+---
+
+## Suggested Build Order
+
+```
+Step 1 — Visual Stat Card (stat card section in popup)
+  NEW: src/shared/session_stats.ts
+  MOD: src/popup/popup.html — add #stat-card section
+  MOD: src/popup/popup.ts  — import computeSessionStats; render on load + DATA_UPDATED
+  → Fully self-contained; validates session_stats.ts before history/comparison
+  → Tests: add test_session_stats.ts with sample SessionData fixtures
+
+Step 2 — Session History (storage + service worker + history panel)
+  MOD: src/shared/constants.ts    — add SESSION_HISTORY + MAX_HISTORY
+  MOD: src/models/types.ts        — add optional savedAt field
+  MOD: src/background/serviceWorker.ts — append-to-history in SAVE_DATA;
+                                         GET_HISTORY handler;
+                                         EXPORT_HISTORY_CSV_REQUEST handler
+  MOD: src/popup/popup.html — add #history-panel section
+  MOD: src/popup/popup.ts  — GET_HISTORY on load; render list; wire Export buttons
+  → Tests: add test_session_history.ts for deduplication + cap logic
+
+Step 3 — Session Comparison (depends on Step 2 history being available in popup)
+  NEW: src/shared/session_comparison.ts
+  MOD: src/popup/popup.html — add session selection UI + #comparison-result
+  MOD: src/popup/popup.ts  — import compareSessions; wire selection → render delta
+  → Tests: add test_session_comparison.ts with two fixed sessions
+
+Step 4 — Smart Prompt Suggestions (depends on cachedData; no history dependency)
+  NEW: src/shared/prompt_matcher.ts
+  MOD: src/popup/popup.ts  — import matchPromptToSession; call after cachedData set;
+                              call updateRecommendedBadge() to apply/clear ★ suffix
+  → Tests: add test_prompt_matcher.ts with metric presence scenarios
+
+Order rationale:
+  Stat card first — new pure module, self-contained, safe starting point
+  History second  — largest service worker change; must be stable before comparison
+  Comparison third — depends on history being in popup memory
+  Prompt matching last — smallest change; drops in cleanly after popup.ts is settled
+```
+
+---
+
+## Integration Points
+
+### Popup Module-Level Variables (v1.6 additions)
+
+The popup currently caches `cachedData`, `cachedUnitChoice`, `cachedSurface`, `cachedCustomPrompts`. v1.6 adds:
+
+```typescript
+let cachedHistory: SessionData[] = [];   // from GET_HISTORY; updated on capture
+let cachedRecommendedPromptId: string | null = null;  // from matchPromptToSession
+```
+
+### Message Type Registry (v1.6 additions to serviceWorker.ts)
+
+```typescript
+type RequestMessage =
+  | SaveDataRequest
+  | ExportCsvRequest
+  | GetDataRequest
+  | GetHistoryRequest          // NEW
+  | ExportHistoryCsvRequest;   // NEW
+```
+
+### Internal Boundaries
+
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| popup.ts ↔ session_stats.ts | Direct import | Pure function; no async |
+| popup.ts ↔ session_comparison.ts | Direct import | Pure function; no async |
+| popup.ts ↔ prompt_matcher.ts | Direct import | Pure function; no async |
+| popup.ts ↔ serviceWorker.ts | `chrome.runtime.sendMessage` | GET_HISTORY + EXPORT_HISTORY_CSV_REQUEST are new |
+| serviceWorker.ts ↔ chrome.storage.local | Async chrome API | sessionHistory key is new |
 
 ---
 
 ## Sources
 
-- Direct source code inspection: `/Users/kylelunter/claudeprojects/trackv3/src/` — all TypeScript and HTML files read (HIGH confidence)
-- Chrome MV3 manifest `commands` documentation: https://developer.chrome.com/docs/extensions/reference/api/commands (HIGH confidence)
-- `_execute_action` reserved command name for triggering extension popup: official MV3 docs (HIGH confidence)
-- `prefers-color-scheme` CSS media query: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme (HIGH confidence)
-- Chrome MV3 `host_permissions` permission prompt behavior: https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions (HIGH confidence)
-- Prior ARCHITECTURE.md research (v1.3 build, 2026-03-02) — clipboard flow, storage patterns, anti-patterns (HIGH confidence, same codebase)
+- Direct source code inspection: all TypeScript, HTML, and JSON files in `src/` — all function signatures, storage patterns, and message types read (HIGH confidence)
+- chrome.storage.local quota: 10MB (raised from 5MB in Chrome 113): https://developer.chrome.com/docs/extensions/reference/api/storage (HIGH confidence)
+- `chrome.runtime.sendMessage` practical message size: serialization to JSON; message passing is not suitable for megabyte payloads — use storage index pattern: https://developer.chrome.com/docs/extensions/reference/api/runtime#method-sendMessage (HIGH confidence)
+- `mergeSessionData` in `src/models/types.ts` — established deduplication-by-report_id pattern; adapted for history append logic (direct source inspection)
+- Prior ARCHITECTURE.md research (v1.5 build, 2026-03-02) — established patterns for storage keys, message handlers, popup cache pattern, anti-patterns (HIGH confidence, same codebase)
 
 ---
-*Architecture research for: TrackPull v1.5 — Polish & Quick Wins*
-*Researched: 2026-03-02*
-*Supersedes v1.3 ARCHITECTURE.md for this milestone's scope*
+
+*Architecture research for: TrackPull v1.6 — Data Intelligence*
+*Researched: 2026-03-03*
+*Supersedes v1.5 ARCHITECTURE.md for this milestone's scope*

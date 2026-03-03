@@ -1,324 +1,329 @@
 # Stack Research
 
-**Domain:** Chrome Extension v1.5 — Polish & Quick Wins (Gemini support, prompt preview, empty state, export toggle, keyboard shortcut, dark mode)
-**Researched:** 2026-03-02
-**Confidence:** HIGH for Chrome API patterns (verified against official docs); HIGH for dark mode CSS (CSS spec + Chrome confirmed); HIGH for tabs.create permissions (confirmed no host_permissions needed)
+**Domain:** Chrome Extension v1.6 — Session History, Cross-Session Comparison, Visual Stat Cards, Smart Prompt Matching
+**Researched:** 2026-03-03
+**Confidence:** HIGH for storage strategy (verified against official Chrome docs); HIGH for keyword matching (native TypeScript, no library needed); HIGH for UI approach (popup size constraints confirmed); HIGH for zero-dependency constraint (no new production deps required)
 
 ---
 
 ## Context: What This File Covers
 
-TrackPull has a validated, zero-production-dependency stack (TypeScript + esbuild + Chrome MV3 APIs). The prior STACK.md (v1.3) documents the clipboard, AI launch, and options page additions — those decisions stand and are not re-researched here.
+TrackPull has a validated, zero-production-dependency stack: TypeScript, esbuild, Chrome MV3 APIs. The existing STACK.md documents v1.5 decisions (dark mode, Gemini, prompt preview, export toggle) — those stand and are not re-researched.
 
-This document covers ONLY what is new for v1.5:
+This document covers ONLY what is new for v1.6:
 
-1. Gemini AI launch — URL to use and whether host_permissions are needed
-2. Keyboard shortcut — Chrome Commands API, manifest syntax, key constraints
-3. Dark mode — CSS approach, Chrome popup behavior with prefers-color-scheme
-4. Prompt preview — Modal/overlay implementation approach in popup
-5. Empty state guidance — Conditional UI pattern
-6. Export format toggle — Checkbox + storage key
+1. **Session history storage** — where and how to persist past sessions; how many can fit; re-export capability
+2. **Session comparison** — delta computation approach; no library needed
+3. **Visual stat cards in popup** — CSS-only implementation within 800x600 popup constraints
+4. **Smart prompt matching** — keyword detection against session data; native vs library
 
-Do not alter anything about interceptor, CSV generation, unit conversion, AI tab launch mechanism, or the build system.
+Do not alter anything about the interceptor, CSV generation, unit conversion, AI tab launch mechanism, build system, or dark mode implementation.
 
 ---
 
 ## Recommended Stack
 
-### Core Technologies (New for v1.5)
+### Core Technologies (New for v1.6)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| `commands` manifest key | MV3 | Keyboard shortcut to open popup | Standard MV3 mechanism. `_execute_action` reserved command opens popup without needing any `onCommand` listener in code. No new permission required. |
-| `@media (prefers-color-scheme: dark)` | CSS Level 5 | Dark mode matching system theme | Chrome correctly propagates the OS `prefers-color-scheme` value to extension popup and options pages. Plain CSS media query — no JavaScript, no new API. |
-| `chrome.storage.local` (new key) | Built-in Chrome API | Persist export toggle preference (include/exclude averages+consistency rows) | Already in use. One new boolean key. No schema migration needed. |
-| HTML `<dialog>` element or manual overlay div | Web standard / vanilla DOM | Prompt preview modal in popup | `<dialog>` is supported in all Chrome versions compatible with MV3. No library needed. Alternatively a plain `<div>` with `position:fixed` works identically at popup scale. |
+| `chrome.storage.local` (new keys) | Built-in MV3 | Session history index + full session data | Already in use. 10 MB quota (verified) is generous: ~26 KB per full session = ~392 sessions fit. Full session storage enables re-export from history, which is a stated requirement. No new permission needed. |
+| CSS Grid / Flexbox in popup | Browser built-in | Visual stat card layout | Popup is constrained to 800×600 px max (hard Chrome limit). CSS-only stat cards using `display:grid` or `display:flex` with existing CSS token variables are the correct approach. No charting library. |
+| Native TypeScript keyword matching | TypeScript built-in | Smart prompt suggestions | The matching problem is: given ~29 known Trackman metrics present in a session, which built-in prompts are relevant? This is solved with a lookup table of metric-to-prompt associations — a `Map<string, string[]>` or typed `Record`. No fuzzy search library needed. Fuse.js and equivalents are for user-typed queries against large datasets; this use case is deterministic metric presence checks. |
 
 ---
 
 ## Feature-by-Feature Technical Breakdown
 
-### 1. Gemini AI Launch
+### 1. Session History Storage
 
-**Current situation:** Gemini is already in `AI_URLS` in popup.ts (`"https://gemini.google.com"`) and appears in the AI service dropdown. The PROJECT.md notes Gemini was deliberately deferred because adding `host_permissions` for `gemini.google.com` would trigger a permission prompt for all users. The v1.5 goal is to ship this as an isolated release so the permission prompt is its own event.
+**Requirement:** Persist sessions in `chrome.storage`, browse and re-export from popup.
 
-**Verified finding:** `chrome.tabs.create({ url: "https://gemini.google.com" })` does NOT require `host_permissions` for `gemini.google.com`.
+**Verified storage quotas (official Chrome docs):**
+- `chrome.storage.local` — 10,485,760 bytes (10 MB), persists across browser restarts
+- `chrome.storage.session` — 10,485,760 bytes (10 MB), in-memory only, cleared on browser restart
+- `chrome.storage.sync` — 102,400 bytes total (~100 KB) — **not suitable for session data**
 
-Per the official Chrome Tabs API reference: "Most features don't require any permissions to use. For example: creating a new tab, reloading a tab, navigating to another URL, etc."
+**Use `chrome.storage.local` for session history.** Sessions must survive browser restarts (users open Chrome, open the popup, browse history). `storage.session` is cleared on restart — wrong fit. `storage.sync` quota is far too small.
 
-`host_permissions` is required when an extension needs to read sensitive tab properties (`url`, `title`, `favIconUrl`), inject content scripts, capture screenshots, or intercept network requests on a domain. Opening a tab does not fall into any of these categories.
+**Storage sizing (measured):**
 
-**Conclusion:** No `host_permissions` addition for `gemini.google.com` is needed. Gemini is already wired into popup.ts. The "isolated release" concern from v1.3 decision log was a precaution, but the permission system does not require it. Gemini can ship in v1.5 without touching manifest.json host_permissions.
+| Approach | Per Session | 10 Sessions | Notes |
+|----------|------------|-------------|-------|
+| Full `SessionData` (re-export capable) | ~26 KB | ~261 KB | 8 clubs × 8 shots × ~9 metrics with `{value, unit}` objects |
+| Summary-only (averages + metadata) | ~1.5 KB | ~15 KB | No re-export; comparison only |
 
-**Only action required:** Verify the Gemini URL is correct (confirm `"https://gemini.google.com"` vs `"https://gemini.google.com/app"`) and that it lands on the chat page. The existing clipboard + tab approach works identically.
+**Recommendation: Store full `SessionData` objects for re-export capability.** At ~26 KB per session, the 10 MB quota supports ~392 sessions — far more than any golfer will accumulate. No compression needed. No `unlimitedStorage` permission needed.
 
-**Confidence:** HIGH — verified against official Chrome Tabs API docs.
+**Storage key pattern (per-key, not single array):**
+
+```typescript
+// Index key — stores array of session IDs in reverse chronological order
+const SESSION_HISTORY_IDS_KEY = "sessionHistoryIds";
+
+// Per-session key — stores full SessionData for each session
+const SESSION_KEY_PREFIX = "session_";
+// Example: "session_20260303_abc123def"
+```
+
+**Why per-key instead of a single `sessionHistory` array?**
+- Matches the existing `customPrompt_` per-key pattern already in the codebase (proven pattern)
+- Avoids deserializing all sessions when loading only the index
+- Prevents a single 8 KB item limit concern (not a `storage.local` constraint, but consistent with existing design)
+- Enables O(1) session deletion without rewriting the whole array
+
+**New `STORAGE_KEYS` entries needed:**
+
+```typescript
+SESSION_HISTORY_IDS: "sessionHistoryIds",
+// Per-session keys use SESSION_KEY_PREFIX + id (not in STORAGE_KEYS enum, same as CUSTOM_PROMPT_KEY_PREFIX)
+```
+
+**Session ID strategy:** `"session_" + date + "_" + report_id.slice(0, 8)` — human-readable, collision-resistant for the same user, no UUID library needed.
+
+**Session limit policy:** Cap history at 20 sessions (configurable constant). On each new save, if count exceeds 20, remove the oldest session key. This prevents unbounded growth without quota math at runtime.
+
+```typescript
+const MAX_SESSION_HISTORY = 20;
+```
+
+20 sessions × ~26 KB = ~520 KB — well within 10 MB.
+
+**No new manifest permissions required.** `storage` permission already declared.
+
+**Confidence:** HIGH — quota verified against official Chrome storage API reference.
 
 ---
 
-### 2. Keyboard Shortcut (Cmd+Shift+T / Ctrl+Shift+T)
+### 2. Cross-Session Comparison (Delta Columns)
 
-**Manifest addition required:**
+**Requirement:** Delta columns comparing club averages across sessions.
 
-```json
-"commands": {
-  "_execute_action": {
-    "suggested_key": {
-      "default": "Ctrl+Shift+T",
-      "mac": "Command+Shift+T"
-    },
-    "description": "Open TrackPull popup"
-  }
+**Approach: Pure TypeScript arithmetic — no library needed.**
+
+Delta computation is subtraction of two numbers with null handling:
+
+```typescript
+function computeDelta(
+  current: number | undefined,
+  previous: number | undefined
+): number | null {
+  if (current === undefined || previous === undefined) return null;
+  return current - previous;
 }
 ```
 
-**Key rules (verified):**
+**Comparison data shape:**
 
-- Must include `Ctrl` or `Alt` as modifier. `Shift` is optional.
-- On macOS, `Ctrl` in `default` automatically becomes `Command`. Use the explicit `mac` key with `Command+Shift+T` for clarity.
-- `Ctrl+Alt` combinations are prohibited (conflicts with AltGr on Windows/Linux).
-- OS-level and Chrome-level shortcuts take priority and cannot be overridden. If `Ctrl+Shift+T` is in use by Chrome (it is: "Reopen closed tab"), Chrome's hotkey wins and the extension shortcut is silently ignored.
-
-**Critical conflict: Ctrl+Shift+T is Chrome's "Reopen closed tab"** — this is a well-known Chrome built-in shortcut. Declaring it as `suggested_key` will have no effect; Chrome's native binding takes priority.
-
-**Better alternatives to recommend in roadmap:**
-
-| Platform | Suggestion | Conflict risk |
-|----------|------------|---------------|
-| Default | `Ctrl+Shift+Y` | Low |
-| Mac | `Command+Shift+Y` | Low |
-| Alt+T | `Alt+T` | Low (Alt shortcuts rarely conflict) |
-
-The shortcut is user-remappable via `chrome://extensions/shortcuts` regardless of what is suggested.
-
-**Code changes required:** None. `_execute_action` opens the popup automatically — no TypeScript listener is needed. The `commands` block in manifest.json is the only change.
-
-**Permissions required:** None. The `commands` API does not require a permission declaration.
-
-**Confidence:** HIGH — verified against official Chrome Commands API reference.
-
----
-
-### 3. Dark Mode (CSS prefers-color-scheme)
-
-**Approach: Pure CSS media query. No JavaScript, no toggle, no new storage key.**
-
-Chrome follows the operating system's `prefers-color-scheme` setting and correctly propagates it to extension popup and options pages. This is confirmed behavior — extension popups are rendered as standard web content and inherit the system preference.
-
-**Implementation pattern:**
-
-```css
-/* Base: light mode (existing styles stay unchanged) */
-body {
-  background-color: #ffffff;
-  color: #333333;
-}
-
-/* Dark mode override — add at bottom of existing <style> block */
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #1a1a1a;
-    color: #e0e0e0;
-  }
-
-  .shot-count-container {
-    background-color: #2a2a2a;
-  }
-
-  .unit-selectors select,
-  .ai-group select {
-    background: #2a2a2a;
-    color: #e0e0e0;
-    border-color: #4a90d9;
-  }
-
-  .btn-primary {
-    background-color: #1565c0;
-  }
-
-  .btn-outline {
-    color: #90caf9;
-    border-color: #90caf9;
-  }
-
-  .ai-section {
-    border-top-color: #444;
-  }
-
-  .icon-btn:hover {
-    background-color: #2a2a2a;
-  }
+```typescript
+interface ClubDelta {
+  club_name: string;
+  metrics: Record<string, {
+    current: number;
+    previous: number;
+    delta: number;
+    direction: "up" | "down" | "flat";
+  }>;
 }
 ```
 
-**Files to update:** `popup.html` and `options.html` — both have inline `<style>` blocks. Add a `@media (prefers-color-scheme: dark)` block at the bottom of each.
+**"Direction" threshold:** treat `|delta| < 0.5` as "flat" for display purposes (avoids showing +0.1 as meaningful movement). This threshold is a constant, not a user setting.
 
-**Color palette for dark mode:**
+**Where the comparison runs:** In `popup.ts` (or a new `session_comparison.ts` module), after loading the current session and the selected comparison session from `chrome.storage.local`. The computation is synchronous and O(clubs × metrics).
 
-| Role | Light | Dark |
-|------|-------|------|
-| Page background | `#ffffff` | `#1a1a1a` |
-| Card/container background | `#f5f5f5` | `#2a2a2a` |
-| Primary text | `#333333` | `#e0e0e0` |
-| Secondary text | `#666666` | `#aaaaaa` |
-| Accent (blue) | `#1976d2` | `#4a90d9` |
-| Accent hover | `#1565c0` | `#3a7bc8` |
-| Border | `#e0e0e0` | `#444444` |
-| Input background | `#ffffff` | `#2a2a2a` |
-| Success toast | `#388e3c` | `#388e3c` (unchanged) |
-| Error toast | `#d32f2f` | `#d32f2f` (unchanged) |
+**No library, no new files required unless extraction improves testability.** Recommend a `session_stats.ts` module in `src/shared/` to keep pure functions testable via vitest.
 
-**No manual toggle needed** for v1.5. "Match system theme" is the correct behavior and the simplest implementation. A user-controlled toggle would require a new storage key and JavaScript to apply a class to `<html>`, adding complexity for marginal gain — defer to v1.6+ if requested.
-
-**Confidence:** HIGH — CSS Level 5 `prefers-color-scheme` is well-supported; Chrome extension popup behavior verified via w3c/webextensions issue #242 (Chrome confirmed to propagate OS preference consistently to popup and options pages).
+**Confidence:** HIGH — this is arithmetic, no external dependency needed.
 
 ---
 
-### 4. Prompt Preview Modal
+### 3. Visual Stat Cards in Popup
 
-**Goal:** Show a read-only preview of the assembled prompt+data before clicking "Open in AI," so users can verify what will be sent.
+**Requirement:** Stat card showing avg carry, avg club speed, shot count by club.
 
-**Approach: Inline `<div>` overlay (not `<dialog>`).**
+**Hard constraint: Chrome popup max size is 800×600 px (hard limit in Chromium source).** Content beyond this triggers scrollbars. The current popup already uses ~500 px of vertical space with all sections visible. Stat cards must either replace the shot count display or add minimal height.
 
-Both `<dialog>` and a div-based modal work fine in the popup. A plain div is simpler for a small popup where the modal does not need to trap focus across the full browser context. Either is acceptable.
+**Approach: CSS Grid stat card with existing CSS token variables.**
+
+The existing popup already has:
+- CSS custom property tokens (`--color-bg-surface`, `--color-accent`, etc.)
+- `display:flex` layout patterns
+- `border-radius: 8px` card pattern (`.shot-count-container`)
+
+A stat card is a 2–3 column grid of metric labels + values. No charting, no canvas, no SVG — just styled `<div>` elements.
 
 ```html
-<!-- In popup.html — add before </body> -->
-<div id="preview-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:500; overflow:auto; padding:16px;">
-  <div style="background:#fff; border-radius:8px; padding:16px; max-height:100%; overflow:auto;">
-    <h3 style="margin:0 0 8px; font-size:14px;">Prompt Preview</h3>
-    <pre id="preview-text" style="white-space:pre-wrap; font-size:12px; font-family:monospace; margin:0 0 12px;"></pre>
-    <button id="preview-close-btn">Close</button>
+<!-- Replace or augment #shot-count-container -->
+<div id="stat-cards" class="stat-grid">
+  <div class="stat-card">
+    <span class="stat-label">Shots</span>
+    <span class="stat-value" id="stat-shots">—</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Avg Carry</span>
+    <span class="stat-value" id="stat-carry">—</span>
+  </div>
+  <div class="stat-card">
+    <span class="stat-label">Avg Club Speed</span>
+    <span class="stat-value" id="stat-speed">—</span>
   </div>
 </div>
 ```
 
-**Trigger:** Add a "Preview" button near the "Open in AI" button. Clicking Preview calls `assemblePrompt()` with current selections and renders the output into `#preview-text`, then shows the overlay.
+```css
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
 
-**Dark mode consideration:** The preview overlay background color (`#fff`) also needs a dark mode variant. Add it to the `@media (prefers-color-scheme: dark)` block.
+.stat-card {
+  background: var(--color-bg-surface);
+  border-radius: 6px;
+  padding: 10px 8px;
+  text-align: center;
+}
 
-**No new Chrome APIs or permissions needed.**
+.stat-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
 
-**Confidence:** HIGH — standard DOM pattern, zero API surface.
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--color-accent);
+}
+```
+
+**Dark mode:** Automatically correct — uses existing `--color-bg-surface` and `--color-accent` tokens that already have dark mode values in the `@media (prefers-color-scheme: dark)` block.
+
+**Stat computation:** Runs in `popup.ts` after data load, calling a `computeSessionStats()` function:
+
+```typescript
+interface SessionStats {
+  totalShots: number;
+  avgCarry: number | null;       // null if Carry metric not present
+  avgClubSpeed: number | null;   // null if ClubSpeed metric not present
+  clubBreakdown: Array<{ club_name: string; shot_count: number }>;
+}
+```
+
+**Where the logic lives:** New `computeSessionStats()` function in `src/shared/session_stats.ts` (pure function, testable). Called from `popup.ts` after data is loaded.
+
+**No new dependencies, no canvas, no chart library.**
+
+**Confidence:** HIGH — CSS pattern, existing token system, popup size constraint confirmed.
 
 ---
 
-### 5. Empty State Guidance
+### 4. Smart Prompt Suggestions
 
-**Goal:** When shot count is 0, replace the "0 shots" dead end with actionable instructions (e.g., "Open a Trackman report to capture shots").
+**Requirement:** Highlighted label on data-matched prompts in the dropdown.
 
-**Approach: Conditional DOM in `updateExportButtonVisibility()` — already the right function.**
+**What "smart" means here:** Given the set of metric names present in the current session (`SessionData.metric_names`), identify which built-in prompts are relevant to those metrics and display a visual indicator (e.g., a "Recommended" badge or "★" prefix on the option text).
 
-The existing `updateExportButtonVisibility()` function in popup.ts controls what is shown based on whether `data` is present. Extend it to also swap a static "empty state" element in/out.
+**Approach: Deterministic keyword lookup table — no fuzzy search library.**
 
-```html
-<!-- In popup.html — add to shot-count-container -->
-<div id="empty-state-msg" style="display:none; font-size:13px; color:#666; margin-top:8px;">
-  Open a Trackman report tab and TrackPull will capture your shots automatically.
-</div>
-```
+Fuzzy search libraries (Fuse.js, fast-fuzzy, microfuzz) solve a different problem: matching user-typed text against a corpus. This use case is: "does session contain metric X?" — a `Set.has()` check, not a string distance problem.
 
 ```typescript
-// In popup.ts — extend updateExportButtonVisibility
-const emptyMsg = document.getElementById("empty-state-msg");
-if (emptyMsg) emptyMsg.style.display = hasValidData ? "none" : "block";
+// In prompt_types.ts or a new session_stats.ts
+const PROMPT_METRIC_AFFINITY: Record<string, string[]> = {
+  "consistency-analysis-advanced": ["ClubSpeed", "BallSpeed", "SpinRate", "FaceAngle"],
+  "launch-spin-intermediate": ["LaunchAngle", "SpinRate", "SpinAxis", "DynamicLoft"],
+  "shot-shape-intermediate": ["FaceAngle", "ClubPath", "FaceToPath", "Curve", "Side"],
+  "club-delivery-advanced": ["AttackAngle", "ClubPath", "DynamicLoft", "FaceAngle"],
+  "distance-gapping-beginner": ["Carry", "Total"],
+  "session-overview-beginner": [],        // Always applicable
+  "quick-summary-beginner": [],           // Always applicable
+  "club-breakdown-intermediate": ["Carry", "BallSpeed"],
+};
+
+function getRecommendedPromptIds(metricNames: string[]): Set<string> {
+  const available = new Set(metricNames);
+  const recommended = new Set<string>();
+
+  for (const [promptId, requiredMetrics] of Object.entries(PROMPT_METRIC_AFFINITY)) {
+    if (requiredMetrics.length === 0) {
+      recommended.add(promptId); // Always-applicable prompts
+      continue;
+    }
+    // Recommend if session has at least one of the relevant metrics
+    if (requiredMetrics.some(m => available.has(m))) {
+      recommended.add(promptId);
+    }
+  }
+  return recommended;
+}
 ```
 
-**No new Chrome APIs or storage keys needed.** Pure UI conditional.
-
-**Confidence:** HIGH — trivial DOM logic, existing pattern in codebase.
-
----
-
-### 6. Export Format Toggle (Include/Exclude Averages + Consistency Rows)
-
-**Goal:** Let users choose whether the CSV export includes the Average and Consistency summary rows per club.
-
-**Storage:** One new boolean key in `chrome.storage.local`.
+**UI rendering:** In `renderPromptSelect()` in `popup.ts`, after computing the recommended set, prefix matching option text with a star or append `(Recommended)`:
 
 ```typescript
-// Add to STORAGE_KEYS in constants.ts
-INCLUDE_SUMMARY_ROWS: "includeSummaryRows"
+opt.textContent = isRecommended ? `★ ${p.name}` : p.name;
 ```
 
-Default value: `true` (existing behavior — averages + consistency included by default).
+This avoids any DOM badge complexity that could break the `<select>` element's option styling — `<option>` elements have very limited styling support across OSes (no CSS background-color on macOS). Text-prefix is the safe cross-platform approach.
 
-**UI:** A checkbox in the popup, near the Export CSV button.
+**No library, no new file required.** The affinity map and `getRecommendedPromptIds()` function belong in `src/shared/session_stats.ts` alongside the stat computation functions, or directly in `prompt_types.ts` since it's prompt metadata.
 
-```html
-<!-- In popup.html — add above or below export-row div -->
-<label style="font-size:12px; display:flex; align-items:center; gap:6px; margin-top:8px;">
-  <input type="checkbox" id="include-summary-rows" checked />
-  Include averages &amp; consistency rows in CSV
-</label>
-```
-
-**Storage read/write pattern (same as other preferences):**
-
-```typescript
-// Load preference
-const result = await chrome.storage.local.get([STORAGE_KEYS.INCLUDE_SUMMARY_ROWS]);
-const includeSummaryRows = result[STORAGE_KEYS.INCLUDE_SUMMARY_ROWS] !== false; // true by default
-
-// Persist on change
-checkbox.addEventListener("change", () => {
-  chrome.storage.local.set({ [STORAGE_KEYS.INCLUDE_SUMMARY_ROWS]: checkbox.checked });
-});
-
-// Pass to writeCsv
-writeCsv(cachedData, includeSummaryRows, undefined, cachedUnitChoice, cachedSurface);
-```
-
-**`writeCsv` already accepts `includeAverages` as its second parameter** — this maps directly. No changes to csv_writer.ts are needed beyond verifying the parameter controls both averages and consistency rows (confirmed: lines 134-161 of csv_writer.ts show both are gated on `includeAverages`).
-
-**No new Chrome APIs or permissions needed.**
-
-**Confidence:** HIGH — existing API, existing function signature already supports this.
+**Confidence:** HIGH — native TypeScript, no external dependency, `<option>` styling limitation confirmed by browser behavior.
 
 ---
 
 ## Supporting Libraries (Still Zero Production Dependencies)
 
-No new production dependencies are required for any v1.5 feature:
+No new production dependencies are required for any v1.6 feature:
 
-- Keyboard shortcut — manifest.json change only
-- Dark mode — CSS `@media` query only
-- Prompt preview — vanilla DOM div/overlay
-- Empty state — conditional `display` toggle
-- Export toggle — `chrome.storage.local` + checkbox
-- Gemini launch — already implemented, no manifest change needed
+| Feature | Why No Library Needed |
+|---------|----------------------|
+| Session history storage | `chrome.storage.local` per-key pattern (same as custom prompts) |
+| Session comparison | Arithmetic on two `Record<string, MetricValue>` objects |
+| Visual stat cards | CSS Grid + existing token variables |
+| Smart prompt matching | `Set.has()` lookup against a typed affinity map |
+| Fuzzy matching | Not applicable — prompts are matched by metric presence, not text similarity |
 
-The zero-production-dependency constraint is maintained across all six features.
+**Zero-dependency constraint maintained.**
 
 ---
 
-## Manifest Changes Summary
+## New Files to Create
 
-The full manifest.json changes for v1.5:
+| File | Purpose |
+|------|---------|
+| `src/shared/session_stats.ts` | Pure functions: `computeSessionStats()`, `getRecommendedPromptIds()`, `computeSessionDelta()` |
+| `src/shared/session_history.ts` | Storage CRUD: `saveSessionToHistory()`, `loadSessionHistory()`, `deleteSessionFromHistory()`, `loadSessionById()` |
 
-```json
-{
-  "commands": {
-    "_execute_action": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+Y",
-        "mac": "Command+Shift+Y"
-      },
-      "description": "Open TrackPull"
-    }
-  }
-}
+These follow the existing `custom_prompts.ts` pattern — pure async Chrome storage helpers with no side effects.
+
+---
+
+## New `STORAGE_KEYS` Entries
+
+```typescript
+// In src/shared/constants.ts, add to STORAGE_KEYS:
+SESSION_HISTORY_IDS: "sessionHistoryIds",
 ```
 
-**One addition only:** The `commands` block.
+```typescript
+// Add alongside CUSTOM_PROMPT_KEY_PREFIX:
+export const SESSION_KEY_PREFIX = "session_" as const;
+export const MAX_SESSION_HISTORY = 20 as const;
+```
 
-**No changes to:**
-- `permissions` — no new permissions needed
-- `host_permissions` — Gemini does not require it for `chrome.tabs.create`
-- `content_scripts` — no new content scripts
-- `background` — service worker unchanged
-- `action` — popup unchanged
-- `options_ui` — options page unchanged
+---
+
+## Manifest Changes
+
+**None.** `storage` permission is already declared. No new permissions, no new content scripts, no new background handlers needed for any v1.6 feature.
 
 ---
 
@@ -326,12 +331,14 @@ The full manifest.json changes for v1.5:
 
 | Category | Recommended | Alternative | Why Not |
 |----------|-------------|-------------|---------|
-| Dark mode | `@media (prefers-color-scheme: dark)` CSS | Manual toggle with `data-theme` attribute + JS | Manual toggle requires a new storage key, event listener, and class-swapping on load. "Match system" is the stated requirement and the simpler path. Toggle can be added in v1.6 if users request it. |
-| Dark mode | CSS in `<style>` block | External `.css` file | CSS is already inline in both HTML files. Splitting to external files requires build script changes. No benefit at this size. |
-| Prompt preview | Plain div overlay | `<dialog>` element | `<dialog>` provides focus trapping and `Escape` key handling, which are not needed for a read-only preview in a small popup. Plain div is 5 fewer lines. |
-| Export toggle | Checkbox + storage | Radio buttons (Shots Only / Full / Custom) | A binary checkbox is sufficient for the stated requirement. Radio buttons add UI complexity. Can evolve later. |
-| Keyboard shortcut | `_execute_action` in manifest | `onCommand` listener + `chrome.action.openPopup()` | `chrome.action.openPopup()` is only callable from user-gesture context, and `_execute_action` already does what's needed without any code. |
-| Suggested shortcut | `Ctrl+Shift+Y` | `Ctrl+Shift+T` | `Ctrl+Shift+T` is Chrome's built-in "Reopen closed tab" shortcut. Chrome's native binding wins; the extension suggested key would be silently ignored on most Chrome versions. |
+| Session storage location | `chrome.storage.local` per-key | Single `sessionHistory` array key | Array approach deserializes all data on every read. Per-key matches existing custom prompt pattern. More importantly: avoids ever hitting the `QUOTA_BYTES_PER_ITEM` limit on sync (8 KB), though local doesn't have this limit. Consistency with codebase wins. |
+| Session storage location | `chrome.storage.local` | `chrome.storage.session` | Session storage is cleared on browser restart. Users expect history to persist across sessions. Wrong fit. |
+| Session storage location | `chrome.storage.local` | `chrome.storage.sync` | Sync quota is 102 KB total — one full session exceeds that. Wrong fit. |
+| Session storage format | Full `SessionData` object | Summary-only (averages + metadata) | Summary-only (~1.5 KB) saves storage but breaks the "re-export from history" requirement. Full sessions (~26 KB) are needed for re-export. At ~26 KB each, 10 MB fits ~392 sessions — compression adds complexity with no practical benefit. |
+| Smart prompt matching | Typed affinity map + `Set.has()` | Fuse.js or fast-fuzzy | Fuzzy libraries solve user-input text matching. Metric presence checks are deterministic — `Set.has()` is O(1) and has no false positives. Fuzzy matching would introduce false positives (e.g., "Carry" fuzzy-matching against "accuracy" topics). |
+| Stat card visualization | CSS Grid + `<div>` | Chart.js, D3, or Recharts | Popup space is extremely limited (800×600 px hard limit). A charting library adds bundle size, layout complexity, and renders worse than clean typography at small sizes. Golfers need numbers, not sparklines. |
+| Session comparison UI | Popup inline | Separate options page tab | Options page requires navigating away from popup, breaking the inline browse-and-compare flow. Popup inline comparison is the stated requirement. |
+| History browse UI | Scrollable `<select>` or `<ul>` | Full list view | Popup is height-constrained. A compact dropdown or short scrollable list (max 5 items visible) fits within 600 px without pushing other controls off-screen. |
 
 ---
 
@@ -339,12 +346,14 @@ The full manifest.json changes for v1.5:
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `host_permissions` for `gemini.google.com` | `chrome.tabs.create` does not require host_permissions for the destination URL. Adding it displays a permission prompt users will not understand and widens the extension's permission surface unnecessarily. | No change — existing `chrome.tabs.create` pattern works |
-| `tabs` permission | Not needed for `chrome.tabs.create`. Adding it displays "Read your browsing history" warning to users. | Omit |
-| Dark mode JS library (e.g., `color-mode`, `darkreader`) | Zero-dependency constraint. CSS media query handles system-level dark mode in 5 lines. | CSS `@media (prefers-color-scheme: dark)` |
-| `Ctrl+Shift+T` as keyboard shortcut | Chrome's native shortcut (Reopen closed tab) takes priority. Extension shortcut is silently ignored. | Use `Ctrl+Shift+Y` or another non-conflicting combo |
-| User-configurable keyboard shortcut picker | `chrome://extensions/shortcuts` already provides this for all extensions. Chrome handles it natively. | Point users to `chrome://extensions/shortcuts` if they want to change it |
-| Any new import/module | All six features are small enough to implement inline in existing files (popup.ts, popup.html, options.html, manifest.json, constants.ts). No new files needed beyond possibly a modal utility if preview grows complex. | Extend existing files |
+| Fuse.js or any fuzzy search library | Solves the wrong problem. Metric presence is a `Set.has()` check, not a string distance problem. Adds ~24 KB bundle weight for zero benefit. | Typed affinity `Record<string, string[]>` + `Set.has()` |
+| Chart.js, D3, Recharts | Popup is 800×600 px max. Charts require canvas or SVG, add significant bundle weight, and render poorly in small popup containers. Numbers in styled `<div>` elements are more readable at popup scale. | CSS Grid stat cards |
+| `unlimitedStorage` permission | Not needed. At ~26 KB per session × 20 sessions = ~520 KB, well within 10 MB `storage.local` default quota. Requesting `unlimitedStorage` is unnecessary and signals to reviewers that the extension may misuse storage. | Cap history at `MAX_SESSION_HISTORY = 20` |
+| `chrome.storage.sync` for session data | 102 KB total quota — one full session may exceed it. Sync is for user preferences (cross-device settings), not bulk data. | `chrome.storage.local` |
+| `chrome.storage.session` for session data | Cleared on browser restart — defeats the purpose of persistent history. | `chrome.storage.local` |
+| UUID library for session IDs | Overkill. `date + report_id.slice(0, 8)` creates collision-resistant IDs for a single user. No library needed. | Native string concatenation |
+| External CSS framework (Tailwind, Bootstrap) | Zero-dependency constraint. Existing token-based CSS system already handles dark mode and theming. | Existing `--color-*` CSS custom properties |
+| `<option>` element CSS styling for "Recommended" badge | `<option>` elements have extremely limited CSS support on macOS (background-color ignored, custom fonts ignored). Platform-inconsistent results. | Text prefix: `★ prompt name` in `option.textContent` |
 
 ---
 
@@ -352,26 +361,24 @@ The full manifest.json changes for v1.5:
 
 | API/Feature | Availability | Notes |
 |-------------|-------------|-------|
-| `commands` with `_execute_action` | MV3 (Chrome 88+) | Replaces `_execute_browser_action` from MV2. Works in all current Chrome versions. |
-| `@media (prefers-color-scheme: dark)` | Chrome 76+ | Well within MV3 support window. OS preference propagated correctly to extension popups in Chrome. |
-| `chrome.storage.local` (new key) | All MV3 versions | Existing API — just a new key name. |
-| `<dialog>` element | Chrome 37+ | If preferred over div overlay — no compatibility concern. |
-| `writeCsv(session, includeAverages)` | v1.0+ | Second parameter already exists in codebase — no signature change needed. |
+| `chrome.storage.local` (10 MB quota) | Chrome 114+ | 5 MB in Chrome 113 and earlier. All current Chrome versions support 10 MB. MV3 was introduced in Chrome 88; 10 MB quota applies to all current MV3 installations. |
+| `chrome.storage.local.getBytesInUse()` | All MV3 versions | Optional utility for quota diagnostics. Not required for v1.6 but useful for development. |
+| CSS `display:grid` | Chrome 57+ | Well within MV3 support window. |
+| `Set.has()` | ES2015+ / Chrome 49+ | No compatibility concern. |
+| `chrome.storage.session` | Chrome 102+ | Available but not appropriate for this use case (in-memory, cleared on restart). |
 
 ---
 
 ## Sources
 
-- Chrome Tabs API Reference (`chrome.tabs.create` permissions) — https://developer.chrome.com/docs/extensions/reference/api/tabs#method-create (HIGH confidence, official; confirmed tabs.create needs no permissions for URL-only tab creation)
-- Chrome Commands API Reference — https://developer.chrome.com/docs/extensions/reference/api/commands (HIGH confidence, official; confirmed `_execute_action` syntax, key requirements, modifier rules)
-- Chrome Extensions Samples issue #619 — https://github.com/GoogleChrome/chrome-extensions-samples/issues/619 (MEDIUM confidence; community confirmation of `_execute_action` for popup opening)
-- w3c/webextensions issue #242 — https://github.com/w3c/webextensions/issues/242 (HIGH confidence; confirms Chrome propagates OS `prefers-color-scheme` consistently to popup and options pages)
-- MDN prefers-color-scheme — https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@media/prefers-color-scheme (HIGH confidence, official spec reference)
-- Chrome Declare Permissions reference — https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions (HIGH confidence, official; confirms which APIs require host_permissions and which do not)
-- PROJECT.md decision log — Gemini deferral rationale (HIGH confidence; confirmed the decision was about isolating the permission prompt, not a technical requirement for host_permissions)
-- csv_writer.ts source inspection — lines 134-161 (HIGH confidence; confirmed `includeAverages` param gates both Average and Consistency rows)
+- Chrome Storage API Reference (quota limits, storage areas) — https://developer.chrome.com/docs/extensions/reference/api/storage (HIGH confidence, official; verified 10 MB `storage.local` quota, 102 KB `storage.sync` quota, `storage.session` in-memory behavior)
+- Chrome Extension popup size constraints — Chromium issue tracker confirming 800×600 hard limit: https://issues.chromium.org/issues/40655432 (MEDIUM confidence; community + Chromium issue; consistent with `kMaxSize = {800, 600}` referenced in Chromium source)
+- Fuse.js library overview — https://www.fusejs.io/ (HIGH confidence; confirmed it solves user-typed text fuzzy search, not deterministic metric presence matching)
+- Existing codebase analysis — `src/shared/custom_prompts.ts`, `src/shared/constants.ts`, `src/models/types.ts`, `src/popup/popup.ts` (HIGH confidence; confirmed per-key storage pattern, `SessionData` type structure, existing `STORAGE_KEYS`, popup UI patterns)
+- Storage sizing measurement — `node` JSON serialization test (HIGH confidence; measured ~26 KB per typical `SessionData` with 8 clubs × 8 shots × 9 metrics; ~1.5 KB for summary-only approach)
+- DEV Community: Local vs Sync vs Session comparison — https://dev.to/notearthian/local-vs-sync-vs-session-which-chrome-extension-storage-should-you-use-5ec8 (MEDIUM confidence; consistent with official docs)
 
 ---
 
-*Stack research for: TrackPull v1.5 — Polish & Quick Wins*
-*Researched: 2026-03-02*
+*Stack research for: TrackPull v1.6 — Data Intelligence (Session History, Comparison, Stat Cards, Smart Prompts)*
+*Researched: 2026-03-03*

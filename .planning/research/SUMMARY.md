@@ -1,168 +1,192 @@
 # Project Research Summary
 
-**Project:** TrackPull v1.5 — Polish & Quick Wins
-**Domain:** Chrome Extension (MV3) — Golf data capture and AI prompt export
-**Researched:** 2026-03-02
+**Project:** TrackPull v1.6 — Data Intelligence
+**Domain:** Chrome Extension (MV3) — Golf shot data persistence, session comparison, and AI prompt intelligence
+**Researched:** 2026-03-03
 **Confidence:** HIGH
 
 ## Executive Summary
 
-TrackPull v1.5 is a polish milestone for an existing, proven Chrome extension. The codebase already has a complete, zero-production-dependency architecture (TypeScript + esbuild + Chrome MV3 APIs) that works in production. All six v1.5 features — Gemini AI launch, prompt preview, empty state guidance, export format toggle, keyboard shortcut, and dark mode — are additive enhancements that extend existing files without requiring new dependencies, new modules, or architectural changes. The correct expert approach for this type of polish milestone is to build incrementally: manifest-first (isolated release for permission changes), CSS-foundation next (dark mode before UI elements proliferate), then UI logic changes in increasing complexity order.
+TrackPull v1.6 adds four features to an already-validated Chrome extension stack: session history, cross-session comparison, visual stat cards, and smart prompt suggestions. The existing architecture (TypeScript + esbuild, zero production dependencies, MV3 service worker, `chrome.storage.local`) is the correct foundation — no stack changes are needed. All four features build on existing data models without new data capture, new permissions, or new external dependencies. The recommended approach is a strict separation of concerns: pure TypeScript modules (`session_stats.ts`, `session_comparison.ts`, `prompt_matcher.ts`) for all data computation, with `popup.ts` and `serviceWorker.ts` handling orchestration and storage only.
 
-The recommended approach is to ship Gemini host_permissions as a standalone release before bundling the remaining five features together. This is already the project's stated intent and is validated as technically correct: adding a new `host_permissions` entry disables the extension for all existing users pending re-approval, so isolating it minimizes the blast radius. The remaining five features carry zero permission changes and zero breaking changes to existing behavior. Every default is set to preserve backward compatibility (includeAverages defaults to true, dark mode follows the OS automatically, empty state only shows after storage resolves).
+The most important architectural decision is storage placement for session history. Sessions must go in `chrome.storage.local` (not `sync`), stored as a capped array with `raw_api_data` stripped before persisting. Full `SessionData` objects without the raw API payload are approximately 40-90 KB each; a 10-session cap keeps total history under 900 KB — well within the 10 MB local quota. The existing `EXPORT_CSV_REQUEST` path is preserved unchanged; a new `EXPORT_HISTORY_CSV_REQUEST` handler handles historical re-exports. The session comparison and stat card computations are purely in-memory operations on data already fetched at popup load — no additional storage reads.
 
-The primary implementation risk is dark mode: the existing codebase sets colors via JavaScript inline styles (`element.style.color = "#d32f2f"`), which have higher CSS specificity than any `@media` query and cannot be overridden without a prior CSS custom properties refactor. The keyboard shortcut conflict (`Ctrl+Shift+T` is Chrome's reserved "reopen closed tab") is a silent failure — the manifest compiles cleanly but the shortcut never triggers. Both are well-understood and easily avoided with the patterns documented in this research.
+The primary risks are: (1) silent storage quota failures if `raw_api_data` is not stripped before saving sessions to history; (2) popup height overflow if the full history list is rendered inline without height constraints; and (3) stale prompt suggestions and stat card values if the `DATA_UPDATED` handler is not extended to trigger re-renders. All three risks are preventable with explicit design choices made before implementation begins.
 
 ## Key Findings
 
 ### Recommended Stack
 
-TrackPull's existing stack — TypeScript compiled with esbuild, Chrome MV3 APIs, zero production dependencies — remains unchanged for v1.5. No new libraries, no new build tooling, no new frameworks are needed. All six features are implementable with APIs already in use or standard browser/CSS capabilities.
+The existing stack requires zero changes for v1.6. `chrome.storage.local` with a capped array pattern, CSS Grid within existing token variables, and native TypeScript `Set.has()` lookups cover all four features. No charting libraries, no fuzzy search libraries, no UUID generators, no new manifest permissions. Three new files are added in `src/shared/` (`session_stats.ts`, `session_comparison.ts`, `prompt_matcher.ts`) — all pure functions with no Chrome API dependencies, making them fully testable with `npx vitest run`.
 
-**Core technologies (new for v1.5):**
-- `commands` manifest key (MV3): Keyboard shortcut via `_execute_action` — no TypeScript listener needed; manifest-only change; no new permissions
-- `@media (prefers-color-scheme: dark)` CSS: Dark mode matching system theme — pure CSS, no JavaScript, no new storage key, reads OS preference automatically
-- `chrome.storage.local` (new key `includeAverages`): Export format toggle persistence — one additive key with default `true` to preserve existing behavior; no schema migration
-- HTML `<details>/<summary>` element: Prompt preview disclosure widget — standard DOM, no library, fits popup layout constraints better than a modal overlay
+**Core technologies:**
+- `chrome.storage.local` (capped array for session history): persists across browser restarts, 10 MB quota; at ~40-90 KB per session the enforced 10-session cap stays under 900 KB total
+- CSS Grid + existing `--color-*` tokens: stat card layout with automatic dark mode via the existing token system — no new CSS framework needed
+- Native TypeScript `Set.has()` lookup: smart prompt matching via a `Record<string, string[]>` affinity map — no fuzzy search library (fuzzy search solves a different problem class: user-typed text vs. corpus; this is deterministic metric presence)
+- Arithmetic delta computation: session comparison via pure subtraction on `ClubGroup.averages` — no statistics library
 
 ### Expected Features
 
-**Must have (table stakes for v1.5):**
-- Dark mode matching system theme — users with OS dark mode expect all UI to adapt; a white popup in dark mode is an obvious oversight
-- Empty state guidance replacing "0 shots" dead end — a bare zero count gives users no actionable path; standard UX requires a positive, instructional message
-- Keyboard shortcut to open popup — power users expect keyboard access; clicking the toolbar icon every time is unnecessary friction
+**Must have (table stakes):**
+- Session auto-save on capture — every sports data tool auto-saves; users should never need to manually trigger a save
+- Session history list (browsable from popup or options page) — persistent storage without a browse path is useless
+- Re-export any past session as CSV — history is incomplete without re-export; reuses existing CSV export infrastructure with no csv_writer.ts changes
+- Visual stat card for current session (total shots, avg carry, avg club speed) — current shot-count-only display leaves obvious value on the table; all required data is already in `cachedData`
 
-**Should have (differentiators):**
-- Export format toggle (include/exclude averages and consistency rows) — advanced users doing their own analysis do not want summary rows mixed with shot-level data
-- Prompt preview before AI launch — builds user trust that the correct prompt and data will be sent; valuable for large sessions where data volume is not obvious
+**Should have (competitive differentiators):**
+- Session comparison delta columns — "did I improve?" is the core golf improvement question; no native Trackman export tool surfaces this; positive/negative delta with directional color coding
+- Smart prompt suggestion highlight — reduces cognitive friction when selecting AI prompts; rule-based matching on `metric_names` is zero-latency and requires no API calls
+- Export comparison as CSV — natural follow-on once comparison UI exists; reuses CSV writer infrastructure with a new delta-format output shape
 
-**Verify first, then ship:**
-- Gemini AI launch — `AI_URLS["Gemini"]` already exists in popup.ts and Gemini is already in the HTML select; the only remaining action is confirming the URL is correct and adding the host_permissions entry in an isolated release
-
-**Defer to v1.6+:**
-- Manual dark mode toggle (user-controlled independent of OS) — adds unnecessary complexity over system-match; revisit only if users request it
-- Gemini content script injection for URL pre-fill — requires host_permissions and is brittle against Gemini's SPA architecture; clipboard-first is the correct permanent approach
-- User-configurable shortcut picker in extension UI — Chrome's `chrome://extensions/shortcuts` already provides this natively for all extensions
+**Defer (v2+):**
+- Trend view across all sessions (per-club carry trend line) — requires enough historical data to be meaningful; build once users have accumulated sessions
+- Session sharing / shareable links — niche demand, significant complexity, no backend infrastructure
 
 ### Architecture Approach
 
-All six features integrate into existing files with no new modules required. The architecture is purely additive. The shared modules (csv_writer.ts, prompt_builder.ts, tsv_writer.ts, unit_normalization.ts, interceptor.ts, bridge.ts) require zero changes. The core data capture pipeline is untouched.
+v1.6 follows a strict layering pattern: the capture pipeline (`interceptor.ts`, `bridge.ts`) is untouched; `serviceWorker.ts` gains session history persistence logic and two new message handlers; `popup.ts` gains four new render paths; and three new pure modules in `src/shared/` handle all data transformation. The popup's existing module-level cache pattern (`cachedData`, `cachedUnitChoice`) is extended with `cachedHistory: SessionData[]` and `cachedRecommendedPromptId: string | null`. Session data for comparison is served from the in-memory `cachedHistory` array — no second storage read triggered by user interaction.
 
-**Major components and what changes:**
-1. `src/manifest.json` — Gemini `host_permissions` entry + keyboard shortcut `commands` block (manifest-only, two additive fields)
-2. `src/popup/popup.html` — dark mode CSS media query, empty state element, export toggle checkbox, prompt preview widget (HTML and CSS additions)
-3. `src/popup/popup.ts` — extend `updateExportButtonVisibility()` for empty state; add `updatePromptPreview()` function; wire export toggle persistence (function extension + one new function; no new imports)
-4. `src/options/options.html` — dark mode CSS media query only
-5. `src/background/serviceWorker.ts` — read `includeAverages` from storage in `EXPORT_CSV_REQUEST` handler, pass to `writeCsv()` (one-line parameter change; `includeAverages` param already exists in csv_writer.ts)
-6. `src/shared/constants.ts` — add `INCLUDE_AVERAGES` to STORAGE_KEYS (one additive constant)
+**Major components:**
+1. `serviceWorker.ts` — session history persistence (append-with-cap, deduplication by `report_id`), new `GET_HISTORY` and `EXPORT_HISTORY_CSV_REQUEST` handlers
+2. `src/shared/session_stats.ts` — pure function: `SessionData → SessionStats` (avg carry, avg club speed, per-club shot counts); reads from pre-computed `ClubGroup.averages`, not re-computed inline
+3. `src/shared/session_comparison.ts` — pure function: `(SessionData, SessionData) → ComparisonResult` with per-club `ClubDelta` including null handling for mismatched clubs; sign convention: B minus A, positive = improved
+4. `src/shared/prompt_matcher.ts` — pure function: `(SessionData, BuiltInPrompt[]) → MatchResult | null` using priority-ordered heuristic rules against `metric_names`
+5. `popup.ts` — orchestration: fetches history at DOMContentLoaded, wires all four new render paths, extends `DATA_UPDATED` handler to refresh stat card and prompt badge
 
 ### Critical Pitfalls
 
-1. **`Ctrl+Shift+T` keyboard shortcut is silently overridden by Chrome's "Reopen closed tab"** — The manifest compiles without error, the shortcut appears in `chrome://extensions/shortcuts`, but pressing it reopens a tab instead of opening the popup. Use `Ctrl+Shift+Y` / `Command+Shift+Y` instead. Chrome's native browser shortcuts always take priority; extensions cannot override them.
-
-2. **Dark mode is broken by JavaScript inline styles** — `element.style.color = "#d32f2f"` (used in `showStatusMessage()` and toast creation) has higher CSS specificity than any `@media` query. A `prefers-color-scheme` overlay alone produces a dark background with bright light-mode status text. Mitigation: refactor all JS color assignments to CSS class additions that use `var(--color-*)` custom properties, then write the media query.
-
-3. **Gemini host_permissions addition disables the extension for all existing users pending re-approval** — Chrome's permission change detection triggers a re-prompt when any new host is added to `host_permissions`. The extension is disabled until the user explicitly re-approves. Ship Gemini host_permissions as its own isolated release with clear release notes.
-
-4. **Empty state guidance flashes briefly on every popup open before storage resolves** — `chrome.storage.local.get` is async. Showing the empty state before the promise resolves means it displays momentarily even when the user has data. Show the empty state only after the storage read completes and the result is confirmed null.
-
-5. **Export toggle has no effect if not threaded through the service worker's storage read** — The export flow crosses a message boundary (popup sends `EXPORT_CSV_REQUEST`; service worker handles it and calls `writeCsv()`). The `includeAverages` preference must be read by the service worker from `chrome.storage.local`, not passed via message payload. Service worker already reads all other export preferences (speed unit, distance unit, surface) from storage — add `STORAGE_KEYS.INCLUDE_AVERAGES` to that same `storage.local.get` call.
+1. **`raw_api_data` stored in session history blows storage quota** — strip the `raw_api_data` field before saving any `SessionData` to history; define a `SessionSnapshot` type with this field omitted; a single large session with `raw_api_data` can reach 700+ KB, hitting the 10 MB quota at just ~14 sessions
+2. **No storage quota guard means history silently stops saving** — every `chrome.storage.local.set()` in the history write path must check errors; implement proactive quota check with `getBytesInUse()` before each write; surface a toast on failure rather than dropping silently
+3. **Popup height overflow from history list** — the 800x600 px Chrome popup hard limit is already challenged by current v1.5 content; a full session list inside the popup will clip controls; either route the full list to the options page or constrain the popup to a fixed-height (max 120px) scrollable widget showing 2-3 rows
+4. **Session comparison breaks on club name mismatches** — club names from the Trackman DOM can vary by whitespace, hyphenation, or report type; normalize (trim, lowercase, collapse separators) before comparison; handle clubs present in only one session with explicit N/A display
+5. **Stale stat cards and prompt suggestions when popup stays open across report loads** — both the stat card render and the smart prompt matching must be wired to the `DATA_UPDATED` handler, not only to `DOMContentLoaded`; extract each into a named function called from both initialization and update paths
 
 ## Implications for Roadmap
 
-Build order is driven by two hard constraints: (1) Gemini host_permissions must ship in isolation because it triggers a user-facing re-approval prompt; (2) dark mode CSS must be established before other UI elements are added so new elements inherit dark styles in a single pass.
+Build order follows feature dependencies strictly: auto-save is the prerequisite for history and comparison; stat cards and prompt suggestions are independent and can be built before or alongside history work.
 
-### Phase 1: Manifest Changes (Isolated Release)
+### Phase 1: Visual Stat Card
 
-**Rationale:** Gemini host_permissions is the only v1.5 change that disables the extension for existing users on update. Isolating it to its own release limits blast radius and gives users a clear signal about what changed. The keyboard shortcut `commands` block carries no permission prompt and can be bundled here since it is also manifest-only with no user impact.
-**Delivers:** Gemini confirmed as a working AI service option; keyboard shortcut declared and testable in `chrome://extensions/shortcuts`
-**Addresses:** Gemini AI launch support, keyboard shortcut (manifest entry)
-**Avoids:** Pitfall V2 (permission re-prompt mixed with unrelated features), Pitfall V1 (wrong shortcut key — use Ctrl+Shift+Y), Pitfall V8 (no onCommand listener needed for `_execute_action`)
-**Research flag:** Not needed — manifest-only; Chrome Commands and host_permissions APIs are well-documented
+**Rationale:** Zero dependencies on other v1.6 work. Requires only `cachedData` (already present in v1.5). Creates the new `session_stats.ts` module and validates the pure-function pattern before it is needed for comparison. Lowest-risk starting point that delivers visible user value immediately.
 
-### Phase 2: Dark Mode CSS Foundation
+**Delivers:** Compact stat card in popup showing avg carry, avg club speed, and per-club shot counts. Replaces or augments the current single-number shot count display.
 
-**Rationale:** Dark mode must be built before the other four UI features add HTML elements to popup.html. Building dark mode first means each subsequent phase naturally includes dark mode styles for new elements in the same pass, rather than requiring a retroactive audit.
-**Delivers:** Popup and options page automatically switch to dark palette when OS dark mode is active; no user action required
-**Uses:** CSS custom properties refactor (`:root` color variables) + `@media (prefers-color-scheme: dark)` media query blocks in popup.html and options.html
-**Avoids:** Pitfall V3 (JS inline styles bypass the CSS cascade — CSS variable refactor is the prerequisite step), Pitfall V7 (dynamically created toast elements need explicit dark mode class overrides)
-**Research flag:** Not needed — CSS approach is well-documented and verified against Chrome extension popup behavior
+**Addresses:** Table-stakes "at-a-glance summary" feature; reads from pre-computed `ClubGroup.averages` as the single source of truth (prevents double-computation divergence from CSV).
 
-### Phase 3: Empty State Guidance
+**Avoids:** Pitfall M2 (double-computation of averages) and Pitfall M5 (stale data on `DATA_UPDATED`) — both must be designed correctly from the start by wiring `renderStatCards()` to both `DOMContentLoaded` and the `DATA_UPDATED` handler.
 
-**Rationale:** Self-contained, zero dependencies on other v1.5 features. Minor change to one existing function and one new HTML element. Quick win after the heavier dark mode work.
-**Delivers:** Users opening the popup with no data see "Open a Trackman report to capture shots" instead of a bare "0"
-**Implements:** Extend `updateExportButtonVisibility()` to toggle a new `#empty-state` div; add dark mode styles for the new element (already have the media query in place from Phase 2)
-**Avoids:** Pitfall V6 (empty state must display only after storage read resolves — implement as a three-state model: loading / no-data / has-data)
-**Research flag:** Not needed — implementation path is trivial and fully traced through existing code
+**New files:** `src/shared/session_stats.ts`
+**Modified files:** `src/popup/popup.html`, `src/popup/popup.ts`
 
-### Phase 4: Export Format Toggle
+### Phase 2: Session History Storage and Service Worker
 
-**Rationale:** Requires coordination across four files (constants.ts, popup.html, popup.ts, serviceWorker.ts). Comes after simpler phases so popup.ts and popup.html modifications are consolidated. Storage key and default value must be established before wiring the UI.
-**Delivers:** Checkbox in popup letting users export raw shot data only or include averages/consistency rows; state persists across sessions
-**Uses:** `chrome.storage.local` (new `includeAverages` key, default `true`); `writeCsv()` `includeAverages` param (already exists — zero changes to csv_writer.ts)
-**Avoids:** Pitfall V5 (use `?? true` not `=== false` to handle absent storage key), Pitfall V9 (service worker must read preference from storage directly, not rely on popup to pass it in the message)
-**Research flag:** Not needed — storage and message patterns are established in the existing codebase
+**Rationale:** Foundation for both session history browsing and session comparison. The service worker change (append-to-history in `SAVE_DATA`) is the largest single risk in v1.6 — it must be implemented and stabilized before building any UI that depends on it. Storage design decisions (strip `raw_api_data`, enforce cap, handle quota errors) must be locked in during this phase.
 
-### Phase 5: Prompt Preview
+**Delivers:** Automatic session persistence on every capture (up to 10 sessions, rolling eviction of oldest). `GET_HISTORY` and `EXPORT_HISTORY_CSV_REQUEST` message handlers. `SessionSnapshot` type with `raw_api_data` stripped.
 
-**Rationale:** Goes last among UI features to consolidate all popup.ts changes into one editing pass. Uses only existing imports (`assemblePrompt`, `writeTsv`) and existing cached data variables — zero new dependencies. Building after export toggle means popup.ts is opened only once for both features.
-**Delivers:** Collapsible `<details>/<summary>` disclosure widget in popup showing assembled prompt + data text before clicking "Open in AI"
-**Uses:** Existing `assemblePrompt()` from prompt_builder.ts, existing `cachedData` / `cachedUnitChoice` / `cachedSurface` already in popup.ts module scope
-**Avoids:** Pitfall V4 (full modal overlay exceeds 600px popup height limit — use `<details>/<summary>` with `max-height: 120px; overflow-y: auto` textarea, not `position:fixed` overlay)
-**Research flag:** Not needed — implementation path is fully clear from source inspection; `<details>/<summary>` is the standard pattern for space-constrained popups
+**Addresses:** Session auto-save (P1 table stakes); re-export past session (P1 table stakes).
+
+**Avoids:** Pitfall C1 (raw_api_data quota blowout), Pitfall C2 (wrong storage area — all session data stays in `local`, not `sync`), Pitfall C4 (no quota guard — error handling required on every write), Pitfall M3 (orphaned index keys — batch index and session key writes in a single `storage.local.set()` call).
+
+**New storage keys:** `SESSION_HISTORY` in `STORAGE_KEYS`, `MAX_HISTORY = 10` constant
+**Modified files:** `src/shared/constants.ts`, `src/models/types.ts`, `src/background/serviceWorker.ts`
+
+### Phase 3: Session History UI (Browse and Re-export)
+
+**Rationale:** Depends on Phase 2 service worker work being stable. Adds the popup UI surface for browsing and re-exporting past sessions. The key design decision — popup inline vs. options page — must favor the options page or a tightly constrained popup widget (max-height: 120px, overflow-y: auto, 2-3 rows) to avoid the 600px height overflow pitfall.
+
+**Delivers:** Session history list accessible from popup (compact widget or link to options page), per-session re-export buttons, human-readable date/shot-count labels ("March 3 · 47 shots").
+
+**Addresses:** "Session history list browsable from popup" (table stakes); popup shows a "Saved to history" toast on successful auto-save.
+
+**Avoids:** Pitfall C5 (popup height overflow) — history list must be height-constrained; route full list to options page if popup space is insufficient.
+
+**Modified files:** `src/popup/popup.html`, `src/popup/popup.ts` (optionally `src/options/options.html`, `src/options/options.ts`)
+
+### Phase 4: Session Comparison
+
+**Rationale:** Depends on Phase 3 providing at least two sessions in popup memory. The comparison computation is a pure function over data already cached in `cachedHistory` — no new storage reads at comparison time. UI complexity (selecting two sessions, rendering delta table, showing surface mismatch warning) is the main work.
+
+**Delivers:** Delta table comparing club averages (avg carry, avg club speed, avg spin rate) between any two stored sessions. Positive/negative delta with CSS class-based color coding (`delta-positive`, `delta-negative`). Surface mismatch indicator when sessions differ on hitting surface.
+
+**Addresses:** Cross-session comparison (core differentiator); export comparison as CSV (P2 follow-on after comparison UI is validated).
+
+**Avoids:** Pitfall C3 (club name mismatch — normalize before comparison), Pitfall M4 (surface mismatch misleads user — show surface for each session in comparison header).
+
+**New files:** `src/shared/session_comparison.ts`
+**Modified files:** `src/popup/popup.html`, `src/popup/popup.ts`
+
+### Phase 5: Smart Prompt Suggestions
+
+**Rationale:** Fully independent of history infrastructure — depends only on `cachedData.metric_names` and `BUILTIN_PROMPTS`, both present in v1.5. Placed last because it is the smallest change and drops in cleanly after `popup.ts` is settled from history and comparison work. Building it last avoids re-touching `renderPromptSelect()` multiple times.
+
+**Delivers:** "★ Recommended" badge on the best-fit built-in prompt in the dropdown, based on which Trackman metrics are present in the current session. Badge updates on `DATA_UPDATED` when the user navigates to a new report. User's current selection is never auto-changed.
+
+**Addresses:** Smart prompt suggestion highlight (differentiator); reduces prompt selection decision friction.
+
+**Avoids:** Pitfall M1 (stale matching on `DATA_UPDATED`) — `updateSmartPromptSuggestion()` must be called from both `DOMContentLoaded` initialization and the `DATA_UPDATED` handler.
+
+**New files:** `src/shared/prompt_matcher.ts`
+**Modified files:** `src/popup/popup.ts`
 
 ### Phase Ordering Rationale
 
-- Manifest first because Gemini host_permissions must be isolated from all other changes to limit the re-approval prompt blast radius
-- Dark mode second because it creates the CSS foundation that all subsequent UI phases build on without requiring a second pass
-- Empty state third because it is the simplest UI change and validates the three-state display logic before more complex phases
-- Export toggle fourth because it spans multiple files and requires the storage key to be established before the UI is wired
-- Prompt preview last to consolidate popup.ts edits; stable popup layout from prior phases means no layout retrofitting
+- **Stat card first** because it creates the `session_stats.ts` module pattern independently, delivers visible user value immediately, and has no failure modes that would block other phases
+- **Service worker history second** because it is the highest-risk single change (modifies the existing `SAVE_DATA` handler) and must be stable before any UI depends on stored session data
+- **History UI third** because it depends on service worker being stable; history browsing is prerequisite to comparison
+- **Comparison fourth** because it depends on history UI providing two selectable sessions available in popup memory as `cachedHistory`
+- **Prompt matching last** because it is fully independent and the smallest change; building last avoids multiple reopening of `renderPromptSelect()` as `popup.ts` evolves through earlier phases
 
 ### Research Flags
 
-No phases require `/gsd:research-phase` during planning. All research was completed in this round with HIGH confidence across all six features. The Chrome MV3 APIs in use are official and well-documented; the implementation paths are all traced through actual source code, not inferred.
+Phases likely needing deeper research during planning:
+- **Phase 3 (History UI):** The popup-vs-options-page split requires a concrete UX decision before writing any HTML. Measure actual current v1.5 popup height in dev to confirm which approach fits within 600px.
+- **Phase 4 (Comparison):** Club name normalization needs an explicit decision on normalization rules before implementation. Review actual Trackman DOM output for club name formatting edge cases across different report types.
+
+Phases with standard patterns (skip additional research):
+- **Phase 1 (Stat Card):** Pure function pattern, well-understood. `ClubGroup.averages` as data source confirmed by direct source inspection. Standard vitest test pattern.
+- **Phase 2 (Storage):** Storage patterns verified against official Chrome docs. Append-with-cap pattern is well-documented. `raw_api_data` strip confirmed by direct type inspection.
+- **Phase 5 (Prompt Matching):** Deterministic lookup table, zero dependencies. Heuristic rules fully defined in research. `<option>` textContent badge pattern confirmed safe across OS.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Zero new dependencies; all APIs are official Chrome MV3 or standard CSS/HTML; verified against official documentation |
-| Features | HIGH | Features directly specified in PROJECT.md; implementation paths traced through actual source code inspection; no speculative features |
-| Architecture | HIGH | Based on direct source code inspection of all files in `src/`; no assumptions about function signatures or file layout |
-| Pitfalls | HIGH | Shortcut conflict verified against official Chrome Commands docs; dark mode inline style problem verified against CSS cascade specification; permission re-prompt behavior documented against official Chrome permission model |
+| Stack | HIGH | Zero-dependency constraint maintained; all APIs verified against official Chrome docs; quota math computed from empirical `SessionData` size estimates from actual type shape |
+| Features | HIGH | Direct codebase inspection confirms existing data models support all features without new capture logic; competitor analysis confirms session comparison and smart prompts as genuine differentiators |
+| Architecture | HIGH | All integration points traced against actual source files in `src/`; message handler patterns, storage key conventions, and popup cache patterns verified by direct code inspection |
+| Pitfalls | HIGH | Storage pitfalls verified against official Chrome docs and empirical size estimates; popup 600px limit confirmed via Chromium source; service worker pitfalls from official lifecycle docs |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Gemini URL verification:** `AI_URLS["Gemini"] = "https://gemini.google.com"` already exists in popup.ts. Before Phase 1 ships, manually verify this URL lands on the Gemini chat input and not a marketing page or redirect. Low risk — 30-second manual check.
-- **Dark mode color audit scope:** The complete set of CSS classes and JS inline style assignments requiring dark mode overrides must be inventoried from the actual source files at implementation time. Research identifies the pattern and key known instances (showStatusMessage, toast creation) but implementation should begin with a full audit pass through popup.ts, popup.html, options.ts, and options.html.
-- **Popup current rendered height:** The 600px Chrome popup height cap is a hard limit. Research estimates current popup height at approximately 400-450px, leaving adequate headroom for the prompt preview `<details>` widget. Verify by measuring the actual built popup before committing to the preview widget's expanded height.
-- **Keyboard shortcut final key selection:** STACK.md and FEATURES.md both recommend `Ctrl+Shift+Y` / `Command+Shift+Y`; PITFALLS.md also suggests `Ctrl+Shift+G` as a "G for Golf" mnemonic alternative. Both are technically correct. The roadmapper should make a final call and be consistent across all files.
+- **`SessionSnapshot` type definition:** Research recommends stripping `raw_api_data` from stored sessions, but the exact type definition (new interface vs. TypeScript `Omit<SessionData, 'raw_api_data'>`) is unresolved. Decide during Phase 2 implementation.
+- **History UI placement (popup inline vs. options page):** PITFALLS.md recommends options page for the full list; FEATURES.md and ARCHITECTURE.md recommend an inline popup panel. Measure actual popup height in dev before committing to either approach; the correct answer depends on how much vertical space remains after stat cards are added.
+- **Session history cap value (10 vs. 20):** STACK.md recommends 20, ARCHITECTURE.md recommends 10. Both are safe given quota math (20 sessions at 90 KB = 1.8 MB). Pick one value, define it as `MAX_HISTORY` in `constants.ts`, and document the rationale.
+- **Comparison metric column selection:** Research suggests 5-7 key metrics (ClubSpeed, BallSpeed, SmashFactor, Carry, Total, SpinRate, LaunchAngle). Confirm this list against actual Trackman metric availability and `metric_names` contents before implementing comparison table columns.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Chrome Tabs API Reference — `chrome.tabs.create` requires no host_permissions for URL-only tab creation: https://developer.chrome.com/docs/extensions/reference/api/tabs
-- Chrome Commands API Reference — `_execute_action` syntax, modifier key rules, shortcut conflicts: https://developer.chrome.com/docs/extensions/reference/api/commands
-- Chrome Declare Permissions Reference — host_permissions re-prompt behavior on extension update: https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions
-- MDN prefers-color-scheme — CSS media query specification: https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme
-- w3c/webextensions issue #242 — Chrome propagates OS `prefers-color-scheme` consistently to extension popup and options pages: https://github.com/w3c/webextensions/issues/242
-- Chrome keyboard shortcuts reference — Ctrl+Shift+T / Cmd+Shift+T reserved as "Reopen closed tab": https://support.google.com/chrome/answer/157179
-- Direct source code inspection — all TypeScript and HTML files in `src/` read and analyzed for function signatures, storage patterns, and color assignments
-- csv_writer.ts lines 134-161 — `includeAverages` param already gates both Average and Consistency rows; no csv_writer.ts changes needed for v1.5
+- Chrome Storage API Reference — quota limits, storage areas, per-item limits: https://developer.chrome.com/docs/extensions/reference/api/storage
+- Chrome Extension popup size constraints (800x600 hard limit): Chromium issue tracker https://issues.chromium.org/issues/40655432
+- Direct source code inspection: all files in `/Users/kylelunter/claudeprojects/trackv3/src/` — `SessionData` type, `ClubGroup.averages`, `STORAGE_KEYS`, `BUILTIN_PROMPTS`, popup cache pattern, message handler types, `raw_api_data` field
+- Chrome Extension service worker lifecycle: https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle
+- `chrome.runtime.sendMessage` practical size limits: https://developer.chrome.com/docs/extensions/reference/api/runtime#method-sendMessage
 
 ### Secondary (MEDIUM confidence)
-- elliot79313/gemini-url-prompt GitHub — confirmed Gemini requires content script injection for URL pre-fill; no native URL parameter support: https://github.com/elliot79313/gemini-url-prompt
-- Google AI Developers Forum — no official Google confirmation of native Gemini URL pre-fill; community workarounds only: https://discuss.ai.google.dev/t/can-the-gemini-api-enable-a-website-to-open-the-gemini-site-with-a-text-prompt-pre-filled-by-that-website/73828
-- NN/g — Designing Empty States — positive phrasing + single actionable step UX pattern: https://www.nngroup.com/articles/empty-state-interface-design/
-- CSS light-dark() function — available Chrome 123+ as a single-declaration alternative to separate media query blocks: https://medium.com/front-end-weekly/forget-javascript-achieve-dark-mode-effortlessly-with-brand-new-css-function-light-dark-2024-94981c61756b
+- Trackman Portal Activities tab UX — https://support.trackmangolf.com/hc/en-us/articles/28111485485083-Portal-Player-My-Activities-Within-The-Golf-Portal
+- NN/g recommendation label UX guidelines — https://www.nngroup.com/articles/recommendation-guidelines/
+- PatternFly Dashboard stat card design patterns — https://www.patternfly.org/patterns/dashboard/design-guidelines/
+- Coach Dave Delta session comparison UX — https://coachdaveacademy.com/tutorials/a-delta-guide-learning-through-share-and-compare-data/
+- DEV Community: Local vs Sync vs Session storage comparison — https://dev.to/notearthian/local-vs-sync-vs-session-which-chrome-extension-storage-should-you-use-5ec8
+- GenAI UX contextual prompt suggestion patterns — https://uxdesign.cc/20-genai-ux-patterns-examples-and-implementation-tactics-5b1868b7d4a1
 
-### Tertiary (LOW confidence)
-- AI service URL stability — `gemini.google.com`, `chat.openai.com`, `claude.ai` URLs are undocumented product URLs subject to change without notice; must be verified manually at implementation time
+### Tertiary (LOW confidence, verify during implementation)
+- w3c/webextensions issue #351 — storage.local limits discussion: https://github.com/w3c/webextensions/issues/351
+- HackerNoon — State Storage in Chrome Extensions: https://hackernoon.com/state-storage-in-chrome-extensions-options-limits-and-best-practices
 
 ---
-*Research completed: 2026-03-02*
+*Research completed: 2026-03-03*
 *Ready for roadmap: yes*

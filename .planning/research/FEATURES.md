@@ -1,14 +1,16 @@
 # Feature Research
 
-**Domain:** Golf data scraping and export Chrome extension (Trackman report data)
-**Researched:** 2026-03-02
-**Confidence:** HIGH for dark mode and keyboard shortcut (verified Chrome API docs); HIGH for Gemini approach (confirmed no native URL pre-fill); MEDIUM for prompt preview and empty state UX patterns (established patterns, no Chrome-specific verification needed)
+**Domain:** Golf data scraping and export Chrome extension — session persistence, comparison, and intelligent suggestions
+**Researched:** 2026-03-03
+**Confidence:** HIGH for storage patterns (verified Chrome docs); HIGH for stat card UX (established dashboard patterns); MEDIUM for session comparison UX (analogous domain — sports telemetry, fitness apps); MEDIUM for smart prompt matching (analogous to contextual recommendation patterns)
 
 ---
 
 ## Milestone Scope
 
-This document covers **v1.5 features only**: Gemini AI launch, prompt preview, empty state guidance, export format toggle, keyboard shortcut, and dark mode. It extends and supersedes the v1.3 FEATURES.md for these domains.
+This document covers **v1.6 features only**: session history, session comparison, visual shot summary stat card, and smart prompt suggestions. It extends the v1.5 FEATURES.md. Prior v1.5 features are fully shipped and not re-analyzed here.
+
+The existing system is fully ephemeral — `STORAGE_KEYS.TRACKMAN_DATA` holds only the live session captured during the current page visit. `SessionData` has `date`, `report_id`, `club_groups[]` (with `shots[]`, `averages`, `consistency`), and `metric_names`. All four v1.6 features build on this existing data model without requiring new capture logic.
 
 ---
 
@@ -16,25 +18,26 @@ This document covers **v1.5 features only**: Gemini AI launch, prompt preview, e
 
 ### Table Stakes (Users Expect These)
 
-Features that are non-negotiable for v1.5. Missing these makes the polish milestone feel incomplete.
+Features users consider obvious given the v1.6 goal. Missing these makes the milestone feel unfinished.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Dark mode matching system theme | Users with OS-level dark mode expect all UI to match; a white popup glaring in dark mode is an obvious oversight | LOW | Pure CSS: `@media (prefers-color-scheme: dark)` works in Chrome extension popups and reads OS preference. No JS needed. No `matchMedia` listener needed for initial load. |
-| Empty state guidance instead of "0 shots" | "0 shots" is a dead end — it tells the user nothing. Standard UX requires an actionable message explaining what to do next | LOW | Replace the bare number with a short message + link. Standard pattern: positive phrasing ("Open a Trackman report to capture shots") + actionable link to `web-dynamic-reports.trackmangolf.com`. |
-| Keyboard shortcut to open popup | Power users expect keyboard access to any frequently-used extension; manually clicking the extension icon is friction | LOW | Use `_execute_action` in manifest `commands`. Cannot use Cmd+Shift+T — that is Chrome's reserved "reopen closed tab" shortcut. Must use a non-conflicting combo (see dependency notes). |
-| Gemini as a supported AI service | Gemini is now listed in the AI dropdown but behaves identically to ChatGPT/Claude — open the tab, user pastes | LOW | Gemini has no native URL parameter pre-fill. Clipboard-first approach (copy prompt+data to clipboard, open gemini.google.com) is the correct and already-working pattern. No content script or new host_permissions needed if not injecting. |
+| Session history list browsable in popup | Any sports data tool that persists sessions exposes a way to browse them — Trackman's own app has an "Activities" tab for this. Users who scroll back to last week's session expect to find it somewhere. | MEDIUM | Requires a new UI surface (session list view) in the popup, a storage schema for multiple sessions keyed by `report_id` + date, and a read/load path. The popup today has a single-view layout — this adds a second "view" (current vs. history). |
+| Re-export a past session from history | If history is stored but you can only view it, not act on it, the feature feels read-only and incomplete. | MEDIUM | Re-export requires loading the historical `SessionData` into the same CSV/TSV export flow already built. The background service worker handler (`EXPORT_CSV_REQUEST`) already accepts session data from storage — re-point the key to a historical entry. |
+| Visual stat card for current session | After capturing data, users want a glanceable summary: total shots, avg carry, avg club speed — not a raw shot count. The v1.5 empty state guidance showed the value of contextual info at a glance. | LOW | Compute from `cachedData.club_groups[].shots[].metrics` — `ClubSpeed` and `Carry` are standard metrics in every session. Show 3-4 key numbers. No new data, no new storage — pure display logic built from existing cached values. |
+| Persist sessions automatically on capture | If users must manually "save" a session, they will forget. Every sports tracking app auto-saves. | LOW | On `DATA_UPDATED` message in background, compare incoming `report_id` to stored history keys. If new, append it. If same, update in place (handles multi-page merge). This is an additive side-effect in the existing `DATA_UPDATED` handler. |
 
 ---
 
 ### Differentiators (Competitive Advantage)
 
-Features that go beyond fixing obvious gaps and create a meaningfully better experience.
+Features that go beyond expected behavior and create a meaningfully better experience specific to this tool.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Prompt preview before AI launch | Lets user see the full assembled prompt+data before committing to clipboard copy + tab open. Builds trust that the data is correct. Especially valuable for large sessions. | LOW | A collapsible `<details>/<summary>` element or a show/hide textarea in the popup showing the assembled output of `assemblePrompt()`. Read-only. The assembly logic already exists — this is purely a display surface. No new logic. |
-| Export format toggle for averages/consistency rows | Advanced users who paste into their own analysis spreadsheet don't want the summary rows mixed in with shot-level data | LOW | A single checkbox or compact toggle in the popup: "Include summary rows" (default: on). Persisted in `chrome.storage.local`. The CSV writer already generates these rows — add a boolean param to conditionally skip them. |
+| Session comparison delta columns | Golf improvement is about trend — "am I hitting further than last week?" Delta columns between two sessions' club averages (e.g., carry +4 yds, club speed -1 mph) answer this directly without the user having to manually compute. No other Trackman export tool surfaces this. | HIGH | Requires selecting two sessions, computing per-club averages for the same metric across both sessions, and rendering a delta table. Club names must match exactly for comparison to be meaningful. The delta format (absolute, percentage, or directional arrow) is a design decision. Export as CSV is a natural extension. |
+| Smart prompt suggestion highlight | Users don't always know which prompt fits their data. If the session has SpinRate data, the "Launch & Spin Optimization" prompt is automatically relevant. A subtle "Recommended" badge on the most relevant prompt in the dropdown reduces the cognitive cost of prompt selection. | LOW | Rule-based matching on `SessionData.metric_names`: if session contains `SpinRate` + `SpinAxis` → rank "launch-spin" prompt higher; if `FaceAngle` + `ClubPath` present → rank "shot-shape" or "club-delivery"; if only `Carry` + `ClubSpeed` → rank "quick-summary" or "distance-gapping". This is a pure UI annotation on the existing prompt select — no new storage, no AI. |
+| Export comparison as CSV | After running a session comparison, let the user download the delta table as a CSV for their own analysis or sharing. | MEDIUM | Same CSV writer infrastructure already in place. Requires a new CSV shape: club name, metric, session A value, session B value, delta. The delta computation happens in the comparison logic — this is an output path for that result. Dependency: session comparison delta columns must exist first. |
 
 ---
 
@@ -42,73 +45,82 @@ Features that go beyond fixing obvious gaps and create a meaningfully better exp
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Gemini content script injection for URL pre-fill | Seems like it would make Gemini match ChatGPT/Claude's "auto-fill" behavior | Requires adding `gemini.google.com` to `host_permissions`, which triggers a permission prompt for all existing users on extension update. The content script approach is brittle against Gemini's SPA architecture changes. The clipboard-first approach already works and is the correct design. | Ship Gemini as clipboard-first (identical to current behavior): open gemini.google.com + data already in clipboard. No new permissions required. No injection needed. The PROJECT.md note "isolated host_permissions release" refers to this permission cost — avoid it entirely by not injecting. |
-| `Cmd+Shift+T` as the keyboard shortcut | The project spec names this shortcut | Chrome reserves `Cmd+Shift+T` (Mac) / `Ctrl+Shift+T` (PC) as "Reopen closed tab" at the browser level. Extensions cannot override reserved browser shortcuts. Chrome will silently ignore or conflict with this binding. | Use `Cmd+Shift+Y` (Mac) / `Ctrl+Shift+Y` (PC) — the example shortcut in Chrome's own `_execute_action` documentation. Users can reassign shortcuts in `chrome://extensions/shortcuts`. |
-| System-level dark mode toggle within the extension | Seems like users want to control the theme independently of the OS | The whole value prop of v1.5 dark mode is "matches system theme automatically with zero user action." A manual toggle adds settings complexity for no gain — users who want to override the system already know how to do so at the OS level. | `@media (prefers-color-scheme: dark)` CSS only. One rule. No JS. No toggle. No storage. |
-| Export format toggle in options page | Seems cleaner to keep options separate | The export format toggle is a per-session decision (some sessions you want raw data, some you want summaries). It belongs in the popup, accessible during the export workflow, not buried in a settings page. | Inline toggle in popup, adjacent to Export CSV button. Small checkbox or labeled switch. |
-| Prompt preview in a separate modal/overlay | More screen space for long prompts | Chrome popup maximum width is ~800px but design convention keeps popups narrow (320-400px). A modal within a popup creates nested scroll complexity. Large prompts also make the user regret previewing — they can't do anything useful with 30 KB of text in a 200px textarea. | `<details>/<summary>` disclosure widget: collapsed by default, expands inline. Scrollable fixed-height textarea (e.g., 120px). Shows enough to confirm data is present without overwhelming the popup layout. |
+| Unlimited session history storage | Users want all their sessions saved forever | `chrome.storage.local` has a 10 MB quota. A typical `SessionData` JSON object (with all metric columns for 40 shots across 8 clubs) is approximately 30-80 KB. At 80 KB/session, the 10 MB limit is hit at ~125 sessions. Requesting `unlimitedStorage` triggers a permission prompt on update and expands the extension's data footprint on the user's machine. | Cap history at 20 most recent sessions (rolling eviction of oldest). 20 × 80 KB = 1.6 MB max. Add a "Clear all history" button in the options page. Document the cap in the UI. |
+| Cloud sync of session history to `chrome.storage.sync` | Appealing for users with multiple devices | `chrome.storage.sync` has a 100 KB total quota and 8 KB per item. A single `SessionData` object may exceed 8 KB. Syncing session history would require fragmentation logic and would hit quota almost immediately. | Session history stays `chrome.storage.local` only. Existing AI service preference lives in `sync` (100 bytes) — keep that pattern but don't extend it to sessions. |
+| Session comparison with more than 2 sessions simultaneously | Power users might want 3-way or trend-over-time comparison | Multi-session comparison multiplies UI complexity (which two to compare? which order? how to show N deltas?) with diminishing return. The core question is "did I improve?" which is answered by 2-session comparison. | Ship 2-session comparison only. The user can do multi-session analysis by exporting each session as CSV and using a spreadsheet. |
+| AI-powered prompt suggestion (send data to LLM to pick best prompt) | Seems smarter than rule-based | Requires an API key, a backend, or injecting data into an AI service just to get a prompt recommendation — before the user even starts their analysis. The value delivered is marginal (8 prompts is a short list; users can read them). | Rule-based matching on `metric_names` is deterministic, instant, works offline, requires no permissions, and covers the real use case: "I have spin data, should I use the spin prompt?" |
+| Session history in a full options page tab | More space for a rich history UI | The options page is for preferences, not for primary data interaction. History browsing is a popup-native workflow: the user just captured data and wants to browse or compare. Putting it in options creates a context switch. | Inline history panel within the popup (collapsible, or a second "view" toggled by a History button). Keep the interaction surface close to where the user already is. |
+| Comparison as a persistent "saved comparison" | Let users save a comparison result for reference later | Adds a new storage entity type (saved comparisons) on top of session history. Most users want to act on the comparison immediately (download, send to AI). Persisting comparisons adds complexity without demonstrated demand. | Stateless comparison: select two sessions, compute delta on demand, download or copy. No persistence of comparison results. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Dark Mode]
-    (independent — pure CSS, no dependencies)
+[Session Auto-Save]
+    └──requires──> [DATA_UPDATED message handler] (already exists in background.ts)
+    └──requires──> [chrome.storage.local history schema] (new — session list keyed by report_id)
+    └──feeds──> [Session History List]
+    └──feeds──> [Session Comparison]
 
-[Empty State Guidance]
-    └──requires──> [Shot count display] (already exists as #shot-count element)
-    └──enhances──> [Shot count display] (replaces "0" with actionable message)
+[Session History List]
+    └──requires──> [Session Auto-Save] (needs data to list)
+    └──requires──> [Popup view-switching logic] (new — toggle between current session view and history view)
+    └──enables──> [Re-export Past Session]
+    └──enables──> [Session Comparison]
 
-[Keyboard Shortcut]
-    └──requires──> [manifest.json "commands" entry with _execute_action]
-    (no code changes — manifest-only)
+[Re-export Past Session]
+    └──requires──> [Session History List] (must be able to select a session)
+    └──requires──> [EXPORT_CSV_REQUEST handler] (already exists; re-point to historical session data)
 
-[Gemini AI Launch]
-    └──requires──> [Clipboard-first AI launch pattern] (already exists in v1.3)
-    └──requires──> [AI_URLS["Gemini"] entry] (already exists in popup.ts)
-    (no new dependencies — Gemini option already in dropdown; behavior is identical to ChatGPT/Claude)
+[Visual Stat Card]
+    (independent — reads cachedData, which already exists at DOMContentLoaded)
+    └──enhances──> [Shot count display] (replaces/augments the current single-number shot count)
 
-[Prompt Preview]
-    └──requires──> [assemblePrompt()] (already exists in prompt_builder.ts)
-    └──requires──> [findPromptById()] (already exists in popup.ts)
-    └──requires──> [cachedData] (already pre-fetched at DOMContentLoaded)
-    └──enhances──> [AI Tab Launch] (user sees what will be copied before clicking Open in AI)
+[Session Comparison Delta Columns]
+    └──requires──> [Session History List] (must have >= 2 sessions to compare)
+    └──requires──> [Per-club average computation] (already in ClubGroup.averages — existing data)
+    └──enables──> [Export Comparison as CSV]
 
-[Export Format Toggle]
-    └──requires──> [CSV writer function] (already exists in background.ts or equivalent)
-    └──requires──> [chrome.storage.local] (already declared in manifest)
-    └──enhances──> [Export CSV button] (adds include/exclude option)
+[Export Comparison as CSV]
+    └──requires──> [Session Comparison Delta Columns]
+    └──requires──> [CSV writer] (already exists; needs new delta-format output shape)
+
+[Smart Prompt Suggestion Highlight]
+    (independent — reads cachedData.metric_names and BUILTIN_PROMPTS; no new storage)
+    └──enhances──> [Prompt select dropdown] (adds visual annotation only)
 ```
 
 ### Dependency Notes
 
-- **Gemini has no new dependencies.** The "Gemini AI launch support" in PROJECT.md is already half-done — `AI_URLS["Gemini"]` is already defined in popup.ts and Gemini is already in the AI service dropdown. The only missing piece is whether Gemini was intentionally excluded from the launch flow previously. Confirm whether the Open in AI button already handles Gemini identically to ChatGPT/Claude (clipboard + tabs.create). If yes, v1.5 Gemini work is purely the "isolated host_permissions release" — i.e., no new manifest changes are needed because no content script is being added.
-- **Keyboard shortcut is manifest-only.** No TypeScript changes needed. Add `"commands": { "_execute_action": { "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y" } } }` to manifest.json. Do not use T — it conflicts with Chrome's reopen-closed-tab shortcut.
-- **Prompt preview requires popup layout consideration.** The current popup has a fixed-width layout. A collapsible preview section added after the AI controls section will extend popup height. This is acceptable. Ensure the `<details>` element is closed by default so existing users see no layout change until they click.
-- **Export format toggle requires CSV writer modification.** The toggle state is read at export time and passed as a parameter. Do not change the default behavior (include summaries by default) — only the explicit toggle should suppress them.
-- **Dark mode requires audit of all hardcoded colors.** The popup.html currently uses hardcoded hex colors (`#ffffff`, `#333333`, `#666666`, `#1976d2`, `#388e3c`, `#d32f2f`, `#f5f5f5`). Each must be overridden in a `@media (prefers-color-scheme: dark)` block. Use CSS custom properties (`--bg`, `--text`, `--accent`) to minimize the override surface.
+- **Session auto-save is the foundation.** Without it, history and comparison have no data. It must ship before any other v1.6 feature is useful. It is also the lowest-complexity item — a side-effect write in the existing data handler.
+- **Visual stat card and smart prompt suggestion are fully independent.** They require only `cachedData`, which is already pre-fetched at popup load time. Either can ship without session history infrastructure.
+- **Session comparison depends on history list.** You cannot compare sessions you cannot select. Implement history storage and list UI before tackling comparison delta computation.
+- **Re-export and comparison both reuse existing infrastructure.** The CSV export path already exists. The averages data is already present in `ClubGroup.averages`. The new work is the selection UI and the delta computation, not the data layer.
+- **Smart prompt suggestion has zero storage dependencies.** It is a pure computation on `metric_names` (already on `SessionData`) and `BUILTIN_PROMPTS` (already in `prompt_types.ts`). A lookup function + one CSS class added to the relevant `<option>` is the entire implementation.
 
 ---
 
 ## MVP Definition
 
-The v1.5 milestone scope is pre-defined in PROJECT.md. This section maps that scope to a recommended build order based on complexity and risk.
+The v1.6 scope is pre-defined in PROJECT.md. This section maps it to a recommended build order based on dependencies and risk.
 
-### Build First (fastest, no dependencies, highest safety)
+### Launch With (v1.6 core — build in this order)
 
-- [ ] **Dark mode CSS** — Pure CSS, no JS, no logic changes. Add `@media (prefers-color-scheme: dark)` block to popup.html and options.html. Zero risk of regression.
-- [ ] **Keyboard shortcut manifest entry** — Single manifest.json change. No TypeScript. Use `Cmd+Shift+Y` / `Ctrl+Shift+Y` (not T). Test in `chrome://extensions/shortcuts` to verify it appears.
-- [ ] **Empty state guidance** — Replace `updateShotCount()` logic to show "Open a Trackman report" message when count is 0. Minor JS change in popup.ts + CSS for the message styling.
+- [ ] **Session auto-save** — Foundation for history and comparison. Side-effect write in `DATA_UPDATED` handler. Define storage schema: `sessionHistory: { [reportId]: SessionData }` in `chrome.storage.local`. Cap at 20 sessions with rolling eviction.
+- [ ] **Visual stat card** — Independent of history. Reads `cachedData`. Add 3-4 key metrics (total shots, avg carry, avg club speed, shot distribution by club) to popup above current shot count display. Zero new storage or data capture.
+- [ ] **Smart prompt suggestion highlight** — Independent of history. Rules on `metric_names` → add a `data-recommended` attribute or "Recommended" badge to the best-fit prompt option. Single function + minimal CSS.
+- [ ] **Session history list** — Requires auto-save. Add a "History" button to popup that toggles a second view listing past sessions with date, shot count, and re-export button.
+- [ ] **Session comparison delta columns** — Requires history list. Select two sessions, compute per-club delta on `ClubGroup.averages`, render a comparison table. The core question it answers: "How did I improve?"
 
-### Build Second (slightly more surface area)
+### Add After Validation (v1.6 follow-on)
 
-- [ ] **Export format toggle** — Add checkbox to popup HTML next to Export CSV. Persist state to `chrome.storage.local`. Pass boolean to CSV writer. Modify writer to conditionally skip averages/consistency rows.
-- [ ] **Prompt preview disclosure widget** — Add `<details><summary>Preview prompt</summary><textarea readonly></textarea></details>` after AI controls. Wire to `assemblePrompt()` on prompt/service change. Populate on expand.
+- [ ] **Export comparison as CSV** — Trigger: if users engage with session comparison, the natural next action is downloading the delta. Add after core comparison UI is proven.
 
-### Build Last (verify Gemini behavior before touching)
+### Future Consideration (v2+)
 
-- [ ] **Gemini AI launch confirmation** — Verify the existing Open in AI button already handles Gemini via clipboard-first (it should — `AI_URLS["Gemini"]` exists). If it does, this is a no-op code change and only a manifest version bump. If a content script was required, that is a separate decision (see Anti-Features above).
+- [ ] **Trend view across all sessions** — Once enough sessions are stored, a per-club carry trend line would be valuable. Defer until history is live and users have accumulated multiple sessions.
+- [ ] **Share session** — Export a session as a shareable link or QR code. No backend — requires encoding the session data in the URL. Niche demand, high complexity.
 
 ---
 
@@ -116,100 +128,113 @@ The v1.5 milestone scope is pre-defined in PROJECT.md. This section maps that sc
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Dark mode | HIGH | LOW | P1 |
-| Empty state guidance | HIGH | LOW | P1 |
-| Keyboard shortcut | MEDIUM | LOW | P1 |
-| Export format toggle | MEDIUM | LOW | P1 |
-| Prompt preview | MEDIUM | LOW | P1 |
-| Gemini AI launch | LOW | LOW | P2 |
+| Session auto-save | HIGH (enables everything else) | LOW | P1 |
+| Visual stat card | HIGH (immediate, no dependencies) | LOW | P1 |
+| Smart prompt suggestion | MEDIUM (reduces decision friction) | LOW | P1 |
+| Session history list | HIGH | MEDIUM | P1 |
+| Session comparison delta columns | HIGH (core differentiator) | HIGH | P1 |
+| Export comparison as CSV | MEDIUM | MEDIUM | P2 |
+| Trend view across sessions | HIGH | HIGH | P3 |
 
 **Priority key:**
-- P1: Ship in v1.5 (all are low-cost, do them all)
-- P2: Verify existing behavior first; may already be done
+- P1: Ship in v1.6
+- P2: Add when comparison UI is validated
+- P3: Future consideration; requires enough historical data to be useful
 
 ---
 
 ## Technical Implementation Notes
 
-These are findings that directly affect implementation decisions for v1.5 features.
+### Storage Schema for Session History
 
-### Dark Mode
+`chrome.storage.local` — current 10 MB quota (since Chrome 113+). Confirmed authoritative via Chrome developer docs.
 
-- **`prefers-color-scheme` works in Chrome extension popups.** Confirmed via w3c/webextensions issue #242: Chrome extension popups and options pages read the OS-level color scheme preference consistently. No JS listener or `matchMedia` required for initial paint.
-- **CSS custom properties are the right approach.** Define a `:root` block with light-mode defaults, then override in `@media (prefers-color-scheme: dark)`. This minimizes the number of override declarations.
-- **CSS `light-dark()` function is available.** Chrome 123+ (released 2024) supports `color: light-dark(#333, #eee)` as a single declaration covering both modes. Since TrackPull targets current Chrome only, this is available. It reduces boilerplate versus separate media query blocks.
-- **options.html needs the same treatment.** Both popup.html and options.html use inline styles. Both must be updated.
-- Confidence: HIGH (verified via [MDN prefers-color-scheme](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme) and [w3c/webextensions issue #242](https://github.com/w3c/webextensions/issues/242))
+Recommended schema:
+```typescript
+// Storage key: STORAGE_KEYS.SESSION_HISTORY (new key)
+// Value type:
+interface SessionHistoryEntry {
+  report_id: string;   // deduplification key
+  date: string;        // from SessionData.date
+  shot_count: number;  // computed at save time (avoids re-counting on list render)
+  session: SessionData; // full session object
+}
+// Stored as array, newest first. Cap at 20 entries.
+// When > 20, shift() the oldest.
+```
 
-### Keyboard Shortcut
+A typical `SessionData` (40 shots, 8 clubs, all 28 metric columns) serializes to approximately 30-80 KB JSON. At 80 KB worst case × 20 sessions = 1.6 MB — well within the 10 MB limit with room for other stored preferences.
 
-- **`_execute_action` is the correct command.** In Manifest V3, this reserved command opens the extension popup on keypress. It does not fire `onCommand` events — no background script handler needed.
-- **`Cmd+Shift+T` is a Chrome-reserved browser shortcut** (reopen closed tab). Extensions cannot override OS-level or browser-reserved shortcuts. Using it will cause silent failure or conflict. The Chrome commands API documentation uses `Ctrl+Shift+Y` / `Command+Shift+Y` as its own example shortcut — use that.
-- **Suggested keys are advisory.** Users can remap to any non-reserved combo in `chrome://extensions/shortcuts`. The manifest `suggested_key` is a default proposal only.
-- **Manifest-only change.** No TypeScript files need modification.
-- Confidence: HIGH (verified via [Chrome commands API](https://developer.chrome.com/docs/extensions/reference/api/commands))
+Deduplication strategy: if incoming `report_id` already exists in history, replace in place (handles multi-page metric merge scenario). This mirrors the existing `mergeSessionData()` pattern.
 
-### Gemini AI Launch
+### Visual Stat Card
 
-- **Gemini has no native URL pre-fill.** As of 2025, `gemini.google.com` does not parse `?q=`, `?prompt=`, or `?text=` URL parameters natively. Extensions like `elliot79313/gemini-url-prompt` simulate input injection via content scripts — they are not using a native Gemini URL scheme.
-- **Clipboard-first is the correct pattern.** TrackPull's existing implementation (copy assembled prompt+data to clipboard, then `chrome.tabs.create({ url: "https://gemini.google.com" })`) is already the correct approach. This is what the code does for ChatGPT and Claude today.
-- **No `host_permissions` needed if not injecting.** `chrome.tabs.create()` requires no host_permissions for the destination URL. Only reading tab properties (url, title) or running content scripts requires host_permissions. Opening a tab to gemini.google.com requires zero new permissions.
-- **PROJECT.md note "isolated host_permissions release"** refers to a past decision to defer adding Gemini injection to a separate release to avoid triggering permission prompts. Since we're NOT adding a content script (clipboard-first approach instead), no host_permissions change is needed at all. The Gemini dropdown option already exists in the popup — the "launch" is to verify it already works.
-- Confidence: HIGH for clipboard-first approach; LOW for whether native URL pre-fill will ever exist (Google has not announced it)
+Computed from existing `cachedData` at popup load (no new storage reads). Key metrics available in every session:
+- `ClubSpeed` — available on all clubs (speed metrics are captured on every Trackman session)
+- `Carry` — available on all clubs (distance metrics always present)
+- Shot count per club — already computed in `updateShotCount()`
 
-### Prompt Preview
+Display format: 3-4 compact "pill" numbers above or replacing the current shot count display. Example: `42 shots | 145 yd avg carry | 89 mph avg club speed`. The existing `ClubGroup.averages` object already contains these values — no computation needed beyond averaging across clubs.
 
-- **Assembly is already done.** `assemblePrompt(prompt, tsvData, metadata)` in `prompt_builder.ts` returns the full assembled string. The popup already calls this on "Open in AI" click. Prompt preview just calls the same function and displays the result in a read-only textarea.
-- **Update on prompt/service change.** Wire the preview textarea to update when `promptSelect` or `aiServiceSelect` change. Use the same `cachedData`, `cachedUnitChoice`, `cachedSurface` already cached at DOMContentLoaded.
-- **`<details>/<summary>` preferred over modal.** The popup is constrained. A disclosure widget collapsed by default adds zero visual weight. On expand it shows a scrollable textarea. This is the dominant pattern in extension popups for secondary info.
-- **Popup height concern.** The popup currently shrink-wraps content. Adding a collapsed `<details>` block is invisible. When expanded, the popup will grow taller. Chrome allows popup heights up to ~600px. Current popup is well under that. No issue.
-- Confidence: HIGH (implementation path is clear from existing code)
+### Smart Prompt Suggestion Rules
 
-### Export Format Toggle
+Rule-based matching against `SessionData.metric_names`. Lookup runs once when `cachedData` loads. Add a `getRecommendedPromptId(metricNames: string[]): string` function to `prompt_builder.ts`.
 
-- **CSV writer location.** The export CSV flow goes through the background service worker (background.ts handles `EXPORT_CSV_REQUEST` messages). The toggle state must be passed through the message or read from storage in the background.
-- **Storage key needed.** Add `INCLUDE_SUMMARY_ROWS` to `STORAGE_KEYS` constants. Default: `true` (existing behavior preserved).
-- **Popup reads preference at launch** (same pattern as other preferences). Toggle checkbox reflects stored value. On change: write to `chrome.storage.local` immediately (same pattern as speed/distance unit selectors).
-- **CSV writer gets a new optional boolean param.** `includeSummaryRows: boolean = true`. When false, skip the averages row and consistency row per club. This is additive — zero caller breakage with a default param.
-- Confidence: HIGH (clear implementation path from existing code patterns)
+Priority rules (ordered by specificity):
+1. `SpinRate` + `SpinAxis` present → recommend `"launch-spin-intermediate"`
+2. `FaceAngle` + `ClubPath` + `FaceToPath` present → recommend `"shot-shape-intermediate"` or `"club-delivery-advanced"`
+3. `AttackAngle` + `DynamicLoft` present → recommend `"club-delivery-advanced"`
+4. `Carry` only (minimal metric set) → recommend `"distance-gapping-beginner"`
+5. Default fallback → recommend `"quick-summary-beginner"` (already the current default)
 
-### Empty State Guidance
+UI: add a `"Recommended"` text label inline in the `<option>` for the matched prompt (e.g., `"Launch & Spin Optimization (Recommended)"`). Alternatively, auto-select the recommended prompt if the user hasn't manually changed their selection in this session. The latter is more impactful but risks overwriting a saved preference — a badge is safer.
 
-- **UX pattern:** Positive phrasing, single actionable step. "Open a Trackman report to capture shots" with a subtitle link "Go to Trackman" pointing to `https://web-dynamic-reports.trackmangolf.com`. Per NN/g and industry patterns: avoid "No data found" (negative); prefer "Here's how to get started" (positive + actionable).
-- **Implementation:** Modify `updateShotCount()` to either set `shotCountElement.textContent` to the number (existing behavior when data exists) or render a guidance message when count is 0. A separate `<div id="empty-state">` element (hidden when data exists) avoids mutating the count element's semantics.
-- **The export row and AI section are already hidden** when there's no data (via `updateExportButtonVisibility()`). The empty state guidance replaces the cold "0" with an instructional message in the same space.
-- Confidence: HIGH (clear from existing code + well-established UX pattern)
+### Session Comparison Delta Computation
+
+Source: `ClubGroup.averages` on both sessions. Keys in `averages` are metric names (same as `metric_names` array). Delta is `sessionB.averages[metric] - sessionA.averages[metric]`. Positive delta = improvement in most distance/speed metrics (context-dependent — lower spin or side is better, so sign interpretation is metric-aware).
+
+Club matching: exact string match on `club_name`. Clubs present in one session but not the other are shown with N/A for the missing session's values.
+
+Metric selection for comparison table: expose the same metrics the user has unit preferences for (carry in their chosen distance unit, club speed in their chosen speed unit). Do not dump all 28 metrics into the comparison table — it becomes unreadable. A curated set of 5-7 key metrics per club is the right scope: `ClubSpeed`, `BallSpeed`, `SmashFactor`, `Carry`, `Total`, `SpinRate`, `LaunchAngle`.
+
+### Popup View Architecture
+
+The popup today is a single flat layout. Session history requires a second "view." Two implementation patterns in Chrome extension popups:
+
+1. **Tab-based** — add History/Current tabs at top of popup. Simple but adds permanent vertical height to all views.
+2. **Show/hide panel** — a "History" button slides in or reveals a list panel; "Back" returns to current session view. More compact but requires explicit panel state management.
+
+Recommendation: show/hide panel. The popup is already narrow (320-400px width), and tabs add visual weight that the current design avoids. A "History (5)" button in the header area, clicking which slides in a list panel, matches patterns seen in well-designed analytics extensions. State is transient (panel open/closed) — no need to persist which panel is active.
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | Grammarly (ext) | JSON Formatter (ext) | ChatGPT for Chrome (ext) | TrackPull v1.5 plan |
-|---------|-----------------|----------------------|--------------------------|---------------------|
-| Dark mode | Yes | Yes | Yes | Yes — `prefers-color-scheme` CSS |
-| Keyboard shortcut | Yes | Varies | Yes | Yes — `_execute_action` with `Cmd+Shift+Y` |
-| Empty state guidance | Yes (onboarding) | N/A | Yes | Yes — actionable message |
-| Prompt preview | N/A | N/A | Yes | Yes — disclosure widget |
-| Export options toggle | N/A | N/A | N/A | Yes — include/exclude summary rows |
-| Gemini support | N/A | N/A | N/A | Yes — clipboard-first (same as ChatGPT/Claude) |
+| Feature | Trackman Golf App | FlightScope App | TrackPull v1.6 plan |
+|---------|-------------------|-----------------|---------------------|
+| Session history | Yes — Activities tab, full history, cloud-backed | Yes — session log in app | Local-only, 20 sessions, popup-accessible |
+| Session comparison | Yes — side-by-side stats per club | Limited | Delta table, 2-session, downloadable CSV |
+| Visual stat card | Yes — rich dashboard with charts | Yes — basic summary | Compact 3-4 metric pills in popup |
+| Smart prompt suggestion | N/A (native AI, no prompts) | N/A | Rule-based badge on best-fit prompt |
+| Export to CSV | No (app locks data to their ecosystem) | No | Already shipped — v1.6 extends to historical sessions |
+
+TrackPull's differentiation is the CSV export and AI prompt workflow — both of which the native apps deliberately withhold. The v1.6 features extend that open-data philosophy to historical sessions.
 
 ---
 
 ## Sources
 
-- [Chrome commands API — `_execute_action` and key syntax](https://developer.chrome.com/docs/extensions/reference/api/commands) — confirmed `_execute_action` for popup trigger; `Command+Shift+Y` / `Ctrl+Shift+Y` as example shortcut (HIGH confidence)
-- [MDN prefers-color-scheme](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme) — CSS media query syntax (HIGH confidence)
-- [w3c/webextensions issue #242](https://github.com/w3c/webextensions/issues/242) — confirmed `prefers-color-scheme` reads OS preference in Chrome extension popups (HIGH confidence)
-- [elliot79313/gemini-url-prompt GitHub](https://github.com/elliot79313/gemini-url-prompt) — confirmed Gemini requires content script injection for URL pre-fill; no native URL params (MEDIUM confidence)
-- [Google AI Developers Forum — Gemini URL pre-fill](https://discuss.ai.google.dev/t/can-the-gemini-api-enable-a-website-to-open-the-gemini-site-with-a-text-prompt-pre-filled-by-that-website/73828) — no official Google response confirming native support; community workarounds required (MEDIUM confidence)
-- [Chrome keyboard shortcuts — Ctrl+Shift+T](https://support.google.com/chrome/answer/157179) — Ctrl+Shift+T / Cmd+Shift+T is Chrome's reserved "reopen closed tab" shortcut (HIGH confidence)
-- [NN/g — Designing Empty States](https://www.nngroup.com/articles/empty-state-interface-design/) — positive phrasing + single action UX pattern (MEDIUM confidence)
-- [Chrome dialog element for modals](https://developer.chrome.com/blog/dialog-element-modals-made-easy) — `<details>/<summary>` preferred over dialog for lightweight disclosures in space-constrained popups (MEDIUM confidence)
-- [Chrome tabs API — tabs.create](https://developer.chrome.com/docs/extensions/reference/api/tabs) — no host_permissions required for destination URL when creating a tab (HIGH confidence)
-- [CSS light-dark() function](https://medium.com/front-end-weekly/forget-javascript-achieve-dark-mode-effortlessly-with-brand-new-css-function-light-dark-2024-94981c61756b) — available in Chrome 123+ as single-declaration dark mode (MEDIUM confidence)
+- [Chrome storage API — quota limits and storage.local](https://developer.chrome.com/docs/extensions/reference/api/storage) — 10 MB limit for local (HIGH confidence)
+- [Trackman Portal — Activities tab UX](https://support.trackmangolf.com/hc/en-us/articles/28111485485083-Portal-Player-My-Activities-Within-The-Golf-Portal) — session history patterns in Trackman's own product (MEDIUM confidence)
+- [NN/g — Recommendation UX guidelines](https://www.nngroup.com/articles/recommendation-guidelines/) — "Recommended" label UX best practice (MEDIUM confidence)
+- [Designing Use-Case Prompt Suggestions — NN/g](https://www.nngroup.com/articles/designing-use-case-prompt-suggestions/) — contextual prompt suggestion patterns for AI UX (MEDIUM confidence)
+- [PatternFly Dashboard Design Guidelines](https://www.patternfly.org/patterns/dashboard/design-guidelines/) — stat card design patterns (MEDIUM confidence)
+- [Coach Dave Delta — session comparison UX](https://coachdaveacademy.com/tutorials/a-delta-guide-learning-through-share-and-compare-data/) — delta comparison patterns in sports telemetry (MEDIUM confidence — adjacent domain)
+- [GenAI UX patterns — contextual prompt suggestions](https://uxdesign.cc/20-genai-ux-patterns-examples-and-implementation-tactics-5b1868b7d4a1) — data-matched AI prompt recommendation patterns (MEDIUM confidence)
+- Codebase analysis: `src/models/types.ts`, `src/shared/constants.ts`, `src/popup/popup.ts`, `src/shared/prompt_types.ts` — confirmed existing data models, storage keys, metric names, and prompt IDs available for v1.6 features (HIGH confidence)
 
 ---
 
-*Feature research for: TrackPull v1.5 — Polish & Quick Wins (Gemini launch, prompt preview, empty states, export toggle, keyboard shortcut, dark mode)*
-*Researched: 2026-03-02*
-*Supersedes v1.3 FEATURES.md for new v1.5 feature domains; v1.3 entries preserved as context where referenced*
+*Feature research for: TrackPull v1.6 — Data Intelligence (session history, comparison, visual stat summary, smart prompt suggestions)*
+*Researched: 2026-03-03*
+*Extends v1.5 FEATURES.md. Prior v1.5 entries preserved in that file; only v1.6 features analyzed here.*

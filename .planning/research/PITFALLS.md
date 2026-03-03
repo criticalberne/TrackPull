@@ -1,465 +1,247 @@
 # Pitfalls Research
 
-**Domain:** Chrome Extension (MV3) — Clipboard Export, AI Prompt Tab Launch, and v1.5 Polish Features
-**Researched:** 2026-03-02
-**Confidence:** HIGH for MV3 clipboard mechanics (official docs + Chromium issue tracker verified); HIGH for AI URL pre-fill status (multiple community sources, cross-verified); HIGH for keyboard shortcut restrictions (official API docs verified); HIGH for popup size constraints (multiple community sources consistent); MEDIUM for dark mode CSS cascade (official docs + community); MEDIUM for permission re-prompt behavior (official docs, behavior documented but edge-case dependent); LOW for AI service URL stability (undocumented, subject to change without notice)
+**Domain:** Chrome Extension (MV3) — Session History, Cross-Session Comparison, Visual Stat Cards, Smart Prompt Matching
+**Researched:** 2026-03-03
+**Confidence:** HIGH for chrome.storage quota math (verified via official docs + empirical size estimates from actual SessionData shape); HIGH for MV3 service worker pitfalls (official docs verified); HIGH for popup UI constraints (Chromium source confirmed 800x600 cap); MEDIUM for session comparison UX patterns (reasoning from existing code + known domain patterns); MEDIUM for smart matching implementation risks (first-principles reasoning from codebase inspection)
 
 ---
 
-## v1.5 Polish & Quick Wins — Feature-Specific Pitfalls
+## Critical Pitfalls
 
-These pitfalls are specific to the six features in the v1.5 milestone. They cover integration risks when adding Gemini support, prompt preview, empty state guidance, export format toggle, keyboard shortcut, and dark mode to the existing popup/options architecture.
-
----
-
-### Pitfall V1: Keyboard Shortcut Cmd+Shift+T Conflicts With Chrome's "Reopen Closed Tab"
+### Pitfall C1: raw_api_data Stored in Session History Blows Storage Quota
 
 **What goes wrong:**
-The planned shortcut `Cmd+Shift+T` (specified in manifest as `Ctrl+Shift+T`, which Chrome auto-converts to `Cmd+Shift+T` on macOS) is Chrome's built-in "Reopen closed tab" shortcut on both macOS and Windows. Chrome's browser shortcuts take priority over extension command shortcuts. The manifest compiles without error, the shortcut appears in `chrome://extensions/shortcuts`, but pressing it reopens a tab instead of opening the TrackPull popup. The extension command is never triggered.
+Each `SessionData` object has an optional `raw_api_data?: unknown` field that holds the raw Trackman API JSON payload. If session history is implemented by saving `SessionData` objects verbatim, this field is included in every stored session. A large Trackman session (14 clubs, 30 shots, 29 metrics) serializes to ~700 KB. With `raw_api_data` included, that climbs further. `chrome.storage.local` defaults to 10 MB (5 MB before Chrome 114). At 10 MB, the quota accommodates only ~14 large sessions before writes fail silently via `chrome.runtime.lastError`.
 
 **Why it happens:**
-Chrome's documentation states: "Certain operating system and Chrome shortcuts (e.g. window management) always take priority over Extension command shortcuts and cannot be overridden." The `Ctrl+Shift+T` / `Cmd+Shift+T` shortcut is a Chrome-level navigation shortcut, not configurable. Extension manifests that specify it will be silently overridden at runtime. There is no error or warning at install or manifest parse time.
+The current flow saves the entire `SessionData` object to storage as-is. When session history is added, the naive approach is to push each captured session into a history array and store the array. This doubles storage consumption because `raw_api_data` is a second copy of the raw shot data alongside the already-parsed `club_groups`.
 
 **How to avoid:**
-Do not use `Ctrl+Shift+T` as the extension shortcut. Alternatives that are less likely to conflict:
-- `Ctrl+Shift+G` — "G for Golf" mnemonic, not reserved by Chrome or macOS on Mac
-- `Ctrl+Shift+P` — common convention for "Pull" but conflicts with Chrome's print preview on Windows; test before committing
-- Let the user assign their own shortcut — ship with a suggested shortcut only, document it as user-configurable via `chrome://extensions/shortcuts`
+Strip `raw_api_data` before saving to session history. Create a `SessionSnapshot` type derived from `SessionData` with `raw_api_data` omitted. Store only `SessionSnapshot` objects in history. Verify by calculating the serialized byte size of the snapshot before every write. Size estimates from this codebase's actual `SessionData` shape:
 
-The `_execute_action` command in the manifest is the correct mechanism for "open popup":
-```json
-"commands": {
-  "_execute_action": {
-    "suggested_key": {
-      "default": "Ctrl+Shift+G",
-      "mac": "Command+Shift+G"
-    },
-    "description": "Open TrackPull popup"
-  }
-}
-```
-Note: `_execute_action` does not fire `chrome.commands.onCommand` — it directly triggers the action popup. No additional listener needed.
+| Session Size | Typical (8 clubs, 15 shots, 15 metrics) | Large (14 clubs, 30 shots, 29 metrics) |
+|---|---|---|
+| With raw_api_data | ~108 KB | ~720+ KB |
+| Without raw_api_data | ~89 KB | ~708 KB |
+| Sessions before 10 MB limit (no raw_api_data) | ~112 typical | ~14 large |
+
+Even without `raw_api_data`, large sessions constrain how many can be stored. Cap history at a reasonable count (10–20 sessions) and implement eviction (drop oldest when limit is reached).
 
 **Warning signs:**
-- Pressing the shortcut reopens a previously closed browser tab instead of the extension popup.
-- The shortcut works in `chrome://extensions/shortcuts` after manual reassignment by the user, but not after install.
-- Manifest specifies `"Ctrl+Shift+T"` without explicit platform override.
+- History works for the first few sessions, then silently stops saving
+- `chrome.runtime.lastError` is set but no visible error is surfaced to the user
+- Session count does not increment after saves succeed
 
 **Phase to address:**
-Keyboard shortcut implementation phase. Verify the chosen shortcut is not Chrome-reserved before writing any code. Test on both macOS and Windows.
+Session history storage design phase — before implementing the history write path.
 
 ---
 
-### Pitfall V2: Gemini host_permissions Addition Disables Extension for All Existing Users
+### Pitfall C2: Single Large History Array Exceeds chrome.storage.sync Per-Item Quota
 
 **What goes wrong:**
-Adding `"https://gemini.google.com/*"` to `host_permissions` in `manifest.json` triggers Chrome's permission escalation check on the next auto-update. Chrome compares the new permission warnings against the permission set the user already approved. Adding a new host that was not previously covered generates a new "Read and change your data on gemini.google.com" warning. Chrome disables the extension and notifies the user with a re-approval prompt. Users who miss or dismiss the prompt have a broken extension.
+`chrome.storage.sync` enforces an 8,192-byte per-item limit. If session history is accidentally stored in `chrome.storage.sync` (rather than `chrome.storage.local`) as a single array, any session exceeding 8 KB causes an immediate, silent write failure. A single typical session (~89 KB) is 10x this limit. The extension already uses sync for `customPrompt_*` keys, so there is a pattern precedent developers may incorrectly follow.
 
 **Why it happens:**
-The existing `manifest.json` has `"host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"]`. Adding any new host creates a net-new warning message category. Chrome's permission change detection is binary: if the new permission set generates different warning text than the previously-approved set, the extension is disabled until the user re-approves. There is no way to add host_permissions without triggering this for all current users.
-
-This was anticipated in the project's key decisions: "Gemini deferred to v1.4+ — host_permissions addition triggers permission prompt for all users; isolate to own release." Isolating this to v1.5 (dedicated release) is the correct call. The risk is the timing and communication around the prompt.
+The existing codebase mixes sync and local storage: unit preferences and AI service preference use `chrome.storage.local`, but custom prompts use `chrome.storage.sync`. A developer adding session history may look at `custom_prompts.ts` as a reference and accidentally copy the `.sync` storage pattern instead of `.local`.
 
 **How to avoid:**
-- Ship Gemini host_permissions as a standalone release (v1.5.0 with only this change and the Gemini UI) rather than bundled with all five other v1.5 features. This narrows the blast radius: if users are confused by the re-prompt, they know exactly what caused it.
-- The UI in the popup already lists Gemini as an option in the `ai-service-select` dropdown (visible in popup.html), so the UX is already partially prepared. The manifest change is the only gating factor.
-- Do not add `"https://generativelanguage.googleapis.com/*"` — this extension opens the Gemini web UI (gemini.google.com), not the Gemini API. The API host is irrelevant and would add a second alarming-looking permission.
-- Communicate the permission re-prompt in release notes. Users who see "extension disabled" without context will uninstall rather than re-approve.
+Session history belongs exclusively in `chrome.storage.local`. The session index (list of session IDs + metadata) can be a single key. Each full session snapshot stored under a separate key (e.g., `session_{id}`) — this mirrors the existing `customPrompt_{id}` pattern already used for custom prompts, which avoids the 8 KB per-item limit.
+
+Storage layout for session history:
+
+| Key | Store | Content |
+|---|---|---|
+| `sessionHistoryIndex` | local | `string[]` — ordered list of session IDs |
+| `session_{id}` | local | `SessionSnapshot` — full data for one session |
 
 **Warning signs:**
-- Testing the update in an unpacked extension shows no re-prompt (it won't — Chrome only triggers this on Chrome Web Store auto-updates, not sideloaded extension reloads).
-- Manifest diff shows `host_permissions` gaining a new entry without a dedicated release note.
-- Developer adds both `"https://gemini.google.com/*"` and the Gemini API host in the same release.
+- Session saves appear to succeed but data is not retrievable
+- `chrome.runtime.lastError: "QUOTA_BYTES_PER_ITEM quota exceeded"` visible in background console
+- History works for small sessions but fails for full-bag sessions
 
 **Phase to address:**
-Gemini support implementation phase. This should be the first feature shipped in v1.5, in an isolated release before the other five features land, exactly as planned.
+Session history storage design phase — storage key selection must be explicit and documented.
 
 ---
 
-### Pitfall V3: Dark Mode CSS Breaks Existing Hardcoded Colors
+### Pitfall C3: Session Comparison Breaks When Clubs Don't Match Across Sessions
 
 **What goes wrong:**
-Adding `@media (prefers-color-scheme: dark)` overrides to popup.html and options.html misses elements that use hardcoded hex colors set via inline CSS or JavaScript (e.g., `element.style.color = '#d32f2f'`). The result is a partially-dark UI: the background switches to dark but buttons, toasts, status messages, and some text remain in light-mode colors. Specifically in the existing codebase:
-- `showStatusMessage()` in popup.ts sets `statusElement.style.color = isError ? "#d32f2f" : "#388e3c"` as an inline style
-- Toast background colors are hardcoded in `showToast()` as `background-color: #d32f2f` and `#388e3c` via className
-- The `shot-count` element has `color: #1976d2` hardcoded in CSS
-
-Inline styles set via JavaScript have higher specificity than `@media` CSS rules and cannot be overridden by a stylesheet dark mode rule without `!important`, which itself creates a specificity war.
+Session comparison computes delta columns between club averages. If session A has "7 Iron" and session B has "7-Iron" (with a hyphen), or session A has "7 Iron" and session B does not include that club at all, the comparison produces either wrong deltas or crashes attempting to access undefined averages.
 
 **Why it happens:**
-The popup and options pages were built with a light-only design and no CSS custom properties (CSS variables). All colors are literal hex values in the stylesheet and in JavaScript string assignments. Adding dark mode as a pure CSS overlay works for elements that exist in the HTML and whose styles come from the stylesheet, but JavaScript-injected inline styles bypass the CSS cascade entirely.
+Club names come from the Trackman DOM (`CSS_CLUB_TAG = "group-tag"`). Trackman may render club names differently across report types (report vs. activity), or a user may hit different clubs across sessions. The comparison logic must reconcile club lists that are not identical.
 
 **How to avoid:**
-Before adding dark mode media queries, audit every color assignment in both TypeScript files. The correct approach:
+Normalize club names before comparison (trim whitespace, lowercase, collapse hyphens/spaces). Handle the missing-club case explicitly: if a club exists in one session but not the other, show the delta as "N/A" rather than 0 or undefined. Design the comparison UI to show a union of clubs from both sessions, with missing values clearly marked.
 
-1. Replace all hardcoded color strings in JavaScript with CSS class additions/removals:
-```typescript
-// Before (bad for dark mode):
-statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
-
-// After (dark mode compatible):
-statusElement.className = isError ? "status-error" : "status-success";
-```
-
-2. Define a CSS color palette as custom properties on `:root` and apply dark mode by overriding them:
-```css
-:root {
-  --color-error: #d32f2f;
-  --color-success: #388e3c;
-  --color-primary: #1976d2;
-  --bg-primary: #ffffff;
-  --text-primary: #333333;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-error: #ef9a9a;
-    --color-success: #a5d6a7;
-    --color-primary: #64b5f6;
-    --bg-primary: #1e1e1e;
-    --text-primary: #e0e0e0;
-  }
-}
-```
-
-3. Replace all literal hex colors in the stylesheet with `var(--color-*)` references.
-
-Do this refactor first, then add the media query. Without it, dark mode will be broken for toast messages and status indicators — the highest-visibility UI elements.
+Test cases to write before implementing:
+- Clubs with extra whitespace in names
+- Clubs present in session A but absent in session B (and vice versa)
+- Both sessions have the same clubs — standard delta case
+- Both sessions have zero clubs in common — show "no comparable clubs" state
 
 **Warning signs:**
-- Dark mode screenshots show dark background but red/green error/success text still in full-brightness light-mode colors.
-- Toast elements appear correct but status message text does not update.
-- Any occurrence of `element.style.color = "..."` or `element.style.backgroundColor = "..."` in popup.ts or options.ts.
-- Stylesheet contains `color: #d32f2f` rather than `color: var(--color-error)`.
+- Delta columns show `NaN` or `undefined` instead of a value or "N/A"
+- Comparison crashes when one session has clubs the other does not
+- Club names that "look the same" appear as separate rows in the comparison
 
 **Phase to address:**
-Dark mode implementation phase. Perform the CSS variable refactor as step 1 before writing any `@media (prefers-color-scheme: dark)` rule.
+Session comparison implementation phase — normalization utility must be written before the comparison function.
 
 ---
 
-### Pitfall V4: Prompt Preview Modal Exceeds Popup Height Constraint
+### Pitfall C4: No Storage Quota Guard Means History Silently Stops Saving
 
 **What goes wrong:**
-A prompt preview modal displayed inside the existing popup (which is already ~400-500px tall given the current controls) pushes the popup beyond Chrome's 600px hard height cap. The modal renders but the popup clips the bottom portion. If the popup uses `overflow: hidden` on body (the current implicit behavior), the modal close button or bottom content is unreachable. If `overflow: auto` is added, a scrollbar appears that looks broken at the narrow 320px popup width.
+`chrome.storage.local` write failures do not throw. They set `chrome.runtime.lastError` (in callback style) or reject the promise (in async style) — but only if the caller checks. If session history writes ignore errors, the user sees no indication that saving failed. New sessions appear to be saved, but the history list does not grow.
 
 **Why it happens:**
-The current popup already contains: header row, shot count container, unit selectors (3 dropdowns), export row (2 buttons), AI section (2 dropdowns + 2 buttons), and clear button. That's approximately 400-450px of content. A prompt preview modal that shows the full assembled prompt+data string (which can be 50-80 KB rendered in a textarea) cannot fit inside the remaining 150-200px of headroom before the 600px ceiling.
+The existing `SAVE_DATA` handler in `serviceWorker.ts` already checks `chrome.runtime.lastError` for the current-session save. But when session history save logic is added, developers often write the first working version, see it work in testing (small sessions, empty history), and ship without verifying the failure path.
 
 **How to avoid:**
-Do not implement the prompt preview as a modal overlay inside the popup. Two viable approaches:
+Every `chrome.storage.local.set()` call in the history write path must check for errors. On quota error specifically:
+1. Log the error
+2. Attempt to evict the oldest session and retry the save
+3. If retry also fails, surface a toast warning to the user: "Session history full — oldest session removed to make room"
 
-**Option A: Truncated inline preview** — Show the first 300 characters of the assembled prompt as a collapsible `<details>` element directly in the popup UI. No modal, no height expansion. Toggle open/close. This fits in the available space and avoids the height problem entirely.
-
-```html
-<details id="prompt-preview">
-  <summary>Preview prompt</summary>
-  <pre id="prompt-preview-text" class="prompt-preview-text"></pre>
-</details>
-```
-
-**Option B: Options page preview** — Open the options page to a "preview" state when the user clicks "Preview" in the popup. The options page is a full tab and has no size constraints. This is more friction but allows rendering the full assembled prompt with data.
-
-Do not use a `position: fixed` overlay inside the popup — popups do not scroll and the overlay will clip.
+Implement a `getStorageUsage()` check before each history write using `chrome.storage.local.getBytesInUse()`. If projected write would exceed a safe threshold (e.g., 8 MB out of 10 MB), evict proactively rather than reactively.
 
 **Warning signs:**
-- The popup body requires scrolling after adding the preview UI.
-- A `position: fixed; inset: 0` modal inside the popup clips at 600px.
-- `min-width: 320px` on body means any modal narrower than 320px won't fit the full text without horizontal scroll.
+- History list does not grow after several sessions
+- No error shown in UI despite saves "completing"
+- Background console shows `runtime.lastError` but popup shows no feedback
 
 **Phase to address:**
-Prompt preview implementation phase. Mock the UI in a static HTML file before wiring to TypeScript; measure the rendered height with a full prompt payload.
+Session history storage design phase — the write path and error handling must be implemented together, not as a later addition.
 
 ---
 
-### Pitfall V5: Export Format Toggle Storage Key Missing for Existing Users Returns Undefined, Treated as Falsy Toggle State
+### Pitfall C5: Popup Grows to Unusable Height With Session History List
 
 **What goes wrong:**
-A new boolean storage key (e.g., `includeAverages`) is added to `chrome.storage.local` to control whether the export includes averages and consistency rows. For existing users, this key does not exist in storage. `chrome.storage.local.get(["includeAverages"])` returns `{}` — the key is absent, not `false`. Code that checks `if (result.includeAverages)` correctly defaults to "off" (falsy), but code that checks `if (result.includeAverages === false)` incorrectly treats undefined as "include averages" because `undefined !== false`. The default behavior (include or exclude) is inconsistent depending on which equality check is used.
+The Chrome extension popup maximum height is 600px (800px max width). The current popup already has significant vertical content: shot count, export controls, AI prompt selector, prompt preview. Adding a session history list — even 3–5 rows — pushes the popup past 600px, causing Chrome to clip the bottom content and making some controls unreachable without scrolling. Chrome's popup auto-sizes to content height, but clamps at 600px without showing a scrollbar by default.
 
 **Why it happens:**
-This is a general Chrome storage gotcha: unset keys return `undefined`, not a type-specific falsy default. The existing codebase already handles this correctly for unit preferences (see `migrateLegacyPref` pattern), but a new developer touching the toggle code may not recognize the pattern and write a strict equality check against `false`.
+Session history UI is typically designed like a web page with a natural height. In an extension popup, height is a hard constraint. Developers test with few sessions (list is short) and miss the overflow case until a user reports it.
 
 **How to avoid:**
-Define the default value explicitly at the point of read, not at the point of check:
-```typescript
-// Correct pattern:
-const result = await chrome.storage.local.get(["includeAverages"]);
-const includeAverages: boolean = result["includeAverages"] ?? true; // default: include averages
+Session history UI does not belong in the popup. Use the existing `options.html` page (accessible via the existing options UI) for session browsing and re-export. The popup shows at most a summary indicator: "3 sessions saved" with a link to the options page. This is the correct split:
 
-// Wrong pattern (undefined !== false):
-if (result["includeAverages"] === false) { /* exclude */ }
-```
-Add the new key to `STORAGE_KEYS` in constants.ts so it is tracked alongside all other storage keys. Write a unit test that verifies the default behavior when the key is absent.
+- **Popup:** current session status, quick export, AI launch. Session count badge only.
+- **Options page:** full session history list, per-session re-export, comparison trigger.
 
-The default should be `true` (include averages and consistency rows) to preserve backward-compatible behavior for existing users — they currently always get averages in their exports.
+If a session list must appear in the popup, constrain it to a fixed-height scrollable container (max-height: 120px, overflow-y: auto) showing only 2–3 rows with "View all" link to options.
 
 **Warning signs:**
-- Toggle defaults to "exclude averages" for new users when the intent is to preserve existing behavior.
-- Code uses `result.includeAverages === false` instead of `result.includeAverages ?? true`.
-- The new storage key is not added to `STORAGE_KEYS` in constants.ts.
+- "View all" button or bottom controls are cut off when more than 3 sessions are saved
+- Popup body requires scrolling to reach export button
+- Chrome Task Manager shows popup DOM height > 600px
 
 **Phase to address:**
-Export format toggle implementation phase. Define the storage key and default in constants.ts first; write the read-with-default pattern before wiring to the UI.
+Session history UI design phase — decide popup vs. options page placement before writing any HTML.
 
 ---
 
-### Pitfall V6: Empty State Detection Treats "Loading" State as "No Data" State
+## Moderate Pitfalls
+
+### Pitfall M1: Smart Prompt Matching Uses Stale Cached Data
 
 **What goes wrong:**
-The popup's `updateShotCount()` function currently sets `shotCountElement.textContent = "0"` for both "no data in storage" and "data exists but has no shots." Adding empty state guidance (e.g., "Visit a Trackman report to capture data") triggered from the "0 shots" state incorrectly shows guidance during the brief moment when the popup opens and storage has not yet responded (the async `chrome.storage.local.get` has not resolved). The user sees the "Visit Trackman" message flash before their actual shot count appears.
-
-Additionally, the guidance message is wrong for a different failure mode: when the user is on the Trackman page but the extension has not yet intercepted an API response (e.g., the page hasn't fully loaded or the correct metric view hasn't been visited). "0 shots" can mean three distinct states: (1) user has never visited Trackman, (2) user is on Trackman but hasn't triggered data capture, (3) data was cleared. The current empty state guidance can only realistically address state 1 and 3 — state 2 requires different copy.
+Smart prompt matching highlights a prompt in the dropdown based on the current session's data characteristics (e.g., high spin rate → "Launch & Spin Optimization"). If the matching runs at popup DOMContentLoaded using `cachedData`, it uses the data captured at that moment. If `DATA_UPDATED` fires after DOMContentLoaded (because the user loaded a new report after opening the popup), the highlighted prompt is not re-evaluated. The user sees a suggestion based on old data.
 
 **Why it happens:**
-The popup currently initializes `shot-count` to `"Loading..."` and then immediately starts the async storage read. The "0" display state does not distinguish between "storage returned null" (never captured) and "storage is still loading" (race condition). Empty state guidance hooked to the "0" count will fire during the loading window on every popup open.
+The existing `DATA_UPDATED` message handler in `popup.ts` updates `cachedData` and calls `updateShotCount()`, `updateExportButtonVisibility()`, and `updatePreview()`. A developer adding smart matching will wire it in the same handler but may only call the match function on initial load, not on subsequent data updates.
 
 **How to avoid:**
-Introduce a third display state distinct from "Loading" and "0":
-```typescript
-// Three distinct states:
-// 1. Loading: shotCountElement.textContent = "Loading..."
-// 2. No data: shotCountElement.textContent = "0" + show guidance
-// 3. Has data: shotCountElement.textContent = count.toString()
-
-// Only show guidance AFTER storage read resolves AND result is null/empty:
-const result = await chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA]);
-const data = result[STORAGE_KEYS.TRACKMAN_DATA];
-if (!data) {
-  showEmptyState(); // now safe — loading is complete, confirmed no data
-} else {
-  updateShotCount(data);
-}
-```
-
-For empty state copy, write two distinct messages:
-- Primary (storage is empty): "Open a Trackman report in your browser to capture shot data."
-- Secondary (optional, shown after a delay if on Trackman domain): "Data not captured yet — browse to the results table to load shots."
+Wherever `cachedData` is updated, re-run the smart matching function. Extract matching into a single `updateSmartPromptSuggestion()` function, and call it in:
+1. The DOMContentLoaded initialization block (after cachedData is populated)
+2. The `DATA_UPDATED` message handler
 
 **Warning signs:**
-- Empty state guidance flashes briefly on popup open then disappears when data loads.
-- "Visit Trackman" message appears for a user who has 50 shots captured.
-- `showEmptyState()` is called before the `chrome.storage.local.get` Promise resolves.
+- Highlighted prompt does not change after navigating to a different Trackman report while popup is open
+- Prompt highlight reflects the previous session's characteristics
 
 **Phase to address:**
-Empty state implementation phase. Add the three-state model before hooking up the guidance UI; the loading state must be a distinct condition from no-data.
+Smart prompt matching implementation phase — ensure the DATA_UPDATED handler is extended before shipping.
 
 ---
 
-### Pitfall V7: Dark Mode Does Not Apply to Dynamically Created DOM Elements (Toasts)
+### Pitfall M2: Visual Stat Cards Compute Averages Twice (Once for Display, Once for CSV)
 
 **What goes wrong:**
-Dark mode CSS rules defined with `@media (prefers-color-scheme: dark)` in the stylesheet apply to elements in the HTML at parse time. Toast elements in TrackPull are created dynamically via `document.createElement("div")` and appended to the DOM at runtime. If the toast's colors are set via the class names `.toast.success` and `.toast.error` in the stylesheet, the media query will apply correctly. However, both popup.html and options.html define toast colors using `background-color: #388e3c` and `background-color: #d32f2f` as direct class rules with no CSS variable references. These survive dark mode unchanged — toasts remain brightly colored in dark mode.
+The visual stat cards display average carry, average club speed, and shot count by club. The CSV export already computes and includes these averages via `writeCsv()`. If the stat card implementation computes averages independently in the popup, there are now two averaging code paths that can diverge — different rounding, different handling of missing values, different units.
 
 **Why it happens:**
-Same root cause as Pitfall V3: literal hex colors in class definitions bypass the dark mode system unless they use `var()` references. Dynamically created elements receive their styles from the class rules, which are literal colors, so `@media (prefers-color-scheme: dark)` overrides must specifically target `.toast.success` and `.toast.error` inside the media query.
+The popup currently displays only shot count. A developer adding stat cards writes a quick averaging function directly in `popup.ts` using `cachedData.club_groups`, without recognizing that `ClubGroup.averages` already contains pre-computed averages from the scraper/parser.
 
 **How to avoid:**
-Include toast classes explicitly in the dark mode media query, or (better) switch toast classes to use CSS custom properties (addressed as part of the Pitfall V3 refactor). The toast colors need to remain high-contrast in both modes — success should be a dark-accessible green, error a dark-accessible red:
-
-```css
-@media (prefers-color-scheme: dark) {
-  .toast.success { background-color: #2e7d32; } /* slightly darker green */
-  .toast.error { background-color: #c62828; } /* slightly darker red */
-}
-```
-
-This is safe without full CSS variable refactor as a targeted fix, but the CSS variable approach from Pitfall V3 is the cleaner long-term solution.
+Do not re-compute averages in the popup. Read them from `cachedData.club_groups[i].averages` directly — these are already computed by the interceptor and parser. Apply the existing `cachedUnitChoice` unit conversion to display values. The same `MetricValue` object that flows through `csv_writer.ts` is the source of truth. Consistency is guaranteed because both the CSV and the stat card use the same pre-computed averages.
 
 **Warning signs:**
-- Dark mode screenshot shows dark background but bright green/red toasts.
-- CSS audit shows `.toast.success` with no `@media (prefers-color-scheme: dark)` override.
-- Dark mode implemented by adding `:root` dark variables without reviewing all class rules.
+- Stat card shows "245 yards avg carry" but the CSV exports "246 yards" for the same club
+- Averages look wrong for clubs with few shots (the scraper averages and a simple mean of filtered `shot.metrics` values may differ)
 
 **Phase to address:**
-Dark mode implementation phase, same as Pitfall V3. Audit all color-bearing CSS classes in popup.html and options.html, not just body-level colors.
+Visual stat card implementation phase — use the already-present `ClubGroup.averages` as the data source from the start.
 
 ---
 
-### Pitfall V8: Keyboard Shortcut _execute_action Requires No Listener — Adding One Creates a Race
+### Pitfall M3: Session History Index Key Grows Without Bound
 
 **What goes wrong:**
-A developer adds a `chrome.commands.onCommand` listener in the service worker to handle the keyboard shortcut, expecting it to be called when the user presses the shortcut and the popup opens. The `_execute_action` command does not fire `chrome.commands.onCommand`. The listener is never called. In a worse variant, the developer adds logic to the listener expecting to pre-fetch data or update state before the popup opens — this pre-fetch never runs, and the popup loads with stale or missing data, confusing the developer who then spends time debugging the non-firing event.
+The `sessionHistoryIndex` key stores an array of session IDs. If there is no eviction policy, the array grows with every session. After 50 sessions, the index array itself is ~5 KB (within storage limits). But more importantly: orphaned session keys (`session_{id}`) accumulate if a session write fails after the index is updated, or if the index update fails after the session write succeeds. These orphaned keys are invisible to the user and consume quota silently.
 
 **Why it happens:**
-The Chrome Extensions API documentation clearly states that `_execute_action` is a reserved command that directly triggers the action (popup) without dispatching a command event. Developers who have used standard commands before expect all command names to fire `onCommand`. The `_execute_action` name looks like it should fire an event.
+The existing custom prompts pattern uses a similar index-per-key approach (`customPromptIds` + `customPrompt_{id}`). That pattern works correctly for prompts because prompts are individually managed and deleted by the user. Sessions are written automatically — the window for partial-write failure is narrower but still real, especially on first-time quota saturation.
 
 **How to avoid:**
-Do not add `chrome.commands.onCommand` listener for `_execute_action`. The popup already handles its own initialization in `DOMContentLoaded`. If data pre-fetch is needed before the popup renders, do it inside the popup's `DOMContentLoaded` handler — that is already the correct pattern in popup.ts.
-
-The manifest entry for `_execute_action` only needs the `"suggested_key"` and `"description"` fields. No listener code is needed anywhere:
-```json
-"commands": {
-  "_execute_action": {
-    "suggested_key": { "default": "Ctrl+Shift+G" },
-    "description": "Open TrackPull"
-  }
-}
-```
+Write the session data and the index update in a single `chrome.storage.local.set()` call when possible (batch both the session snapshot key and the updated index array in one object). If storage fails, neither is written. For cleanup, add a garbage collection pass on startup: load the index, enumerate all `session_*` keys in storage, remove any keys that are not referenced in the index.
 
 **Warning signs:**
-- Service worker contains `chrome.commands.onCommand.addListener(...)` referencing `_execute_action`.
-- Developer reports "the shortcut opens the popup but my listener code doesn't run."
-- Logic that should run before popup render is placed in a command handler instead of `popup.ts`.
+- `chrome.storage.local.getBytesInUse()` is higher than the sum of known session sizes
+- Session count from the index does not match the count of `session_*` keys in DevTools Storage inspector
+- History list renders fewer sessions than the raw storage shows
 
 **Phase to address:**
-Keyboard shortcut implementation phase. The implementation is purely declarative (manifest entry only). No TypeScript changes are needed in popup.ts or serviceWorker.ts.
+Session history storage design phase — atomic write pattern and startup GC should be designed upfront.
 
 ---
 
-### Pitfall V9: Export Format Toggle Changes CSV Output But Breaks Backward-Compatible Filenames and Existing Tests
+### Pitfall M4: Comparison Delta Is Meaningless Across Different Surface Conditions
 
 **What goes wrong:**
-The `writeCsv()` function in csv_writer.ts currently always includes averages and consistency rows. Adding a `includeAverages` parameter changes the function signature. Callers in serviceWorker.ts pass the CSV writer call through a message handler — if the new parameter is not threaded through the `EXPORT_CSV_REQUEST` message, the toggle has no effect in production even though it works in unit tests (which call `writeCsv` directly). Additionally, existing unit tests that assert exact CSV output (including average/consistency rows) will fail if the default parameter is set to `false`.
+Session comparison shows a delta column: "Carry: +12 yards" between session A and session B. But session A was on Grass and session B was on Mat. Mat sessions produce significantly different ball flight characteristics (lower spin, different launch conditions) compared to Grass. The delta is technically correct arithmetic but is misleading — the user may interpret carry improvement as swing progress when it is actually surface artifact.
 
 **Why it happens:**
-The export flow is: popup click → message to service worker → service worker reads storage + calls writeCsv → downloads the file. The toggle state lives in popup-land (storage key). The CSV generation lives in service worker-land. The parameter must travel across the message boundary, either via storage read in the service worker or via inclusion in the message payload. If the developer adds the parameter to `writeCsv` but forgets to thread it through the message → service worker path, the feature appears to work in tests but does nothing in the actual extension.
+The `hittingSurface` field is stored in `metadata_params` of `SessionData`. Comparison logic that focuses on metric deltas will likely skip this contextual field.
 
 **How to avoid:**
-The toggle state must be stored in `chrome.storage.local` (not just in-memory popup state) so the service worker can read it independently during export. The service worker already reads unit preference and surface preference from storage — add the toggle key to the same `chrome.storage.local.get()` call in the `EXPORT_CSV_REQUEST` handler:
-
-```typescript
-// In serviceWorker.ts EXPORT_CSV_REQUEST handler:
-chrome.storage.local.get([
-  STORAGE_KEYS.TRACKMAN_DATA,
-  STORAGE_KEYS.SPEED_UNIT,
-  STORAGE_KEYS.DISTANCE_UNIT,
-  STORAGE_KEYS.HITTING_SURFACE,
-  STORAGE_KEYS.INCLUDE_AVERAGES, // new key
-  "unitPreference"
-], (result) => {
-  const includeAverages: boolean = result[STORAGE_KEYS.INCLUDE_AVERAGES] ?? true;
-  const csvContent = writeCsv(data, includeAverages, undefined, unitChoice, surface);
-```
-
-Update unit tests to pass `true` explicitly for the `includeAverages` parameter to keep existing test assertions valid.
-
-**Warning signs:**
-- Toggle works when testing `writeCsv` directly in unit tests but has no effect when exporting from the popup.
-- Service worker's `EXPORT_CSV_REQUEST` handler does not read `STORAGE_KEYS.INCLUDE_AVERAGES`.
-- Unit tests fail after adding the new parameter with a new default.
+Show the hitting surface for each session in the comparison header. When the surfaces differ, add a visual indicator ("Mixed surfaces — comparison may not reflect swing changes"). This does not block the comparison, but it warns the user. Store `hittingSurface` in the `SessionSnapshot` metadata and make it visible in the comparison view.
 
 **Phase to address:**
-Export format toggle implementation phase. Thread the storage key through the entire message → service worker → writeCsv path on day one; verify with an end-to-end test (not just a unit test of writeCsv).
+Session comparison UI implementation phase — add surface mismatch indicator before shipping.
 
 ---
 
-## Critical Pitfalls (Carry-Forward from v1.3/v1.4)
-
-These pitfalls from earlier research remain relevant to v1.5 features.
-
----
-
-### Pitfall 1: Clipboard Write Fails in Service Worker — Wrong Context Used
+### Pitfall M5: Stat Card Renders Stale Data if Popup Stays Open Across Report Loads
 
 **What goes wrong:**
-A developer routes the clipboard copy through the service worker (e.g., handling a `COPY_TO_CLIPBOARD` message in `serviceWorker.ts`). `navigator.clipboard` is unavailable in service worker context. The call either throws `TypeError: navigator.clipboard is undefined` or silently fails. The user clicks "Copy" and nothing happens.
+The popup can stay open while the user navigates to a different Trackman report. The `DATA_UPDATED` message fires and `cachedData` is updated. If the stat cards render on DOMContentLoaded only and are not wired to the `DATA_UPDATED` handler, the cards show the first session's data for the entire popup session.
 
 **Why it happens:**
-Service workers do not have a DOM context and therefore have no access to `navigator.clipboard`. The existing architecture for CSV export (popup → message → service worker → download) works for `chrome.downloads`, which is a Chrome API available to service workers. Developers naturally try to replicate this pattern for clipboard, but the clipboard API is a Web Platform API requiring a document context, not a Chrome API.
+Same root cause as Pitfall M1. Any new UI element that reads `cachedData` must be updated in the `DATA_UPDATED` handler.
 
 **How to avoid:**
-Clipboard write belongs in the **popup context**, not the service worker. The popup is a document context — `navigator.clipboard.writeText()` works there directly when the user clicks a button. Call it directly in the popup's click handler. Do not route it through the service worker at all. Add `"clipboardWrite"` to `manifest.json` permissions to skip the transient activation requirement.
+Extract stat card rendering into a `renderStatCards()` function. Call it in both:
+1. DOMContentLoaded initialization (after cachedData is loaded)
+2. DATA_UPDATED handler (alongside existing `updateShotCount()` calls)
 
-The correct flow is:
-```
-User clicks "Copy" button in popup
-→ popup.ts handler calls navigator.clipboard.writeText(formattedData) directly
-→ success/error toast shown to user
-```
-
-**Warning signs:**
-- `TypeError: Cannot read properties of undefined (reading 'writeText')` in service worker console.
-- User reports "Copy" button does nothing, no error shown.
-- Developer adding a `COPY_TO_CLIPBOARD` message type to serviceWorker.ts.
+This is the same pattern already established for `updatePreview()`.
 
 **Phase to address:**
-Clipboard copy implementation phase. Architect the copy handler to live in popup.ts from the start — do not prototype it in the service worker first.
-
----
-
-### Pitfall 2: Clipboard Write Silently Fails When Popup Loses Focus Before Async Resolves
-
-**What goes wrong:**
-The popup fetches shot data from `chrome.storage.local` asynchronously, formats it as TSV, then calls `navigator.clipboard.writeText()`. If the popup loses focus between the storage read completing and `writeText()` executing, Chrome throws `DOMException: Document is not focused`. This manifests as a silent failure — the copy toast may show "success" while the clipboard actually has stale or no content.
-
-**Why it happens:**
-The `navigator.clipboard.writeText()` API requires the document to have focus at call time, even with the `clipboardWrite` permission. In a Chrome extension popup, focus is fragile: the popup closes (and thus loses focus) if the user clicks outside it. An async chain of `storage.get → format → clipboard.write` opens a window where focus can be lost between storage callback resolution and the clipboard write.
-
-**How to avoid:**
-Keep the async chain as tight as possible. Retrieve the data, format it, and call `navigator.clipboard.writeText()` all within the same microtask queue flush — avoid any `setTimeout` or unnecessary `await` between the data retrieval and the clipboard write. The storage read can be done proactively on popup load (not on button click) so that when the user clicks "Copy", the data is already in memory and the write fires synchronously within the click handler's event context.
-
-Pattern to use:
-```typescript
-// On popup load: pre-fetch data into memory
-let cachedTsvData: string | null = null;
-
-// On load
-const data = await chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA]);
-cachedTsvData = formatAsTsv(data[STORAGE_KEYS.TRACKMAN_DATA]);
-
-// On button click: fire immediately with cached data
-copyBtn.addEventListener('click', () => {
-  if (!cachedTsvData) return;
-  navigator.clipboard.writeText(cachedTsvData)
-    .then(() => showToast('Copied to clipboard', 'success'))
-    .catch(() => showToast('Copy failed — try again', 'error'));
-});
-```
-
-**Warning signs:**
-- `DOMException: Document is not focused` appearing in the popup's DevTools console.
-- Clipboard contains old data after clicking "Copy" on a new session.
-- The copy operation is unreliable: works sometimes, not others.
-
-**Phase to address:**
-Clipboard copy implementation phase. Pre-fetch and cache data on popup open; do not initiate storage reads inside the click handler.
-
----
-
-### Pitfall 3: AI URL Pre-Fill Is Not a Supported Feature — It Is a Fragile Hack
-
-**What goes wrong:**
-The developer designs the "AI tab launch" feature assuming that opening `https://chatgpt.com/?q=<prompt>` or `https://claude.ai/?q=<prompt>` will reliably pre-fill the prompt field. This was community-discovered URL behavior, not an official API. These URLs break silently when the AI provider updates their frontend.
-
-**How to avoid:**
-Design the feature around clipboard copy as the primary delivery mechanism, not URL pre-fill. Open the AI service homepage (bare URL), let the user paste.
-
-**Warning signs:**
-- AI tab opens but chat field is empty with no error.
-- Users report that the AI launch "used to work" after a provider UI update.
-
-**Phase to address:**
-AI tab launch design phase. Clipboard-first is the only durable approach.
-
----
-
-### Pitfall 4: Manifest Permissions Addition for "tabs" Disables Extension for Existing Users
-
-**What goes wrong:**
-Adding `"tabs"` to the `permissions` array in `manifest.json` to support tab opening triggers Chrome's privilege escalation check on extension update. The extension is disabled and existing users see a re-approval prompt.
-
-**How to avoid:**
-`chrome.tabs.create()` does **not** require the `"tabs"` permission — it works with no tabs permission. Do not add `"tabs"` to the manifest.
-
-**Warning signs:**
-- Developer adding `"tabs"` to manifest because they saw it referenced in documentation alongside `chrome.tabs.create`.
-- A manifest diff before release showing new entries in the `permissions` array.
-
-**Phase to address:**
-Any phase touching manifest.json. Review the manifest diff as part of every pre-release checklist.
-
----
-
-### Pitfall 5: Storage Quota Exceeded When Saving Many Custom Prompt Templates to chrome.storage.sync
-
-**What goes wrong:**
-Storing user-created prompt templates in `chrome.storage.sync` hits the 8 KB per-item and 100 KB total quota. Writes fail with `chrome.runtime.lastError: QUOTA_BYTES_PER_ITEM quota exceeded`, leaving the user's prompt template unsaved with no feedback.
-
-**How to avoid:**
-Use `chrome.storage.local` for prompt templates. `chrome.storage.local` has a 10 MB default quota. Only store small, singular configuration values in `chrome.storage.sync`.
-
-**Phase to address:**
-Prompt storage design phase.
+Visual stat card implementation phase — wire DATA_UPDATED update from the start.
 
 ---
 
@@ -469,33 +251,27 @@ Shortcuts that seem reasonable but create long-term problems.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| URL pre-fill as primary AI delivery mechanism | Feels like one-click magic | Breaks silently whenever AI providers update their frontend; no official API | Never as primary; always implement clipboard-first with URL pre-fill as enhancement |
-| Hardcoded hex colors in JS (element.style.color = "#d32f2f") | Simple to write | Cannot be overridden by CSS dark mode media queries; requires code change to support theming | Acceptable for legacy code, not for new v1.5 UI |
-| Adding `@media (prefers-color-scheme: dark)` without CSS variable refactor first | Can add dark mode quickly | Misses dynamically-set colors; results in partial dark mode that looks broken | Never — do the variable refactor first |
-| Storing built-in prompts in chrome.storage.local on install | Single code path for all prompts | Built-in prompts get overwritten on update, losing user edits | Never — bundle built-ins in source, store only user-created prompts |
-| Using chrome.storage.sync for prompt template bodies | Cross-device sync sounds appealing | 8 KB per-item quota; 100 KB total; silently fails on save | Never — use chrome.storage.local for templates |
-| Routing clipboard write through service worker | Follows existing message-passing pattern | Service workers have no navigator.clipboard access; always fails | Never — clipboard must live in popup context |
-| Implementing prompt preview as a full-height modal inside popup | Familiar UX pattern | Popup 600px height cap clips modal; scrollbar looks broken at 320px width | Never — use inline collapsible or options page redirect |
-| Checking `result.key === false` instead of `result.key ?? default` for boolean storage keys | Slightly more explicit | undefined (absent key) does not equal false; breaks default behavior for existing users | Never for new boolean storage keys |
+| Store full `SessionData` in history (including `raw_api_data`) | No extra type needed | Quota fills at ~14 large sessions; data duplication | Never — strip `raw_api_data` before storing |
+| Put session history UI inside the popup | Faster to build, one file to edit | Popup height overflow at 3+ sessions; poor UX | Never for a full list; a count badge is acceptable |
+| Re-compute averages in popup for stat cards | Simple inline code | Two averaging paths that can diverge from CSV | Never — use `ClubGroup.averages` directly |
+| No session cap / no eviction policy | Simpler write path | Silent failures after 10–14 large sessions | Never — always enforce a max (recommend 20) |
+| Store session index in `chrome.storage.sync` | Index syncs across devices | sync per-item limit is 8 KB; even the index grows beyond that at 50+ sessions | Never — use `chrome.storage.local` for all session data |
+| Match smart prompt on first load only | Simpler code | Stale suggestion when user browses multiple reports with popup open | Acceptable for v1 if documented as a known limitation; fix in follow-up |
 
 ---
 
 ## Integration Gotchas
 
-Common mistakes when connecting to external services or existing extension systems.
+Common mistakes when connecting the new features to the existing extension system.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Gemini host_permissions | Adding to an existing release bundled with other features | Isolate to its own release so permission re-prompt is the only change users see |
-| Keyboard shortcut _execute_action | Adding chrome.commands.onCommand listener for it | No listener needed; _execute_action opens the popup directly; hook initialization to DOMContentLoaded in popup.ts |
-| Keyboard shortcut Ctrl+Shift+T | Using Ctrl+Shift+T (reopens closed tab in Chrome) | Choose a non-reserved combination like Ctrl+Shift+G; test on both macOS and Windows |
-| Export toggle + service worker | Only wiring toggle to writeCsv, not threading through the message path | Store toggle in chrome.storage.local; read it in serviceWorker.ts EXPORT_CSV_REQUEST handler |
-| Dark mode + existing popup styles | Adding @media rules before auditing inline JS color assignments | Refactor inline color assignments to CSS classes first; use CSS custom properties throughout |
-| Empty state guidance | Showing guidance during "Loading" state | Only show guidance after chrome.storage.local.get resolves with null result |
-| ChatGPT URL pre-fill | Using `?prompt=` parameter | Use `?q=` parameter; `?prompt=` has not been observed to work |
-| Claude URL pre-fill | Using `claude.ai/new?q=` or any URL parameter | No URL pre-fill works on claude.ai as of 2025 — use clipboard delivery only |
-| Gemini URL pre-fill | Assuming `?q=` or `?prompt=` works natively | No native support; do not implement; open gemini.google.com bare URL only |
-| chrome.tabs.create | Adding `"tabs"` permission to manifest | Not needed for tab creation; only needed for reading tab metadata |
+| Session save on `SAVE_DATA` handler | Add history write inside existing `SAVE_DATA` handler in `serviceWorker.ts` without error handling | Check `chrome.runtime.lastError` on every history write; implement quota guard before write |
+| Session index update | Update index before saving session data | Save session data first; update index second; batch in single `chrome.storage.local.set()` call where possible |
+| Stat card unit display | Display raw metric values from `ClubGroup.averages` directly | Apply `cachedUnitChoice` conversion (same conversion used in `writeTsv()`) to display values |
+| Smart matching trigger | Wire only to `promptSelect` change events | Wire to `promptSelect` change AND to `DATA_UPDATED` handler in popup |
+| Options page session browser | Open full session list in popup inline | Open options page from popup link; options page has no height constraint |
+| Session comparison Club matching | Exact string match on `club_name` | Normalize names (trim, lowercase, collapse separators) before comparison |
 
 ---
 
@@ -505,105 +281,101 @@ Patterns that work at small scale but fail as usage grows.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Formatting TSV on every popup render | Slow popup open for large sessions | Pre-format on popup load once; cache result in memory | Sessions with 300+ shots and 29 metrics (~50 KB output) |
-| Rendering full prompt text in popup dropdown | Popup layout performance | Show only title/tier in dropdown; lazy-load full text when prompt is selected | 7+ built-in prompts with long text bodies |
-| Prompt preview textarea with unbounded height inside popup | Popup overflows 600px hard cap | Cap preview height with max-height + overflow: auto on the textarea | Any preview that renders more than ~5 lines |
-| Loading all storage keys in one get() call in popup | Acceptable now but grows with each new key | Keep get() calls grouped by concern; avoid single catch-all get() | More than 10-15 storage keys loaded at popup open |
+| Load all session snapshots from storage on every popup open | Popup takes 1–2 seconds to open when 15+ sessions are stored | Store only the index at load time; lazy-load individual sessions on demand | At 10+ large sessions (10 × 708 KB = 7 MB storage read on every popup open) |
+| Render full session list in popup DOM | Popup height clips at 600px; rendering slow for 20+ sessions | Paginate or limit list to 3–5 rows in popup; full list in options page | At 5+ sessions in popup, or 20+ in options page without virtualization |
+| Re-run smart match on every prompt dropdown render | Matching stalls popup open when session is large | Run matching once when data is cached; store result; re-run only on data update | At sessions with 300+ shots (assemblePrompt + metric scan on every render) |
+| Include raw_api_data in every session write | 14th large session fails to save | Strip raw_api_data from SessionSnapshot type | At first large session if raw_api_data is included |
 
 ---
 
 ## Security Mistakes
 
-Domain-specific security issues beyond general web security.
+Domain-specific security issues for this extension.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Injecting user-provided prompt text directly into URL without encoding | URL injection breaks the constructed URL | Always use `encodeURIComponent()` for any text placed in URL parameters |
-| Storing the user's AI service preference in a globally readable storage key without namespace | Minimal risk but poor hygiene | Use namespaced keys like those in STORAGE_KEYS constants object |
-| Including raw session data in a URL sent to an AI service | Golf shot data is not sensitive, but sets a bad pattern | Do not embed session data in URLs; clipboard-only delivery keeps data off the wire until the user explicitly pastes |
-| Adding Gemini API host (generativelanguage.googleapis.com) to host_permissions | Creates an alarming second host permission; extension does not use the API | Only add gemini.google.com — the web UI host; never add the API host |
+| Store session history in `chrome.storage.sync` | Session data (shot metrics, dates, venue patterns) syncs to Google's servers unencrypted | All session data in `chrome.storage.local` only; sync only for preferences |
+| Render session labels from storage with `innerHTML` | If a future feature allows user-edited session labels, XSS via crafted label text | Use `textContent` not `innerHTML` for any user-derived session display strings (consistent with existing `textContent` XSS prevention in prompt preview) |
 
 ---
 
 ## UX Pitfalls
 
+Common user experience mistakes for these specific features.
+
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Empty state shows "Visit Trackman" while data is still loading | User reads guidance for a problem they don't have; trust is broken | Only show guidance after storage read completes with a confirmed null result |
-| Dark mode toggle shows partially dark UI with bright error toasts | Extension looks broken; users perceive it as a bug | Audit all color-bearing elements including dynamically created DOM (toasts, status messages) |
-| Prompt preview in popup requires scrolling through 50+ KB of text | Users can't see the whole prompt; popup is unusable | Truncate preview to 300-500 characters with a "see more" option in options page |
-| Keyboard shortcut works on first try then stops working | User loses trust in the feature | Test shortcut survival across Chrome restart, extension update, and profile switches |
-| Permission re-prompt for Gemini appears with no explanation | Users dismiss or uninstall rather than re-approve | Release notes must explain why the prompt appears; provide in-extension first-run message post-approval |
-| Export toggle defaults to excluding averages | Existing users who rely on averages are surprised by changed output | Default must be `true` (include averages) to preserve existing behavior |
-| No feedback after clicking "Copy" | User re-clicks repeatedly thinking it failed | Always show a brief "Copied!" toast for 2 seconds after a successful write |
+| No indication that a session was saved to history | User does not know history is accumulating; may be surprised to find old sessions later | Show a brief "Saved to history" toast on successful session capture (1-2 seconds, non-blocking) |
+| Session history replaces current session export | User expects the current session to remain primary in the popup | Current session is always the primary view; history is secondary (options page or compact list) |
+| Smart prompt highlight changes without explanation | User sees a badge appear on a prompt but does not know why | Add a tooltip or subtitle: "Suggested based on your spin data" — make the reasoning visible |
+| Comparison shows delta without context sign convention | "+12" on Carry could mean good or bad depending on context | Show directional arrow icons; indicate whether higher is better per metric (Carry: higher = better; Side: lower = better) |
+| Visual stat cards show metrics the current session does not have | Card shows "Avg Club Speed: —" when ClubSpeed was not captured | Only render stat cards for metrics present in the current session's `metric_names`; hide cards for absent metrics |
+| Session labels are raw dates only | "2026-03-03" is not meaningful when a user has 3 sessions in one week | Show date + session number + shot count: "March 3 · Session #2 · 47 shots" |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Keyboard shortcut:** Verify the shortcut actually opens the popup when pressed in Chrome on macOS. Ctrl+Shift+G (not Ctrl+Shift+T) — test by opening `chrome://extensions/shortcuts` and confirming the key binding, then pressing it on a non-Trackman page.
-- [ ] **Gemini support:** Verify clicking "Open in AI" with Gemini selected opens `https://gemini.google.com` (not the API endpoint). Verify the extension is disabled and re-prompts after loading the updated extension from `chrome://extensions`.
-- [ ] **Dark mode:** Verify with DevTools color scheme emulation (Rendering tab > "Emulate CSS media feature prefers-color-scheme"). Check: body background, all buttons, both toast variants (success + error), unit dropdowns, shot count number, status message text.
-- [ ] **Prompt preview:** Verify popup does not require vertical scrolling after preview is rendered. Measure popup height in DevTools — must stay under 600px with preview open.
-- [ ] **Export toggle:** Verify toggling to "exclude averages" produces a CSV without average/consistency rows. Verify toggling back to "include averages" restores them. Verify the setting survives popup close and re-open. Verify the service worker reads the toggle from storage (not from a message payload).
-- [ ] **Empty state:** Verify the guidance message does not flash on popup open when shot data is present. Verify it appears correctly when storage is cleared. Verify it does not appear during the Loading state.
-- [ ] **Build artifacts:** Verify `dist/` contains rebuilt files after any TypeScript change. Run `bash scripts/build-extension.sh` and check timestamps before committing.
-- [ ] **All 247 tests pass:** Run `npx vitest run` after implementing each feature. Dark mode and empty state changes are CSS/HTML only and should not affect existing tests. Export toggle changes writeCsv signature and will require test updates.
+Things that appear complete but are missing critical pieces.
+
+- [ ] **Session history save:** Verify error handling — does the history write path check `chrome.runtime.lastError` and surface a toast on quota failure?
+- [ ] **Session history save:** Verify `raw_api_data` is stripped — serialize a `SessionSnapshot` and confirm `raw_api_data` is not present.
+- [ ] **Session comparison:** Test with non-matching club sets — session A has "Driver", session B does not. Does the UI show "N/A" cleanly?
+- [ ] **Session comparison:** Test with surface mismatch — does the comparison header show the surface mismatch warning?
+- [ ] **Visual stat cards:** Verify unit conversion — does "Avg Carry" show yards or meters per the user's `distanceUnit` preference?
+- [ ] **Visual stat cards:** Test with a session that has no `Carry` metric — does the card hide gracefully or show an error state?
+- [ ] **Smart prompt matching:** Open popup, load session, note highlighted prompt. Then navigate to a different Trackman report while popup is open. Does the highlight update on `DATA_UPDATED`?
+- [ ] **Storage quota guard:** Manually set storage to near-full using DevTools Storage inspector. Verify that a session save attempt fails gracefully with a user-visible toast rather than silently dropping the session.
+- [ ] **Session index cleanup:** Simulate a failed session write (write index but not data). Verify startup GC removes the orphaned index entry.
+- [ ] **Options page session browser:** Verify it opens in a full tab (`open_in_tab: true` is already in manifest). Verify it loads all session snapshots from `chrome.storage.local`.
 
 ---
 
 ## Recovery Strategies
 
+When pitfalls occur despite prevention, how to recover.
+
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Cmd+Shift+T conflict with Chrome reopen-tab shortcut | LOW | Update manifest suggested_key to non-conflicting combination; rebuild; release patch; no user action required |
-| Gemini host_permissions disables extension for all users | LOW (anticipated) | Expected behavior — document in release notes; provide in-extension message post-approval explaining why prompt appeared |
-| Dark mode breaks existing UI with partial implementation | MEDIUM | Audit all color assignments (stylesheet + JS inline); do CSS variable refactor; retest all UI states; rebuild |
-| Prompt preview overflows popup height cap | LOW | Replace modal with inline collapsible `<details>` element; constrain height with max-height + overflow: auto |
-| Export toggle breaks backward compatibility (defaults to exclude) | LOW | Fix default to `true` (include); update storage read pattern to use `?? true`; rebuild |
-| Empty state flashes on load for users with data | LOW | Move empty state trigger to post-storage-read; add loading state guard; rebuild |
-| Keyboard shortcut _execute_action listener never fires | LOW | Remove the listener; no code change needed in popup.ts; rebuild service worker |
-| Clipboard write in service worker fails | LOW | Move write handler to popup.ts; rebuild; no permission changes needed |
-| AI URL pre-fill breaks after provider update | LOW | Remove URL pre-fill for that service; update flow to clipboard-only; rebuild; release patch |
+| Quota exceeded, sessions stopped saving | LOW | Add eviction logic; run GC to clear orphaned keys; users lose oldest sessions (acceptable tradeoff) |
+| raw_api_data stored in all history sessions | HIGH | Requires storage migration on extension update: read existing sessions, strip raw_api_data, re-write; implement in `chrome.runtime.onInstalled` handler |
+| Session index and session data are out of sync | MEDIUM | Add startup GC routine to reconcile; remove orphaned keys; rebuild index from remaining session keys |
+| Comparison crashes on club name mismatch | LOW | Add normalization utility; existing comparison tests will catch regressions |
+| Stat cards show wrong values due to double-computation | MEDIUM | Replace with `ClubGroup.averages` source; existing CSV snapshot tests serve as the averages source of truth |
 
 ---
 
 ## Pitfall-to-Phase Mapping
 
+How roadmap phases should address these pitfalls.
+
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Cmd+Shift+T conflict | Keyboard shortcut implementation | Test shortcut in Chrome on macOS before committing manifest change |
-| _execute_action listener never fires | Keyboard shortcut implementation | Code review: no chrome.commands.onCommand listener for _execute_action |
-| Gemini host_permissions disables extension | Gemini support (isolated release) | Load updated extension in Chrome; verify re-prompt appears; document in release notes |
-| Dark mode breaks JS-assigned colors | Dark mode implementation (step 1: CSS variable refactor) | DevTools color scheme emulation; inspect all toast and status message colors |
-| Dark mode misses dynamically created elements | Dark mode implementation | Create a toast in dark mode; inspect computed styles on .toast.success and .toast.error |
-| Prompt preview overflows popup | Prompt preview implementation | Measure popup body height with preview open; assert under 600px |
-| Export toggle undefined default | Export toggle implementation | Unit test: read key when absent; verify default is `true` (include averages) |
-| Export toggle not threaded to service worker | Export toggle implementation | End-to-end test: toggle off, export, verify CSV has no average rows |
-| Empty state flashes during loading | Empty state implementation | Rapid popup open with data present; verify no guidance flash |
-| Empty state wrong for "on-page but no data" state | Empty state implementation | Define the three states in code; write specific copy for each |
-| Clipboard in service worker | Clipboard copy implementation | Code review: no clipboard calls in serviceWorker.ts |
-| Async focus loss on clipboard write | Clipboard copy implementation | Test with popup unfocused during async gap; verify clipboard content after click |
-| "tabs" permission added unnecessarily | Manifest review (every phase) | diff manifest.json before release; confirm no new entries in permissions array |
-| Storage quota exceeded for prompts | Prompt storage design | Unit test: attempt to store 20 × 1,000-char prompts; verify no quota error |
+| raw_api_data in history blows quota (C1) | Session history — storage design | Serialize a `SessionSnapshot` and assert `raw_api_data` key is absent |
+| Wrong storage area for history (C2) | Session history — storage design | Inspect DevTools > Application > Extension Storage; confirm all `session_*` keys are in `local` not `sync` |
+| Club name mismatch in comparison (C3) | Session comparison — implementation | Unit test: compare sessions with "7 Iron" vs "7-Iron" and assert deltas are computed, not undefined |
+| No quota guard on history writes (C4) | Session history — storage design | Integration test: fill storage to 9 MB manually; verify next save produces visible toast |
+| Popup height overflow from history list (C5) | Session history — UI design | Visual test: save 10 sessions; open popup; verify all controls are accessible without scrolling |
+| Smart matching uses stale data (M1) | Smart prompt matching — wiring | Test: open popup, capture session A, note highlighted prompt, navigate to session B, verify highlight updates |
+| Double-computation of averages (M2) | Visual stat cards — implementation | Assert `renderStatCards()` reads `cachedData.club_groups[i].averages` and does not call a separate averaging function |
+| Index grows without GC (M3) | Session history — storage design | Simulate orphaned key (write index entry without writing session); verify startup GC removes it |
+| Surface mismatch in comparison (M4) | Session comparison — UI | Test: compare a Mat session with a Grass session; verify surface mismatch indicator appears |
+| Stat cards stale after DATA_UPDATED (M5) | Visual stat cards — wiring | Test: open popup with session A loaded; navigate to session B; verify stat cards update |
 
 ---
 
 ## Sources
 
-- [chrome.commands API reference — Chrome for Developers](https://developer.chrome.com/docs/extensions/reference/api/commands) — keyboard shortcut restrictions, _execute_action behavior, global command limitations (HIGH confidence)
-- [Permission warning guidelines — Chrome for Developers](https://developer.chrome.com/docs/extensions/develop/concepts/permission-warnings) — extension disabled on new permission warning; re-consent behavior (HIGH confidence)
-- [Chrome keyboard shortcuts reference — Google Chrome Help](https://support.google.com/chrome/answer/157179) — Ctrl+Shift+T is "Reopen closed tab" on all platforms (HIGH confidence)
-- [Chrome extension popup size — Chromium Issue Tracker 40655432](https://issues.chromium.org/issues/40655432) — 800×600px hard cap confirmed (HIGH confidence)
-- [Inconsistency: extension popup's preferred color scheme — w3c/webextensions Issue #242](https://github.com/w3c/webextensions/issues/242) — Chrome follows OS prefers-color-scheme; browser_style removed in MV3 (MEDIUM confidence)
-- [Manifest 3 Permissions on Update — chromium-extensions Google Group](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/sufxArpz5ZU) — new host_permissions trigger re-consent prompt; extension disabled (MEDIUM confidence)
-- [prefers-color-scheme — MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme) — media query syntax and browser behavior (HIGH confidence)
-- [chrome.storage API reference — Chrome for Developers](https://developer.chrome.com/docs/extensions/reference/api/storage) — exact sync quota: 8 KB per item, 100 KB total; local quota: 10 MB; absent keys return undefined (HIGH confidence)
-- [Offscreen Documents in Manifest V3 — Chrome for Developers](https://developer.chrome.com/blog/Offscreen-Documents-in-Manifest-v3) — confirmed service workers cannot use navigator.clipboard (HIGH confidence)
-- [Cannot read clipboard from service worker — Chromium Issue Tracker](https://issues.chromium.org/issues/40738001) — confirmed service workers cannot use navigator.clipboard (HIGH confidence)
-- [PSA: Updates to chrome://extensions permissions UI in Chrome 130 — chromium-extensions](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/tqbVLwgVh58) — permission UI changes for host permissions (MEDIUM confidence)
-- Project source code inspection: `src/manifest.json`, `src/popup/popup.html`, `src/popup/popup.ts`, `src/background/serviceWorker.ts`, `src/options/options.html`, `src/options/options.ts`, `src/shared/constants.ts` — existing architecture baseline for compatibility assessment (HIGH confidence)
+- [chrome.storage API — official quotas and limits](https://developer.chrome.com/docs/extensions/reference/api/storage) — 10 MB local limit (5 MB pre-Chrome 114), 8 KB sync per-item limit, no per-item local limit, `chrome.runtime.lastError` on write failure (HIGH confidence)
+- [unlimitedStorage permission](https://chrome-stats.com/permission/unlimitedStorage) — removes local quota; does not affect sync; requires manifest declaration (MEDIUM confidence)
+- [w3c/webextensions issue #351 — storage.local limits discussion](https://github.com/w3c/webextensions/issues/351) — confirms 10 MB default, IndexedDB as alternative for large data (MEDIUM confidence)
+- [Chrome extension service worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle) — service workers terminate after 30s inactivity; state must be in storage not globals; event listeners must be top-level (HIGH confidence)
+- [Chrome popup size constraints — Chromium source](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/3A8d3oiOV_E) — max 800x600px, min 25x25px, hardcoded in Chromium source (HIGH confidence)
+- Direct source code inspection: `/Users/kylelunter/claudeprojects/trackv3/src/` — `SessionData` type shape, `raw_api_data` field, existing storage patterns, `STORAGE_KEYS` constants, `ClubGroup.averages` structure (HIGH confidence)
+- Empirical storage size estimates: node.js serialization of realistic `SessionData` instances from actual type shape (HIGH confidence — methodology is direct)
+- [HackerNoon — State Storage in Chrome Extensions](https://hackernoon.com/state-storage-in-chrome-extensions-options-limits-and-best-practices) — storage area comparison and best practices (MEDIUM confidence)
 
 ---
-*Pitfalls research for: Chrome Extension (MV3) — v1.5 Polish & Quick Wins (TrackPull v1.5)*
-*Researched: 2026-03-02*
+*Pitfalls research for: TrackPull v1.6 — Session History, Session Comparison, Visual Stat Cards, Smart Prompt Matching*
+*Researched: 2026-03-03*
+*Supersedes v1.5 PITFALLS.md for this milestone's scope*
