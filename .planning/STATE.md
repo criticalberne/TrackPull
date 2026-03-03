@@ -18,7 +18,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-02)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** Milestone v1.3 — Export & AI, Phase 7: Options Page and Custom Prompts
+**Current focus:** Milestone v1.3 — COMPLETE; next: v1.3 release
 
 ## Current Position
 
@@ -54,6 +54,7 @@ Progress: [##########] 100% (v1.3 — Phase 5 complete, Phase 6 complete, Phase 
 | Phase 06-clipboard-copy-and-ai-launch P06-02 | 8 | 3 tasks | 3 files |
 | Phase 07-options-page-and-custom-prompts P07-01 | 2 | 3 tasks | 9 files |
 | Phase 07-options-page-and-custom-prompts P07-02 | 2 | 2 tasks | 4 files |
+| Phase 07-options-page-and-custom-prompts P07-03 | 5 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ Recent decisions affecting current work:
 - [07-02]: showToast duplicated in options.ts (not imported from popup) — popup and options are separate esbuild bundles; duplication is correct isolation
 - [07-02]: editingPromptId module-level state distinguishes create vs update — single form handles both flows
 - [07-02]: window.confirm for delete confirmation per locked user decision in plan spec
+- [Phase 07-03]: Popup loads fresh custom prompts on each open (no onChanged listener) — per prior user decision in 07-01
+- [Phase 07-03]: Deleted-prompt fallback explicitly writes quick-summary-beginner back to storage — not relying on browser first-option auto-select
 
 ### Pending Todos
 
@@ -106,6 +109,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 07-02-PLAN.md (Options Page UI) — Phase 7 Plan 2 of 3 complete
+Stopped at: Completed 07-03-PLAN.md (Popup Dynamic Prompt Integration) — Phase 7 Plan 3 of 3 complete; v1.3 milestone done
 Resume file: None
-Next action: Execute Phase 7 Plan 03 (Popup Integration)
+Next action: v1.3 release — bump version, rebuild, zip dist/, gh release create
