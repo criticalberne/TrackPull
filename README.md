@@ -19,7 +19,7 @@ Grab your Trackman data and actually do something with it. Export to CSV, paste 
 - Pick your units (mph or m/s, yards or meters) and hitting surface (mat or grass)
 - Toggle averages on or off in exports — raw shots only when you want them
 - Dark mode that follows your system theme
-- Keyboard shortcut: **Cmd+Shift+G** (Mac) / **Ctrl+Shift+G** (Windows) to open the popup
+
 
 ## Install
 
