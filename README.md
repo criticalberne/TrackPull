@@ -7,13 +7,18 @@
 [![Tests](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml/badge.svg)](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Chrome extension that pulls shot data from Trackman web reports and exports it as CSV.
+A Chrome extension that pulls shot data from Trackman web reports — export to CSV, copy to clipboard, or launch one-click AI analysis.
 
 ## Features
 
 - Automatically captures shot data when you open a Trackman report
-- Exports to CSV with metrics grouped by category (speed, launch, spin, distance, etc.)
+- **Export CSV** with metrics grouped by category (speed, launch, spin, distance, etc.)
+- **Copy to clipboard** as tab-separated values — paste directly into Google Sheets or Excel
+- **One-click AI analysis** — launch ChatGPT or Claude with your data + a golf analysis prompt
+- 8 built-in golf prompts across beginner, intermediate, and advanced skill tiers
+- Create and manage custom prompt templates in the options page
 - Independent speed (mph / m/s) and distance (yards / meters) unit selectors
+- Hitting surface selector (Mat / Grass) — included as metadata in all exports and AI prompts
 - Files named `ShotData_YYYY-MM-DD.csv` for easy organization
 
 ## Install
@@ -45,8 +50,11 @@ A Chrome extension that pulls shot data from Trackman web reports and exports it
 1. Open a Trackman report URL (`web-dynamic-reports.trackmangolf.com`)
 2. The extension automatically captures shot data
 3. Click the TrackPull icon in your toolbar to see the shot count
-4. Choose your preferred speed and distance units
-5. Click **Export CSV** to download your data
+4. Choose your preferred speed units, distance units, and hitting surface
+5. **Export CSV** — download your data as a CSV file
+6. **Copy TSV** — copy tab-separated data to clipboard for spreadsheets
+7. **Open in AI** — launch ChatGPT or Claude with your data and a selected prompt
+8. **Copy Prompt + Data** — copy the prompt and data to clipboard for manual paste
 
 ### Supported URL formats
 
@@ -73,7 +81,9 @@ Metrics are grouped by analytical category for quick scanning:
 
 ## AI Prompt Templates
 
-The `prompts/` folder contains ready-made prompts you can use with ChatGPT or Claude to get club fitting insights from your exported CSV data. Either drag and drop your CSV file into the chat window or paste the data directly — each prompt handles both. They're organized by skill level:
+TrackPull includes 8 built-in prompts accessible directly from the popup — select a prompt, click **Open in AI**, and your data is ready for analysis. You can also create custom prompts in the options page.
+
+The `prompts/` folder contains the same prompts as standalone markdown files for reference:
 
 ### Beginner
 - [Understanding Your Numbers](prompts/beginner/understanding-your-numbers.md) — Learn what each metric means and how yours compare to average golfers
