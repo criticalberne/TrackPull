@@ -69,6 +69,33 @@ function findPromptById(id: string): PromptItem | undefined {
   return cachedCustomPrompts.find(p => p.id === id);
 }
 
+function updatePreview(): void {
+  const previewEl = document.getElementById("prompt-preview-content") as HTMLPreElement | null;
+  const promptSelect = document.getElementById("prompt-select") as HTMLSelectElement | null;
+  if (!previewEl || !promptSelect) return;
+
+  if (!cachedData) {
+    previewEl.textContent = "(No shot data captured yet)";
+    return;
+  }
+
+  const prompt = findPromptById(promptSelect.value);
+  if (!prompt) {
+    previewEl.textContent = "";
+    return;
+  }
+
+  const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
+  const metadata = {
+    date: cachedData.date,
+    shotCount: countSessionShots(cachedData),
+    unitLabel: buildUnitLabel(cachedUnitChoice),
+    hittingSurface: cachedSurface,
+  };
+
+  previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("TrackPull popup initialized");
 
@@ -156,6 +183,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         cachedData = (message.data as SessionData) ?? null;
         updateShotCount(message.data);
         updateExportButtonVisibility(message.data);
+        updatePreview();
       }
       return true;
     });
@@ -198,6 +226,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Auto-save on change
       promptSelect.addEventListener("change", () => {
         chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
+        updatePreview();
       });
     }
 
@@ -214,8 +243,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Auto-save on change
       aiServiceSelect.addEventListener("change", () => {
         chrome.storage.sync.set({ [STORAGE_KEYS.AI_SERVICE]: aiServiceSelect.value });
+        updatePreview();
       });
     }
+
+    // Initial preview render (after both selects have their saved values restored)
+    updatePreview();
 
     // Copy TSV button handler (CLIP-01, CLIP-02, CLIP-03)
     const copyTsvBtn = document.getElementById("copy-tsv-btn");

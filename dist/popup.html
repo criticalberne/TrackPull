@@ -243,6 +243,27 @@
       outline-offset: -1px;
     }
 
+    .toggle-row {
+      margin: 12px 0;
+    }
+
+    .toggle-row label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--color-text-body);
+      cursor: pointer;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--color-accent);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
     /* Section dividers */
     .ai-section {
       margin-top: 20px;
@@ -361,6 +382,36 @@
       background-color: var(--color-accent-light);
     }
 
+    /* Prompt preview disclosure widget */
+    details#prompt-preview {
+      margin-top: 10px;
+    }
+
+    details#prompt-preview > summary {
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      padding: 4px 0;
+      user-select: none;
+    }
+
+    #prompt-preview-content {
+      max-height: 180px;
+      overflow-y: auto;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: var(--color-bg-subtle);
+      color: var(--color-text-body);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      padding: 8px;
+      margin: 6px 0 0 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
     .header-row {
       display: flex;
       justify-content: space-between;
@@ -420,6 +471,12 @@
       </select>
     </div>
   </div>
+  <div class="toggle-row">
+    <label>
+      <input type="checkbox" id="include-averages-checkbox">
+      Include averages and consistency in export
+    </label>
+  </div>
   <div id="export-row" class="export-row" style="display:none;">
     <button id="export-btn">Export CSV</button>
     <button id="copy-tsv-btn">Copy TSV</button>
@@ -444,6 +501,10 @@
       <button id="open-ai-btn" class="btn-primary">Open in AI</button>
       <button id="copy-prompt-btn" class="btn-outline">Copy Prompt + Data</button>
     </div>
+    <details id="prompt-preview">
+      <summary>Preview prompt</summary>
+      <pre id="prompt-preview-content"></pre>
+    </details>
   </div>
   <button id="clear-btn" style="display:none">Clear Session Data</button>
   <div id="status-message"></div>

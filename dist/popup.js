@@ -50,7 +50,8 @@
         DISTANCE_UNIT: "distanceUnit",
         SELECTED_PROMPT_ID: "selectedPromptId",
         AI_SERVICE: "aiService",
-        HITTING_SURFACE: "hittingSurface"
+        HITTING_SURFACE: "hittingSurface",
+        INCLUDE_AVERAGES: "includeAverages"
       };
     }
   });
@@ -656,6 +657,28 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
         if (builtIn) return builtIn;
         return cachedCustomPrompts.find((p) => p.id === id);
       }
+      function updatePreview() {
+        const previewEl = document.getElementById("prompt-preview-content");
+        const promptSelect = document.getElementById("prompt-select");
+        if (!previewEl || !promptSelect) return;
+        if (!cachedData) {
+          previewEl.textContent = "(No shot data captured yet)";
+          return;
+        }
+        const prompt = findPromptById(promptSelect.value);
+        if (!prompt) {
+          previewEl.textContent = "";
+          return;
+        }
+        const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
+        const metadata = {
+          date: cachedData.date,
+          shotCount: countSessionShots(cachedData),
+          unitLabel: buildUnitLabel(cachedUnitChoice),
+          hittingSurface: cachedSurface
+        };
+        previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
+      }
       document.addEventListener("DOMContentLoaded", async () => {
         console.log("TrackPull popup initialized");
         try {
@@ -668,7 +691,7 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           updateShotCount(data);
           updateExportButtonVisibility(data);
           const unitResult = await new Promise((resolve) => {
-            chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, "unitPreference"], resolve);
+            chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, STORAGE_KEYS.INCLUDE_AVERAGES, "unitPreference"], resolve);
           });
           let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT];
           let distanceUnit = unitResult[STORAGE_KEYS.DISTANCE_UNIT];
@@ -712,11 +735,20 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
               cachedSurface = surfaceSelect.value;
             });
           }
+          const includeAveragesCheckbox = document.getElementById("include-averages-checkbox");
+          if (includeAveragesCheckbox) {
+            const stored = unitResult[STORAGE_KEYS.INCLUDE_AVERAGES];
+            includeAveragesCheckbox.checked = stored === void 0 ? true : Boolean(stored);
+            includeAveragesCheckbox.addEventListener("change", () => {
+              chrome.storage.local.set({ [STORAGE_KEYS.INCLUDE_AVERAGES]: includeAveragesCheckbox.checked });
+            });
+          }
           chrome.runtime.onMessage.addListener((message) => {
             if (message.type === "DATA_UPDATED") {
               cachedData = message.data ?? null;
               updateShotCount(message.data);
               updateExportButtonVisibility(message.data);
+              updatePreview();
             }
             return true;
           });
@@ -750,6 +782,7 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
             }
             promptSelect.addEventListener("change", () => {
               chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
+              updatePreview();
             });
           }
           const aiServiceSelect = document.getElementById("ai-service-select");
@@ -763,8 +796,10 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
             }
             aiServiceSelect.addEventListener("change", () => {
               chrome.storage.sync.set({ [STORAGE_KEYS.AI_SERVICE]: aiServiceSelect.value });
+              updatePreview();
             });
           }
+          updatePreview();
           const copyTsvBtn = document.getElementById("copy-tsv-btn");
           if (copyTsvBtn) {
             copyTsvBtn.addEventListener("click", async () => {
