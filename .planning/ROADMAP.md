@@ -89,7 +89,8 @@
   2. Unchecking the box and exporting produces a CSV with only raw shot rows — no Average or Consistency rows
   3. The checkbox state persists across popup closes and browser restarts
   4. Existing users who have never touched the toggle get the same export output as before (averages included by default)
-**Plans**: TBD
+**Plans:** 1 plan
+- [ ] 11-01-PLAN.md — Add averages toggle checkbox, storage persistence, and service worker wiring
 
 ### Phase 12: Prompt Preview
 **Goal**: Users can inspect the assembled prompt and data before sending to any AI service
