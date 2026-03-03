@@ -13,6 +13,15 @@ export interface BuiltInPrompt {
   readonly template: string;
 }
 
+export interface CustomPrompt {
+  readonly id: string;
+  readonly name: string;
+  readonly template: string;
+}
+
+/** Union type for any prompt that can be assembled (built-in or custom). */
+export type PromptItem = BuiltInPrompt | CustomPrompt;
+
 export const BUILTIN_PROMPTS: readonly BuiltInPrompt[] = [
   {
     id: "session-overview-beginner",

@@ -5,7 +5,7 @@
  * All functions are pure -- no side effects, no storage access.
  */
 
-import type { BuiltInPrompt } from "./prompt_types";
+import type { PromptItem } from "./prompt_types";
 
 export interface PromptMetadata {
   /** Session date, e.g. "2025-01-15" */
@@ -26,7 +26,7 @@ export interface PromptMetadata {
  * The assembled data block replaces the {{DATA}} placeholder in the template.
  */
 export function assemblePrompt(
-  prompt: BuiltInPrompt,
+  prompt: PromptItem,
   tsvData: string,
   metadata?: PromptMetadata
 ): string {
