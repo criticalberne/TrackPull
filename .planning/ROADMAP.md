@@ -77,7 +77,8 @@
   1. Opening the popup with no stored data shows a guidance message (e.g., "Open a Trackman report to capture shots") instead of "0 shots"
   2. The guidance message does not flash briefly when data is already present — it only appears after storage resolves as empty
   3. The guidance message is readable in both light and dark mode
-**Plans**: TBD
+**Plans:** 1 plan
+- [ ] 10-01-PLAN.md — Empty state guidance HTML/CSS + TypeScript logic refactor
 
 ### Phase 11: Export Format Toggle
 **Goal**: Users can choose whether CSV exports include averages and consistency summary rows
@@ -117,7 +118,7 @@
 | 1. Add setting for hitting surface selection | v1.4 | 2/2 | Complete | 2026-03-03 |
 | 8. Gemini Launch and Keyboard Shortcut | 1/1 | Complete   | 2026-03-03 | - |
 | 9. Dark Mode CSS Foundation | 2/2 | Complete   | 2026-03-03 | - |
-| 10. Empty State Guidance | v1.5 | 0/TBD | Not started | - |
+| 10. Empty State Guidance | v1.5 | 0/1 | Planned | - |
 | 11. Export Format Toggle | v1.5 | 0/TBD | Not started | - |
 | 12. Prompt Preview | v1.5 | 0/TBD | Not started | - |
 
