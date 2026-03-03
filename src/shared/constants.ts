@@ -147,4 +147,5 @@ export const STORAGE_KEYS = {
   SELECTED_PROMPT_ID: "selectedPromptId",
   AI_SERVICE: "aiService",
   HITTING_SURFACE: "hittingSurface",
+  INCLUDE_AVERAGES: "includeAverages",
 } as const;
