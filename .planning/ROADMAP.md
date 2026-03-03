@@ -38,6 +38,17 @@
 | 6. Clipboard Copy and AI Launch | v1.3 | 2/2 | Complete | 2026-03-02 |
 | 7. Options Page and Custom Prompts | v1.3 | 3/3 | Complete | 2026-03-03 |
 
+### Phase 1: Add setting for hitting surface selection
+
+**Goal:** User can select a hitting surface (Grass/Mat) in the popup, and the surface is included as metadata in CSV exports, TSV clipboard copies, and AI prompt assembly
+**Requirements**: TBD
+**Depends on:** Phase 0
+**Plans:** 2 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Add surface preference infrastructure and thread through all output paths
+- [ ] 01-02-PLAN.md — Write surface metadata tests and rebuild extension
+
 ---
 *Roadmap created: 2026-03-02*
 *v1.x phases reflect pre-existing implementation — all 12 v1 requirements complete*
