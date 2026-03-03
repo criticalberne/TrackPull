@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-03T03:04:19.898Z"
+last_updated: "2026-03-03T03:08:01.801Z"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -23,12 +23,12 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 01-add-setting-for-hitting-surface-selection
-Plan: 1 of 1 complete
-Status: Phase 01 Plan 01 complete
-Last activity: 2026-03-03 - Completed Plan 01-01: Add hitting surface preference to popup and all output paths
+Plan: 2 of 2 complete
+Status: Phase 01 complete — all plans done
+Last activity: 2026-03-03 - Completed Plan 01-02: Write hitting surface unit tests and rebuild extension
 Next action: Phase complete — run `/gsd:execute-phase` for next phase or `/gsd:new-milestone` if done
 
-Progress: [##########] Phase 01 Plan 1/1 complete
+Progress: [##########] Phase 01 Plan 2/2 complete
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ Progress: [##########] Phase 01 Plan 1/1 complete
 | 6. Clipboard Copy and AI Launch | v1.3 | 2 | ~10 min | 6 |
 | 7. Options Page and Custom Prompts | v1.3 | 3 | ~9 min | 7 |
 | Phase 01-add-setting-for-hitting-surface-selection P01 | 3 | 2 tasks | 9 files |
+| Phase 01-add-setting-for-hitting-surface-selection P02 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -56,6 +57,7 @@ Progress: [##########] Phase 01 Plan 1/1 complete
 
 See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03 with v1.3 outcomes)
 - [Phase 01-add-setting-for-hitting-surface-selection]: Mat is first in dropdown and default; surface param is optional on all output functions to preserve backward compat; serviceWorker defaults to Mat on fresh install
+- [Phase 01-add-setting-for-hitting-surface-selection]: 11 tests written (exceeds 7 minimum) covering Mat/Grass/undefined for all three output paths
 
 ### Pending Todos
 
@@ -76,7 +78,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-03T03:02:12Z
-Stopped at: Completed 01-add-setting-for-hitting-surface-selection 01-01-PLAN.md
+Last session: 2026-03-03T03:09:00Z
+Stopped at: Completed 01-add-setting-for-hitting-surface-selection 01-02-PLAN.md
 Resume file: None
-Next action: Phase complete — all plans in phase 01 done
+Next action: Phase 01 fully complete — all 2 plans done
