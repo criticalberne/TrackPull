@@ -118,7 +118,7 @@
 | 1. Add setting for hitting surface selection | v1.4 | 2/2 | Complete | 2026-03-03 |
 | 8. Gemini Launch and Keyboard Shortcut | 1/1 | Complete   | 2026-03-03 | - |
 | 9. Dark Mode CSS Foundation | 2/2 | Complete   | 2026-03-03 | - |
-| 10. Empty State Guidance | 1/1 | Complete   | 2026-03-03 | - |
+| 10. Empty State Guidance | 1/1 | Complete    | 2026-03-03 | - |
 | 11. Export Format Toggle | v1.5 | 0/TBD | Not started | - |
 | 12. Prompt Preview | v1.5 | 0/TBD | Not started | - |
 
