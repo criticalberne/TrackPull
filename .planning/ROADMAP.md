@@ -43,7 +43,7 @@
 - [x] **Phase 9: Dark Mode CSS Foundation** - CSS custom properties refactor enabling system-driven dark mode in popup and options pages (completed 2026-03-03)
 - [x] **Phase 10: Empty State Guidance** - Actionable guidance message replacing bare "0 shots" when no data is captured (completed 2026-03-03)
 - [x] **Phase 11: Export Format Toggle** - Checkbox persisting user preference to include or exclude averages and consistency rows in CSV (completed 2026-03-03)
-- [ ] **Phase 12: Prompt Preview** - Collapsible disclosure widget showing assembled prompt and data before AI launch
+- [x] **Phase 12: Prompt Preview** - Collapsible disclosure widget showing assembled prompt and data before AI launch (completed 2026-03-03)
 
 ## Phase Details
 
@@ -121,7 +121,7 @@
 | 9. Dark Mode CSS Foundation | 2/2 | Complete   | 2026-03-03 | - |
 | 10. Empty State Guidance | 1/1 | Complete    | 2026-03-03 | - |
 | 11. Export Format Toggle | 1/1 | Complete    | 2026-03-03 | - |
-| 12. Prompt Preview | v1.5 | 0/TBD | Not started | - |
+| 12. Prompt Preview | 1/1 | Complete   | 2026-03-03 | - |
 
 ---
 *Roadmap created: 2026-03-02*
