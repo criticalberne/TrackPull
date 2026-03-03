@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A Chrome extension that scrapes shot data from Trackman golf web reports, exports to CSV, copies to clipboard as TSV for spreadsheets, and launches one-click AI analysis with built-in and custom golf prompts.
+A Chrome extension that scrapes shot data from Trackman golf web reports, exports to CSV, copies to clipboard as TSV for spreadsheets, and launches one-click AI analysis with built-in and custom golf prompts. Features system-aware dark mode, prompt preview, and export customization.
 
 ## Core Value
 
@@ -30,19 +30,17 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 - ✓ Let users create, edit, and delete custom prompt templates — v1.3
 - ✓ Set default AI service preference — v1.3
 - ✓ Prompt management in options page, quick access in popup — v1.3
-
 - ✓ User-selectable hitting surface (Grass/Mat) in popup with metadata in CSV, TSV, and AI prompts — v1.4
+- ✓ Gemini AI launch support via clipboard-first flow — v1.5
+- ✓ Keyboard shortcut (Cmd+Shift+G / Ctrl+Shift+G) to open popup — v1.5
+- ✓ Dark mode matching system theme across popup and options — v1.5
+- ✓ Empty state guidance replacing bare "0 shots" dead end — v1.5
+- ✓ Export format toggle for averages/consistency rows — v1.5
+- ✓ Prompt preview before sending to AI — v1.5
 
 ### Active
 
-<!-- Current milestone: v1.5 Polish & Quick Wins -->
-
-- [ ] Gemini AI launch support with isolated host_permissions release
-- [ ] Prompt preview before sending to AI
-- [ ] Empty state guidance replacing "0 shots" dead end
-- [ ] Export format toggle for averages/consistency rows
-- [ ] Keyboard shortcut (Cmd+Shift+T) to open popup
-- [ ] Dark mode matching system theme
+(None — planning next milestone)
 
 ### Future
 
@@ -60,22 +58,13 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 - Cloud sync — no backend; extension is local-only by design
 - Direct AI API integration — requires API key management, billing
 - Prompt sharing / community library — requires backend, moderation, user accounts
-
-## Current Milestone: v1.5 Polish & Quick Wins
-
-**Goal:** Ship 6 low-effort, high-impact features that polish the existing experience — Gemini support, prompt preview, empty states, export toggle, keyboard shortcut, and dark mode.
-
-**Target features:**
-- Gemini AI launch support (isolated release for permission prompt)
-- Prompt preview before sending to AI
-- Empty state guidance (actionable messages instead of "0 shots")
-- Export format toggle (include/exclude averages+consistency rows)
-- Keyboard shortcut (Cmd+Shift+T to open popup)
-- Dark mode (match system theme)
+- Manual dark mode toggle — system-match is sufficient; revisit only if users request override
+- Gemini URL pre-fill via content script — brittle against Gemini's SPA; clipboard-first is permanent approach
+- User-configurable shortcut picker — Chrome's chrome://extensions/shortcuts provides this natively
 
 ## Context
 
-Shipped v1.4 with ~50,600 LOC TypeScript.
+Shipped v1.5 with ~49,908 LOC TypeScript.
 Tech stack: Chrome MV3 extension, esbuild, vitest. Zero production dependencies.
 247 tests across 12 test files, all passing.
 `dist/` tracked in git; `production.zip` gitignored.
@@ -101,9 +90,14 @@ Tech stack: Chrome MV3 extension, esbuild, vitest. Zero production dependencies.
 | Clipboard-first AI launch | AI services lack reliable URL pre-fill; clipboard + open tab is universal | ✓ Good |
 | Per-key chrome.storage.sync for custom prompts | Individual keys avoid 8 KB single-item quota limit | ✓ Good |
 | Pre-fetch data pattern in popup | Cache storage reads at DOMContentLoaded; avoids async focus-loss clipboard errors | ✓ Good |
-| Gemini deferred to v1.4+ | host_permissions addition triggers permission prompt for all users; isolate to own release | ✓ Good |
 | Optional last param for surface metadata | All writer functions accept optional hittingSurface — zero caller breakage | ✓ Good |
 | Mat as default surface | Most Trackman users practice on mats at indoor ranges; flags most impactful surface | ✓ Good |
+| _execute_action for keyboard shortcut | Chrome handles popup open natively; no background.js handler needed | ✓ Good |
+| CSS custom property tokens for theming | var(--color-*) tokens enable dark mode via @media query without JS | ✓ Good |
+| classList toggling over inline styles | Status messages use CSS classes for dark mode support instead of style.color | ✓ Good |
+| Native details/summary for prompt preview | No JS state management needed; browser handles expand/collapse | ✓ Good |
+| textContent (not innerHTML) for preview | Prevents XSS from user-defined prompts in preview widget | ✓ Good |
+| includeAverages default true | Backward compatible — existing users continue getting averages in exports | ✓ Good |
 
 ---
-*Last updated: 2026-03-02 after v1.5 milestone start*
+*Last updated: 2026-03-03 after v1.5 milestone*

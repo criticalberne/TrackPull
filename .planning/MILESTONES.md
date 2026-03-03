@@ -1,5 +1,26 @@
 # Milestones
 
+## v1.5 Polish & Quick Wins (Shipped: 2026-03-03)
+
+**Phases:** 8-12 (5 phases, 6 plans, 14 tasks)
+**Timeline:** 1 day (2026-03-02 → 2026-03-03)
+**Git range:** `f14d39f` (docs(08)) to `d72d4db` (docs(phase-12))
+**Files changed:** 12 (+841, -196)
+
+**Delivered:** Six polish features — Gemini AI launch, keyboard shortcut, dark mode, empty state guidance, export format toggle, and prompt preview — shipped as quick wins without breaking existing behavior.
+
+**Key accomplishments:**
+1. Gemini AI launch support with Cmd+Shift+G keyboard shortcut via Chrome Commands API
+2. Dark mode CSS foundation with custom property tokens across popup and options pages
+3. Empty state guidance replacing bare "0 shots" with actionable instructions
+4. Export format toggle for including/excluding averages and consistency rows in CSV
+5. Collapsible prompt preview widget showing assembled prompt and data before AI launch
+6. Status message refactored from inline styles to CSS class toggling for dark mode support
+
+**Tests:** 247 total, all passing
+
+---
+
 ## v1.4 Surface Metadata (Shipped: 2026-03-03)
 
 **Phases:** 1 (1 phase, 2 plans, 4 tasks)
