@@ -911,7 +911,8 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
         const statusElement = document.getElementById("status-message");
         if (!statusElement) return;
         statusElement.textContent = message;
-        statusElement.style.color = isError ? "#d32f2f" : "#388e3c";
+        statusElement.classList.remove("status-error", "status-success");
+        statusElement.classList.add(isError ? "status-error" : "status-success");
       }
       async function handleClearClick() {
         const clearBtn = document.getElementById("clear-btn");
