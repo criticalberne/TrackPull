@@ -7,15 +7,19 @@
 [![Tests](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml/badge.svg)](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Grab your Trackman data and actually do something with it. Export to CSV, paste into a spreadsheet, or send it straight to ChatGPT/Claude for analysis — all from one Chrome extension.
+Grab your Trackman data and actually do something with it. Export to CSV, paste into a spreadsheet, or send it straight to ChatGPT/Claude/Gemini for analysis — all from one Chrome extension.
 
 ## What it does
 
 - Opens a Trackman report? Data's already captured
 - Export as CSV or copy tab-separated values straight into Google Sheets
-- One click to launch AI analysis with your data and a golf prompt
+- One click to launch AI analysis with your data and a golf prompt (ChatGPT, Claude, or Gemini)
+- Preview the full prompt and data before sending to AI
 - 8 built-in prompts from beginner to advanced, plus custom templates you create
 - Pick your units (mph or m/s, yards or meters) and hitting surface (mat or grass)
+- Toggle averages on or off in exports — raw shots only when you want them
+- Dark mode that follows your system theme
+- Keyboard shortcut: **Cmd+Shift+G** (Mac) / **Ctrl+Shift+G** (Windows) to open the popup
 
 ## Install
 
@@ -48,10 +52,11 @@ Grab your Trackman data and actually do something with it. Export to CSV, paste 
 3. Pick what you want to do:
    - **Export CSV** — downloads a file with your data
    - **Copy TSV** — pastes right into spreadsheets
-   - **Open in AI** — launches ChatGPT or Claude with a prompt and your data
+   - **Open in AI** — launches ChatGPT, Claude, or Gemini with a prompt and your data
    - **Copy Prompt + Data** — for pasting into any AI chat manually
+4. Expand **Prompt Preview** to inspect exactly what's being sent before you click
 
-Your hitting surface (mat/grass) is tagged in every export and prompt so the AI knows what it's working with.
+Your hitting surface (mat/grass) is tagged in every export and prompt so the AI knows what it's working with. Uncheck "Include averages" if you just want raw shot rows.
 
 <details>
 <summary>Supported Trackman URLs</summary>
