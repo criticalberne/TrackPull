@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.3
-milestone_name: Export & AI
-status: shipped
-last_updated: "2026-03-03"
+milestone_name: milestone
+status: unknown
+last_updated: "2026-03-03T03:04:19.898Z"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -22,12 +22,13 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 
 ## Current Position
 
-Phase: All v1.3 phases complete (5-7)
-Status: v1.3 milestone SHIPPED
-Last activity: 2026-03-03 - Completed quick task 1: Fix build script to work when run from any directory
-Next action: `/gsd:new-milestone` for next version
+Phase: 01-add-setting-for-hitting-surface-selection
+Plan: 1 of 1 complete
+Status: Phase 01 Plan 01 complete
+Last activity: 2026-03-03 - Completed Plan 01-01: Add hitting surface preference to popup and all output paths
+Next action: Phase complete — run `/gsd:execute-phase` for next phase or `/gsd:new-milestone` if done
 
-Progress: [##########] 100% (v1.3 complete)
+Progress: [##########] Phase 01 Plan 1/1 complete
 
 ## Performance Metrics
 
@@ -43,6 +44,7 @@ Progress: [##########] 100% (v1.3 complete)
 | 5. Foundation Modules | v1.3 | 3 | ~5 min | 9 |
 | 6. Clipboard Copy and AI Launch | v1.3 | 2 | ~10 min | 6 |
 | 7. Options Page and Custom Prompts | v1.3 | 3 | ~9 min | 7 |
+| Phase 01-add-setting-for-hitting-surface-selection P01 | 3 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -53,6 +55,7 @@ Progress: [##########] 100% (v1.3 complete)
 ### Decisions
 
 See: .planning/PROJECT.md Key Decisions table (updated 2026-03-03 with v1.3 outcomes)
+- [Phase 01-add-setting-for-hitting-surface-selection]: Mat is first in dropdown and default; surface param is optional on all output functions to preserve backward compat; serviceWorker defaults to Mat on fresh install
 
 ### Pending Todos
 
@@ -73,7 +76,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-03
-Stopped at: v1.3 milestone archived and tagged
+Last session: 2026-03-03T03:02:12Z
+Stopped at: Completed 01-add-setting-for-hitting-surface-selection 01-01-PLAN.md
 Resume file: None
-Next action: `/gsd:new-milestone` — start next milestone (fresh context window recommended)
+Next action: Phase complete — all plans in phase 01 done
