@@ -835,16 +835,17 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
         }
       });
       function updateShotCount(data) {
+        const container = document.getElementById("shot-count-container");
         const shotCountElement = document.getElementById("shot-count");
-        if (!shotCountElement) return;
+        if (!container || !shotCountElement) return;
         if (!data || typeof data !== "object") {
-          shotCountElement.textContent = "0";
+          container.classList.add("empty-state");
           return;
         }
         const sessionData = data;
         const clubGroups = sessionData["club_groups"];
         if (!clubGroups || !Array.isArray(clubGroups)) {
-          shotCountElement.textContent = "0";
+          container.classList.add("empty-state");
           return;
         }
         let totalShots = 0;
@@ -854,14 +855,17 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
             totalShots += shots.length;
           }
         }
+        container.classList.remove("empty-state");
         shotCountElement.textContent = totalShots.toString();
       }
       function updateExportButtonVisibility(data) {
         const exportRow = document.getElementById("export-row");
         const aiSection = document.getElementById("ai-section");
+        const clearBtn = document.getElementById("clear-btn");
         const hasValidData = data && typeof data === "object" && data["club_groups"];
         if (exportRow) exportRow.style.display = hasValidData ? "flex" : "none";
         if (aiSection) aiSection.style.display = hasValidData ? "block" : "none";
+        if (clearBtn) clearBtn.style.display = hasValidData ? "block" : "none";
       }
       async function handleExportClick() {
         const exportBtn = document.getElementById("export-btn");

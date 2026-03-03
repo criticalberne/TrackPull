@@ -292,11 +292,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 function updateShotCount(data: unknown): void {
+  const container = document.getElementById("shot-count-container");
   const shotCountElement = document.getElementById("shot-count");
-  if (!shotCountElement) return;
+  if (!container || !shotCountElement) return;
 
   if (!data || typeof data !== "object") {
-    shotCountElement.textContent = "0";
+    container.classList.add("empty-state");
     return;
   }
 
@@ -304,7 +305,7 @@ function updateShotCount(data: unknown): void {
   const clubGroups = sessionData["club_groups"] as Array<Record<string, unknown>> | undefined;
 
   if (!clubGroups || !Array.isArray(clubGroups)) {
-    shotCountElement.textContent = "0";
+    container.classList.add("empty-state");
     return;
   }
 
@@ -316,18 +317,21 @@ function updateShotCount(data: unknown): void {
     }
   }
 
+  container.classList.remove("empty-state");
   shotCountElement.textContent = totalShots.toString();
 }
 
 function updateExportButtonVisibility(data: unknown): void {
   const exportRow = document.getElementById("export-row");
   const aiSection = document.getElementById("ai-section");
+  const clearBtn = document.getElementById("clear-btn");
 
   const hasValidData = data && typeof data === "object" &&
     (data as Record<string, unknown>)["club_groups"];
 
   if (exportRow) exportRow.style.display = hasValidData ? "flex" : "none";
   if (aiSection) aiSection.style.display = hasValidData ? "block" : "none";
+  if (clearBtn) clearBtn.style.display = hasValidData ? "block" : "none";
 }
 
 async function handleExportClick(): Promise<void> {
