@@ -146,4 +146,5 @@ export const STORAGE_KEYS = {
   DISTANCE_UNIT: "distanceUnit",
   SELECTED_PROMPT_ID: "selectedPromptId",
   AI_SERVICE: "aiService",
+  HITTING_SURFACE: "hittingSurface",
 } as const;

@@ -16,6 +16,7 @@ import { loadCustomPrompts } from "../shared/custom_prompts";
 // Pre-fetched data for synchronous clipboard access (avoids focus-loss errors)
 let cachedData: SessionData | null = null;
 let cachedUnitChoice: UnitChoice = DEFAULT_UNIT_CHOICE;
+let cachedSurface: "Grass" | "Mat" = "Mat";
 let cachedCustomPrompts: CustomPrompt[] = [];
 
 const AI_URLS: Record<string, string> = {
@@ -86,7 +87,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Unit dropdowns: read saved values, migrate from legacy key if needed
     const unitResult = await new Promise<Record<string, unknown>>((resolve) => {
-      chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, "unitPreference"], resolve);
+      chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, "unitPreference"], resolve);
     });
 
     let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT] as string | undefined;
@@ -109,6 +110,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       distance: distanceUnit as "yards" | "meters",
     };
 
+    // Resolve surface preference with Mat default
+    const surface = (unitResult[STORAGE_KEYS.HITTING_SURFACE] as "Grass" | "Mat") ?? "Mat";
+    cachedSurface = surface;
+
     const speedSelect = document.getElementById("speed-unit") as HTMLSelectElement | null;
     const distanceSelect = document.getElementById("distance-unit") as HTMLSelectElement | null;
 
@@ -125,6 +130,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       distanceSelect.addEventListener("change", () => {
         chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
         cachedUnitChoice = { ...cachedUnitChoice, distance: distanceSelect.value as "yards" | "meters" };
+      });
+    }
+
+    const surfaceSelect = document.getElementById("surface-select") as HTMLSelectElement | null;
+    if (surfaceSelect) {
+      surfaceSelect.value = surface;
+      surfaceSelect.addEventListener("change", () => {
+        chrome.storage.local.set({ [STORAGE_KEYS.HITTING_SURFACE]: surfaceSelect.value });
+        cachedSurface = surfaceSelect.value as "Grass" | "Mat";
       });
     }
 
