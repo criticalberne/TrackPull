@@ -2,8 +2,76 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="color-scheme" content="light dark">
   <title>TrackPull Settings</title>
   <style>
+    /* Dark mode tokens -- keep in sync with popup.html */
+    :root {
+      color-scheme: light dark;
+
+      --color-bg:                 #ffffff;
+      --color-bg-surface:         #f5f5f5;
+      --color-bg-card:            #ffffff;
+      --color-bg-subtle:          #f9f9f9;
+      --color-text-primary:       #1a1a1a;
+      --color-text-body:          #333333;
+      --color-text-muted:         #666666;
+      --color-text-label:         #555555;
+      --color-accent:             #1976d2;
+      --color-accent-hover:       #1565c0;
+      --color-accent-light:       rgba(25, 118, 210, 0.08);
+      --color-accent-ring:        rgba(25, 118, 210, 0.15);
+      --color-border:             #e0e0e0;
+      --color-border-input:       #cccccc;
+      --color-disabled:           #bdbdbd;
+      --color-danger-light:       rgba(211, 47, 47, 0.06);
+      --color-status-error:       #d32f2f;
+      --color-status-ok:          #388e3c;
+      --color-toast-ok-bg:        #388e3c;
+      --color-toast-err-bg:       #d32f2f;
+      --color-badge-beginner-bg:  #e8f5e9;
+      --color-badge-beginner-text:#2e7d32;
+      --color-badge-inter-bg:     #fff3e0;
+      --color-badge-inter-text:   #e65100;
+      --color-badge-adv-bg:       #fce4ec;
+      --color-badge-adv-text:     #c62828;
+      --color-helper-code-bg:     #efefef;
+      --color-text-on-accent:     #ffffff;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg:                 #121212;
+        --color-bg-surface:         #1e1e1e;
+        --color-bg-card:            #2a2a2a;
+        --color-bg-subtle:          #242424;
+        --color-text-primary:       #e8e8e8;
+        --color-text-body:          #cccccc;
+        --color-text-muted:         #999999;
+        --color-text-label:         #aaaaaa;
+        --color-accent:             #64b5f6;
+        --color-accent-hover:       #90caf9;
+        --color-accent-light:       rgba(100, 181, 246, 0.12);
+        --color-accent-ring:        rgba(100, 181, 246, 0.20);
+        --color-border:             #404040;
+        --color-border-input:       #555555;
+        --color-disabled:           #666666;
+        --color-danger-light:       rgba(239, 83, 80, 0.10);
+        --color-status-error:       #ef9a9a;
+        --color-status-ok:          #66bb6a;
+        --color-toast-ok-bg:        #2e7d32;
+        --color-toast-err-bg:       #c62828;
+        --color-badge-beginner-bg:  #1b3a1e;
+        --color-badge-beginner-text:#81c784;
+        --color-badge-inter-bg:     #3e2700;
+        --color-badge-inter-text:   #ffb74d;
+        --color-badge-adv-bg:       #3e1520;
+        --color-badge-adv-text:     #ef9a9a;
+        --color-helper-code-bg:     #333333;
+        --color-text-on-accent:     #ffffff;
+      }
+    }
+
     * {
       box-sizing: border-box;
     }
@@ -12,8 +80,8 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       margin: 0;
       padding: 0;
-      background-color: #f5f5f5;
-      color: #333333;
+      background-color: var(--color-bg-surface);
+      color: var(--color-text-body);
     }
 
     .container {
@@ -25,15 +93,15 @@
     h1 {
       font-size: 24px;
       font-weight: 600;
-      color: #1a1a1a;
+      color: var(--color-text-primary);
       margin: 0 0 32px 0;
     }
 
     h2 {
       font-size: 18px;
       font-weight: 600;
-      color: #1a1a1a;
-      border-bottom: 2px solid #1976d2;
+      color: var(--color-text-primary);
+      border-bottom: 2px solid var(--color-accent);
       padding-bottom: 8px;
       margin: 0 0 16px 0;
     }
@@ -41,14 +109,14 @@
     h3 {
       font-size: 12px;
       font-weight: 600;
-      color: #666;
+      color: var(--color-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       margin: 24px 0 12px 0;
     }
 
     .section {
-      background: #ffffff;
+      background: var(--color-bg-card);
       border-radius: 8px;
       padding: 24px;
       margin-bottom: 24px;
@@ -62,7 +130,7 @@
       gap: 10px;
       padding: 10px 12px;
       border-radius: 6px;
-      background: #f9f9f9;
+      background: var(--color-bg-subtle);
       margin-bottom: 6px;
     }
 
@@ -73,7 +141,7 @@
     .prompt-name {
       font-size: 14px;
       font-weight: 500;
-      color: #1a1a1a;
+      color: var(--color-text-primary);
       flex: 1;
     }
 
@@ -88,18 +156,18 @@
     }
 
     .tier-badge.beginner {
-      background: #e8f5e9;
-      color: #2e7d32;
+      background: var(--color-badge-beginner-bg);
+      color: var(--color-badge-beginner-text);
     }
 
     .tier-badge.intermediate {
-      background: #fff3e0;
-      color: #e65100;
+      background: var(--color-badge-inter-bg);
+      color: var(--color-badge-inter-text);
     }
 
     .tier-badge.advanced {
-      background: #fce4ec;
-      color: #c62828;
+      background: var(--color-badge-adv-bg);
+      color: var(--color-badge-adv-text);
     }
 
     /* Custom prompt items */
@@ -109,7 +177,7 @@
       gap: 10px;
       padding: 10px 12px;
       border-radius: 6px;
-      border: 1px solid #e0e0e0;
+      border: 1px solid var(--color-border);
       margin-bottom: 8px;
     }
 
@@ -120,7 +188,7 @@
     .custom-prompt-name {
       font-size: 14px;
       font-weight: 500;
-      color: #1a1a1a;
+      color: var(--color-text-primary);
       flex: 1;
     }
 
@@ -136,28 +204,28 @@
       font-weight: 500;
       border-radius: 4px;
       cursor: pointer;
-      border: 1px solid #1976d2;
+      border: 1px solid var(--color-accent);
       background: transparent;
-      color: #1976d2;
+      color: var(--color-accent);
       transition: background 0.15s, color 0.15s;
     }
 
     .btn-action:hover {
-      background: rgba(25, 118, 210, 0.08);
+      background: var(--color-accent-light);
     }
 
     .btn-action.delete {
-      border-color: #d32f2f;
-      color: #d32f2f;
+      border-color: var(--color-status-error);
+      color: var(--color-status-error);
     }
 
     .btn-action.delete:hover {
-      background: rgba(211, 47, 47, 0.06);
+      background: var(--color-danger-light);
     }
 
     .no-custom-prompts {
       font-size: 14px;
-      color: #999;
+      color: var(--color-text-muted);
       font-style: italic;
       padding: 8px 0;
     }
@@ -170,9 +238,9 @@
       padding: 8px 16px;
       font-size: 14px;
       font-weight: 500;
-      color: #1976d2;
+      color: var(--color-accent);
       background: transparent;
-      border: 2px solid #1976d2;
+      border: 2px solid var(--color-accent);
       border-radius: 6px;
       cursor: pointer;
       margin-top: 16px;
@@ -180,23 +248,23 @@
     }
 
     .btn-secondary:hover {
-      background: rgba(25, 118, 210, 0.08);
+      background: var(--color-accent-light);
     }
 
     /* Prompt form */
     #prompt-form {
       margin-top: 16px;
       padding: 20px;
-      background: #f9f9f9;
+      background: var(--color-bg-subtle);
       border-radius: 8px;
-      border: 1px solid #e0e0e0;
+      border: 1px solid var(--color-border);
     }
 
     #prompt-form label {
       display: block;
       font-size: 12px;
       font-weight: 600;
-      color: #555;
+      color: var(--color-text-label);
       margin-bottom: 4px;
       margin-top: 14px;
     }
@@ -211,18 +279,18 @@
       padding: 9px 12px;
       font-size: 14px;
       font-family: inherit;
-      border: 1px solid #ccc;
+      border: 1px solid var(--color-border-input);
       border-radius: 6px;
-      background: #fff;
-      color: #333;
+      background: var(--color-bg-card);
+      color: var(--color-text-body);
       transition: border-color 0.15s, outline 0.15s;
     }
 
     #prompt-name-input:focus,
     #prompt-template-input:focus {
       outline: none;
-      border-color: #1976d2;
-      box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 2px var(--color-accent-ring);
     }
 
     #prompt-template-input {
@@ -233,16 +301,16 @@
 
     .helper-text {
       font-size: 12px;
-      color: #888;
+      color: var(--color-text-muted);
       margin: 6px 0 0 0;
     }
 
     .helper-text code {
       font-family: monospace;
-      background: #efefef;
+      background: var(--color-helper-code-bg);
       padding: 1px 5px;
       border-radius: 3px;
-      color: #555;
+      color: var(--color-text-label);
     }
 
     .form-actions {
@@ -255,8 +323,8 @@
       padding: 9px 20px;
       font-size: 14px;
       font-weight: 500;
-      color: #fff;
-      background-color: #1976d2;
+      color: var(--color-text-on-accent);
+      background-color: var(--color-accent);
       border: none;
       border-radius: 6px;
       cursor: pointer;
@@ -264,7 +332,7 @@
     }
 
     .btn-primary:hover {
-      background-color: #1565c0;
+      background-color: var(--color-accent-hover);
     }
 
     /* AI Preferences */
@@ -277,7 +345,7 @@
     .pref-group label {
       font-size: 13px;
       font-weight: 600;
-      color: #555;
+      color: var(--color-text-label);
     }
 
     #options-ai-service {
@@ -285,17 +353,17 @@
       padding: 9px 12px;
       font-size: 14px;
       font-family: inherit;
-      border: 1px solid #ccc;
+      border: 1px solid var(--color-border-input);
       border-radius: 6px;
-      background: #fff;
-      color: #333;
+      background: var(--color-bg-card);
+      color: var(--color-text-body);
       cursor: pointer;
     }
 
     #options-ai-service:focus {
       outline: none;
-      border-color: #1976d2;
-      box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 2px var(--color-accent-ring);
     }
 
     /* Toast styles (same as popup.html) */
@@ -308,7 +376,7 @@
       border-radius: 6px;
       font-size: 14px;
       font-weight: 500;
-      color: white;
+      color: var(--color-text-on-accent);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
       z-index: 1000;
       animation: slideIn 0.3s ease-out;
@@ -316,11 +384,11 @@
     }
 
     .toast.error {
-      background-color: #d32f2f;
+      background-color: var(--color-toast-err-bg);
     }
 
     .toast.success {
-      background-color: #388e3c;
+      background-color: var(--color-toast-ok-bg);
     }
 
     .toast.hiding {
