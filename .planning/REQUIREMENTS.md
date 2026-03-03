@@ -9,7 +9,7 @@ Requirements for v1.5 Polish & Quick Wins. Each maps to roadmap phases.
 
 ### AI Integration
 
-- [ ] **AI-01**: User can launch Gemini as an AI analysis target using the existing clipboard-first flow
+- [x] **AI-01**: User can launch Gemini as an AI analysis target using the existing clipboard-first flow
 - [ ] **AI-02**: User can preview the assembled prompt and data before sending to any AI service
 
 ### UI Polish
@@ -23,7 +23,7 @@ Requirements for v1.5 Polish & Quick Wins. Each maps to roadmap phases.
 
 ### Navigation
 
-- [ ] **NAV-01**: User can open the popup with Cmd+Shift+G (Mac) / Ctrl+Shift+G (Windows)
+- [x] **NAV-01**: User can open the popup with Cmd+Shift+G (Mac) / Ctrl+Shift+G (Windows)
 
 ## v1.6 Requirements
 
@@ -58,8 +58,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AI-01 | Phase 8 | Pending |
-| NAV-01 | Phase 8 | Pending |
+| AI-01 | Phase 8 | Complete |
+| NAV-01 | Phase 8 | Complete |
 | UI-01 | Phase 9 | Pending |
 | UI-02 | Phase 10 | Pending |
 | EXP-01 | Phase 11 | Pending |

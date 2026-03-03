@@ -39,7 +39,7 @@
 
 **Milestone Goal:** Ship 6 low-effort, high-impact features that polish the existing experience without breaking existing behavior.
 
-- [ ] **Phase 8: Gemini Launch and Keyboard Shortcut** - Isolated manifest-only release adding Gemini host_permissions and Cmd+Shift+G keyboard shortcut
+- [x] **Phase 8: Gemini Launch and Keyboard Shortcut** - Isolated manifest-only release adding Gemini host_permissions and Cmd+Shift+G keyboard shortcut (completed 2026-03-03)
 - [ ] **Phase 9: Dark Mode CSS Foundation** - CSS custom properties refactor enabling system-driven dark mode in popup and options pages
 - [ ] **Phase 10: Empty State Guidance** - Actionable guidance message replacing bare "0 shots" when no data is captured
 - [ ] **Phase 11: Export Format Toggle** - Checkbox persisting user preference to include or exclude averages and consistency rows in CSV
@@ -115,7 +115,7 @@
 | 6. Clipboard Copy and AI Launch | v1.3 | 2/2 | Complete | 2026-03-02 |
 | 7. Options Page and Custom Prompts | v1.3 | 3/3 | Complete | 2026-03-03 |
 | 1. Add setting for hitting surface selection | v1.4 | 2/2 | Complete | 2026-03-03 |
-| 8. Gemini Launch and Keyboard Shortcut | v1.5 | 0/TBD | Not started | - |
+| 8. Gemini Launch and Keyboard Shortcut | 1/1 | Complete   | 2026-03-03 | - |
 | 9. Dark Mode CSS Foundation | v1.5 | 0/TBD | Not started | - |
 | 10. Empty State Guidance | v1.5 | 0/TBD | Not started | - |
 | 11. Export Format Toggle | v1.5 | 0/TBD | Not started | - |
