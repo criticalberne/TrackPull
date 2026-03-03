@@ -42,7 +42,7 @@
 - [x] **Phase 8: Gemini Launch and Keyboard Shortcut** - Isolated manifest-only release adding Gemini host_permissions and Cmd+Shift+G keyboard shortcut (completed 2026-03-03)
 - [x] **Phase 9: Dark Mode CSS Foundation** - CSS custom properties refactor enabling system-driven dark mode in popup and options pages (completed 2026-03-03)
 - [x] **Phase 10: Empty State Guidance** - Actionable guidance message replacing bare "0 shots" when no data is captured (completed 2026-03-03)
-- [ ] **Phase 11: Export Format Toggle** - Checkbox persisting user preference to include or exclude averages and consistency rows in CSV
+- [x] **Phase 11: Export Format Toggle** - Checkbox persisting user preference to include or exclude averages and consistency rows in CSV (completed 2026-03-03)
 - [ ] **Phase 12: Prompt Preview** - Collapsible disclosure widget showing assembled prompt and data before AI launch
 
 ## Phase Details
@@ -89,7 +89,7 @@
   2. Unchecking the box and exporting produces a CSV with only raw shot rows — no Average or Consistency rows
   3. The checkbox state persists across popup closes and browser restarts
   4. Existing users who have never touched the toggle get the same export output as before (averages included by default)
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 - [ ] 11-01-PLAN.md — Add averages toggle checkbox, storage persistence, and service worker wiring
 
 ### Phase 12: Prompt Preview
@@ -120,7 +120,7 @@
 | 8. Gemini Launch and Keyboard Shortcut | 1/1 | Complete   | 2026-03-03 | - |
 | 9. Dark Mode CSS Foundation | 2/2 | Complete   | 2026-03-03 | - |
 | 10. Empty State Guidance | 1/1 | Complete    | 2026-03-03 | - |
-| 11. Export Format Toggle | v1.5 | 0/TBD | Not started | - |
+| 11. Export Format Toggle | 1/1 | Complete   | 2026-03-03 | - |
 | 12. Prompt Preview | v1.5 | 0/TBD | Not started | - |
 
 ---

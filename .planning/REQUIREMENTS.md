@@ -19,7 +19,7 @@ Requirements for v1.5 Polish & Quick Wins. Each maps to roadmap phases.
 
 ### Export
 
-- [ ] **EXP-01**: User can toggle whether exports include averages and consistency rows
+- [x] **EXP-01**: User can toggle whether exports include averages and consistency rows
 
 ### Navigation
 
@@ -62,7 +62,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NAV-01 | Phase 8 | Complete |
 | UI-01 | Phase 9 | Complete |
 | UI-02 | Phase 10 | Complete |
-| EXP-01 | Phase 11 | Pending |
+| EXP-01 | Phase 11 | Complete |
 | AI-02 | Phase 12 | Pending |
 
 **Coverage:**
