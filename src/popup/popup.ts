@@ -5,12 +5,15 @@
 import { STORAGE_KEYS } from "../shared/constants";
 import { migrateLegacyPref, getApiSourceUnitSystem, normalizeMetricValue, DISTANCE_LABELS, SPEED_LABELS, DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import type { SessionData, Shot } from "../models/types";
+import type { HistoryEntry, SessionSnapshot } from "../models/types";
 import type { UnitChoice } from "../shared/unit_normalization";
 import { writeTsv } from "../shared/tsv_writer";
 import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
 import { assemblePrompt, buildUnitLabel, countSessionShots } from "../shared/prompt_builder";
 import { loadCustomPrompts } from "../shared/custom_prompts";
+import { deleteSessionFromHistory, clearAllHistory } from "../shared/history";
+import { formatRelativeDate, formatClubSummary, countSnapshotShots } from "./history_helpers";
 
 export function computeClubAverage(
   shots: Shot[],
@@ -31,6 +34,8 @@ let cachedData: SessionData | null = null;
 let cachedUnitChoice: UnitChoice = DEFAULT_UNIT_CHOICE;
 let cachedSurface: "Grass" | "Mat" = "Mat";
 let cachedCustomPrompts: CustomPrompt[] = [];
+let viewingHistoricalSession = false;
+let liveSessionData: SessionData | null = null;
 
 const AI_URLS: Record<string, string> = {
   "ChatGPT": "https://chatgpt.com",
@@ -155,6 +160,75 @@ function updatePreview(): void {
   previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
 }
 
+function renderHistoryList(): void {
+  const section = document.getElementById("history-section") as HTMLDetailsElement | null;
+  const container = document.getElementById("history-list-content");
+  if (!section || !container) return;
+
+  chrome.storage.local.get([STORAGE_KEYS.SESSION_HISTORY], (result: Record<string, unknown>) => {
+    const entries = (result[STORAGE_KEYS.SESSION_HISTORY] as HistoryEntry[] | undefined) ?? [];
+
+    if (entries.length === 0) {
+      section.style.display = "none";
+      container.innerHTML = "";
+      return;
+    }
+
+    section.style.display = "";
+
+    let html = "";
+    for (const entry of entries) {
+      const reportId = entry.snapshot.report_id;
+      const dateStr = formatRelativeDate(entry.captured_at);
+      const shotCount = countSnapshotShots(entry.snapshot);
+      const clubs = formatClubSummary(entry.snapshot.club_groups);
+      html += `<div class="history-row" data-report-id="${reportId}">
+        <span class="history-info">${dateStr} \u2014 ${shotCount} shots \u2014 ${clubs}</span>
+        <button class="history-delete-btn" data-report-id="${reportId}" title="Delete session">\u{1F5D1}</button>
+      </div>`;
+    }
+    html += `<button id="clear-all-history-btn" class="history-clear-all">Clear All History</button>`;
+    container.innerHTML = html;
+  });
+}
+
+function loadHistoricalSession(entry: HistoryEntry): void {
+  liveSessionData = cachedData;
+  cachedData = entry.snapshot as SessionData;
+  viewingHistoricalSession = true;
+
+  const banner = document.getElementById("history-banner");
+  const bannerText = document.getElementById("history-banner-text");
+  if (banner) banner.style.display = "";
+  if (bannerText) {
+    bannerText.textContent = `Viewing: ${formatRelativeDate(entry.captured_at)} session (${countSnapshotShots(entry.snapshot)} shots)`;
+  }
+
+  updateShotCount(cachedData);
+  updateExportButtonVisibility(cachedData);
+  renderStatCard();
+  updatePreview();
+
+  const clearBtn = document.getElementById("clear-btn");
+  if (clearBtn) clearBtn.style.display = "none";
+}
+
+function dismissHistoricalSession(): void {
+  if (!viewingHistoricalSession) return;
+
+  cachedData = liveSessionData;
+  liveSessionData = null;
+  viewingHistoricalSession = false;
+
+  const banner = document.getElementById("history-banner");
+  if (banner) banner.style.display = "none";
+
+  updateShotCount(cachedData);
+  updateExportButtonVisibility(cachedData);
+  renderStatCard();
+  updatePreview();
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   console.log("TrackPull popup initialized");
 
@@ -241,11 +315,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     chrome.runtime.onMessage.addListener((message: { type: string; data?: unknown; error?: string }) => {
       if (message.type === 'DATA_UPDATED') {
+        if (viewingHistoricalSession) {
+          dismissHistoricalSession();
+        }
         cachedData = (message.data as SessionData) ?? null;
         updateShotCount(message.data);
         updateExportButtonVisibility(message.data);
         updatePreview();
         renderStatCard();
+        renderHistoryList();
       }
       if (message.type === 'HISTORY_ERROR') {
         showToast((message as { type: string; error: string }).error, "error");
@@ -393,6 +471,65 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     }
 
+    // History list click delegation
+    const historyListContent = document.getElementById("history-list-content");
+    if (historyListContent) {
+      historyListContent.addEventListener("click", async (event) => {
+        const target = event.target as HTMLElement;
+
+        // Delete button
+        const deleteBtn = target.closest(".history-delete-btn") as HTMLElement | null;
+        if (deleteBtn) {
+          event.stopPropagation();
+          const reportId = deleteBtn.getAttribute("data-report-id");
+          if (!reportId) return;
+          if (viewingHistoricalSession && cachedData?.report_id === reportId) {
+            dismissHistoricalSession();
+          }
+          await deleteSessionFromHistory(reportId);
+          renderHistoryList();
+          return;
+        }
+
+        // Clear All History button
+        if (target.id === "clear-all-history-btn") {
+          event.stopPropagation();
+          if (!confirm("Delete all saved sessions? This cannot be undone.")) return;
+          if (viewingHistoricalSession) {
+            dismissHistoricalSession();
+          }
+          await clearAllHistory();
+          renderHistoryList();
+          return;
+        }
+
+        // Row click — load historical session
+        const row = target.closest(".history-row") as HTMLElement | null;
+        if (row) {
+          const reportId = row.getAttribute("data-report-id");
+          if (!reportId) return;
+          chrome.storage.local.get([STORAGE_KEYS.SESSION_HISTORY], (result: Record<string, unknown>) => {
+            const entries = (result[STORAGE_KEYS.SESSION_HISTORY] as HistoryEntry[] | undefined) ?? [];
+            const entry = entries.find(e => e.snapshot.report_id === reportId);
+            if (entry) {
+              loadHistoricalSession(entry);
+            }
+          });
+        }
+      });
+    }
+
+    // Banner dismiss
+    const bannerDismiss = document.getElementById("history-banner-dismiss");
+    if (bannerDismiss) {
+      bannerDismiss.addEventListener("click", () => {
+        dismissHistoricalSession();
+      });
+    }
+
+    // Initial history list render
+    renderHistoryList();
+
   } catch (error) {
     console.error("Error loading popup data:", error);
     showToast("Error loading shot count", "error");
@@ -439,7 +576,7 @@ function updateExportButtonVisibility(data: unknown): void {
 
   if (exportRow) exportRow.style.display = hasValidData ? "flex" : "none";
   if (aiSection) aiSection.style.display = hasValidData ? "block" : "none";
-  if (clearBtn) clearBtn.style.display = hasValidData ? "block" : "none";
+  if (clearBtn) clearBtn.style.display = (hasValidData && !viewingHistoricalSession) ? "block" : "none";
 }
 
 async function handleExportClick(): Promise<void> {
@@ -450,8 +587,12 @@ async function handleExportClick(): Promise<void> {
   exportBtn.disabled = true;
 
   try {
+    const messagePayload = viewingHistoricalSession && cachedData
+      ? { type: "EXPORT_CSV_FROM_DATA", data: cachedData }
+      : { type: "EXPORT_CSV_REQUEST" };
+
     const response = await new Promise<{ success: boolean; error?: string; filename?: string }>((resolve) => {
-      chrome.runtime.sendMessage({ type: "EXPORT_CSV_REQUEST" }, (resp) => {
+      chrome.runtime.sendMessage(messagePayload, (resp) => {
         resolve(resp || { success: false, error: "No response from service worker" });
       });
     });
