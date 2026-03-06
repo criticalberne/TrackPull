@@ -4,7 +4,7 @@
 
 import { STORAGE_KEYS } from "../shared/constants";
 import { migrateLegacyPref } from "../shared/unit_normalization";
-import type { SessionData } from "../models/types";
+import type { SessionData, Shot } from "../models/types";
 import type { UnitChoice } from "../shared/unit_normalization";
 import { DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import { writeTsv } from "../shared/tsv_writer";
@@ -12,6 +12,20 @@ import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
 import { assemblePrompt, buildUnitLabel, countSessionShots } from "../shared/prompt_builder";
 import { loadCustomPrompts } from "../shared/custom_prompts";
+
+export function computeClubAverage(
+  shots: Shot[],
+  metricName: string
+): number | null {
+  const values = shots
+    .map(s => s.metrics[metricName])
+    .filter(v => v !== undefined && v !== "")
+    .map(v => parseFloat(String(v)));
+  const numericValues = values.filter(v => !isNaN(v));
+  if (numericValues.length === 0) return null;
+  const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+  return Math.round(avg * 10) / 10;
+}
 
 // Pre-fetched data for synchronous clipboard access (avoids focus-loss errors)
 let cachedData: SessionData | null = null;
