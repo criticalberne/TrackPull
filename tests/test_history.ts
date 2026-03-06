@@ -27,7 +27,7 @@ vi.stubGlobal("chrome", {
   },
 });
 
-import { saveSessionToHistory, getHistoryErrorMessage } from "../src/shared/history";
+import { saveSessionToHistory, getHistoryErrorMessage, deleteSessionFromHistory, clearAllHistory } from "../src/shared/history";
 
 function makeSession(reportId: string, overrides?: Partial<SessionData>): SessionData {
   return {
@@ -166,6 +166,102 @@ describe("saveSessionToHistory", () => {
     );
 
     // Reset lastError for other tests
+    chrome.runtime.lastError = null;
+  });
+});
+
+describe("deleteSessionFromHistory", () => {
+  beforeEach(() => {
+    mockStore = {};
+    vi.mocked(chrome.storage.local.get).mockImplementation(
+      (keys: string[], cb: (result: Record<string, unknown>) => void) => {
+        const result: Record<string, unknown> = {};
+        for (const key of keys) {
+          if (key in mockStore) {
+            result[key] = mockStore[key];
+          }
+        }
+        cb(result);
+      }
+    );
+    vi.mocked(chrome.storage.local.set).mockImplementation(
+      (data: Record<string, unknown>, cb: () => void) => {
+        Object.assign(mockStore, data);
+        cb();
+      }
+    );
+    chrome.runtime.lastError = null;
+  });
+
+  it("removes the entry matching report_id", async () => {
+    mockStore["sessionHistory"] = [
+      { captured_at: 1000, snapshot: { report_id: "report-1", date: "2026-01-01", url_type: "report", club_groups: [], metric_names: [], metadata_params: {} } },
+      { captured_at: 2000, snapshot: { report_id: "report-2", date: "2026-01-02", url_type: "report", club_groups: [], metric_names: [], metadata_params: {} } },
+    ];
+
+    await deleteSessionFromHistory("report-1");
+
+    const stored = mockStore["sessionHistory"] as Array<{ snapshot: { report_id: string } }>;
+    expect(stored).toHaveLength(1);
+    expect(stored[0].snapshot.report_id).toBe("report-2");
+  });
+
+  it("resolves without error when report_id not found", async () => {
+    mockStore["sessionHistory"] = [
+      { captured_at: 1000, snapshot: { report_id: "report-1", date: "2026-01-01", url_type: "report", club_groups: [], metric_names: [], metadata_params: {} } },
+    ];
+
+    await expect(deleteSessionFromHistory("nonexistent")).resolves.toBeUndefined();
+
+    const stored = mockStore["sessionHistory"] as Array<{ snapshot: { report_id: string } }>;
+    expect(stored).toHaveLength(1);
+  });
+
+  it("rejects on chrome.runtime.lastError", async () => {
+    vi.mocked(chrome.storage.local.get).mockImplementation(
+      (_keys: string[], cb: (result: Record<string, unknown>) => void) => {
+        chrome.runtime.lastError = { message: "Storage error" };
+        cb({});
+      }
+    );
+
+    await expect(deleteSessionFromHistory("report-1")).rejects.toThrow("Storage error");
+    chrome.runtime.lastError = null;
+  });
+});
+
+describe("clearAllHistory", () => {
+  beforeEach(() => {
+    mockStore = {};
+    vi.mocked(chrome.storage.local.set).mockImplementation(
+      (data: Record<string, unknown>, cb: () => void) => {
+        Object.assign(mockStore, data);
+        cb();
+      }
+    );
+    chrome.runtime.lastError = null;
+  });
+
+  it("sets SESSION_HISTORY to empty array", async () => {
+    mockStore["sessionHistory"] = [
+      { captured_at: 1000, snapshot: { report_id: "report-1" } },
+      { captured_at: 2000, snapshot: { report_id: "report-2" } },
+    ];
+
+    await clearAllHistory();
+
+    expect(mockStore["sessionHistory"]).toEqual([]);
+  });
+
+  it("rejects on chrome.runtime.lastError", async () => {
+    vi.mocked(chrome.storage.local.set).mockImplementation(
+      (_data: Record<string, unknown>, cb: () => void) => {
+        chrome.runtime.lastError = { message: "Storage error" };
+        cb();
+      }
+    );
+
+    await expect(clearAllHistory()).rejects.toThrow("Storage error");
     chrome.runtime.lastError = null;
   });
 });
