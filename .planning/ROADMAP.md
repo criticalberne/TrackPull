@@ -80,7 +80,10 @@ Plans:
   2. Capturing the same report a second time updates the existing entry rather than creating a duplicate
   3. When 20 saved sessions are present, capturing a new session evicts the oldest one rather than failing silently
   4. If a storage write fails (quota exceeded), the extension shows a toast notification rather than dropping the session silently
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 14-01-PLAN.md — Types, constants, and TDD history module (save, dedup, eviction)
+- [ ] 14-02-PLAN.md — Service worker integration and popup error toast
 
 ### Phase 15: Session History UI
 **Goal**: User can browse saved sessions and re-export any of them as CSV, TSV, or AI analysis — identical actions to the current session
@@ -124,7 +127,7 @@ Plans:
 | 11. Export Format Toggle | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 12. Prompt Preview | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 13. Visual Stat Card | 1/1 | Complete    | 2026-03-06 | - |
-| 14. Session History Storage | v1.6 | 0/? | Not started | - |
+| 14. Session History Storage | v1.6 | 0/2 | Not started | - |
 | 15. Session History UI | v1.6 | 0/? | Not started | - |
 | 16. Smart Prompt Suggestions | v1.6 | 0/? | Not started | - |
 
