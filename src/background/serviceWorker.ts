@@ -6,6 +6,7 @@ import { STORAGE_KEYS } from "../shared/constants";
 import { writeCsv } from "../shared/csv_writer";
 import type { SessionData } from "../models/types";
 import { migrateLegacyPref, DEFAULT_UNIT_CHOICE, type UnitChoice, type SpeedUnit, type DistanceUnit } from "../shared/unit_normalization";
+import { saveSessionToHistory, getHistoryErrorMessage } from "../shared/history";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("TrackPull extension installed");
@@ -56,6 +57,15 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
       } else {
         console.log("TrackPull: Session data saved to storage");
         sendResponse({ success: true });
+
+        // History save -- fire and forget, never blocks primary flow
+        saveSessionToHistory(sessionData).catch((err) => {
+          console.error("TrackPull: History save failed:", err);
+          const msg = getHistoryErrorMessage(err.message);
+          chrome.runtime.sendMessage({ type: "HISTORY_ERROR", error: msg }).catch(() => {
+            // Popup not open -- already logged to console
+          });
+        });
       }
     });
     return true;
