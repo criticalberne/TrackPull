@@ -239,13 +239,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     }
 
-    chrome.runtime.onMessage.addListener((message: { type: string; data?: unknown }) => {
+    chrome.runtime.onMessage.addListener((message: { type: string; data?: unknown; error?: string }) => {
       if (message.type === 'DATA_UPDATED') {
         cachedData = (message.data as SessionData) ?? null;
         updateShotCount(message.data);
         updateExportButtonVisibility(message.data);
         updatePreview();
         renderStatCard();
+      }
+      if (message.type === 'HISTORY_ERROR') {
+        showToast((message as { type: string; error: string }).error, "error");
       }
       return true;
     });

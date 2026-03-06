@@ -1,62 +1,119 @@
 (() => {
-  var __getOwnPropNames = Object.getOwnPropertyNames;
-  var __esm = (fn, res) => function __init() {
-    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-  };
-  var __commonJS = (cb, mod) => function __require() {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  };
-
   // src/shared/constants.ts
-  var METRIC_DISPLAY_NAMES, CUSTOM_PROMPT_KEY_PREFIX, CUSTOM_PROMPT_IDS_KEY, STORAGE_KEYS;
-  var init_constants = __esm({
-    "src/shared/constants.ts"() {
-      METRIC_DISPLAY_NAMES = {
-        ClubSpeed: "Club Speed",
-        BallSpeed: "Ball Speed",
-        SmashFactor: "Smash Factor",
-        AttackAngle: "Attack Angle",
-        ClubPath: "Club Path",
-        FaceAngle: "Face Angle",
-        FaceToPath: "Face To Path",
-        SwingDirection: "Swing Direction",
-        DynamicLoft: "Dynamic Loft",
-        SpinRate: "Spin Rate",
-        SpinAxis: "Spin Axis",
-        SpinLoft: "Spin Loft",
-        LaunchAngle: "Launch Angle",
-        LaunchDirection: "Launch Direction",
-        Carry: "Carry",
-        Total: "Total",
-        Side: "Side",
-        SideTotal: "Side Total",
-        CarrySide: "Carry Side",
-        TotalSide: "Total Side",
-        Height: "Height",
-        MaxHeight: "Max Height",
-        Curve: "Curve",
-        LandingAngle: "Landing Angle",
-        HangTime: "Hang Time",
-        LowPointDistance: "Low Point",
-        ImpactHeight: "Impact Height",
-        ImpactOffset: "Impact Offset",
-        Tempo: "Tempo"
-      };
-      CUSTOM_PROMPT_KEY_PREFIX = "customPrompt_";
-      CUSTOM_PROMPT_IDS_KEY = "customPromptIds";
-      STORAGE_KEYS = {
-        TRACKMAN_DATA: "trackmanData",
-        SPEED_UNIT: "speedUnit",
-        DISTANCE_UNIT: "distanceUnit",
-        SELECTED_PROMPT_ID: "selectedPromptId",
-        AI_SERVICE: "aiService",
-        HITTING_SURFACE: "hittingSurface",
-        INCLUDE_AVERAGES: "includeAverages"
-      };
-    }
-  });
+  var METRIC_DISPLAY_NAMES = {
+    ClubSpeed: "Club Speed",
+    BallSpeed: "Ball Speed",
+    SmashFactor: "Smash Factor",
+    AttackAngle: "Attack Angle",
+    ClubPath: "Club Path",
+    FaceAngle: "Face Angle",
+    FaceToPath: "Face To Path",
+    SwingDirection: "Swing Direction",
+    DynamicLoft: "Dynamic Loft",
+    SpinRate: "Spin Rate",
+    SpinAxis: "Spin Axis",
+    SpinLoft: "Spin Loft",
+    LaunchAngle: "Launch Angle",
+    LaunchDirection: "Launch Direction",
+    Carry: "Carry",
+    Total: "Total",
+    Side: "Side",
+    SideTotal: "Side Total",
+    CarrySide: "Carry Side",
+    TotalSide: "Total Side",
+    Height: "Height",
+    MaxHeight: "Max Height",
+    Curve: "Curve",
+    LandingAngle: "Landing Angle",
+    HangTime: "Hang Time",
+    LowPointDistance: "Low Point",
+    ImpactHeight: "Impact Height",
+    ImpactOffset: "Impact Offset",
+    Tempo: "Tempo"
+  };
+  var CUSTOM_PROMPT_KEY_PREFIX = "customPrompt_";
+  var CUSTOM_PROMPT_IDS_KEY = "customPromptIds";
+  var STORAGE_KEYS = {
+    TRACKMAN_DATA: "trackmanData",
+    SPEED_UNIT: "speedUnit",
+    DISTANCE_UNIT: "distanceUnit",
+    SELECTED_PROMPT_ID: "selectedPromptId",
+    AI_SERVICE: "aiService",
+    HITTING_SURFACE: "hittingSurface",
+    INCLUDE_AVERAGES: "includeAverages",
+    SESSION_HISTORY: "sessionHistory"
+  };
 
   // src/shared/unit_normalization.ts
+  var DEFAULT_UNIT_CHOICE = { speed: "mph", distance: "yards" };
+  var UNIT_SYSTEMS = {
+    // Imperial (yards, degrees) - most common
+    "789012": {
+      id: "789012",
+      name: "Imperial",
+      distanceUnit: "yards",
+      angleUnit: "degrees",
+      speedUnit: "mph"
+    },
+    // Metric (meters, radians)
+    "789013": {
+      id: "789013",
+      name: "Metric (rad)",
+      distanceUnit: "meters",
+      angleUnit: "radians",
+      speedUnit: "km/h"
+    },
+    // Metric (meters, degrees) - less common
+    "789014": {
+      id: "789014",
+      name: "Metric (deg)",
+      distanceUnit: "meters",
+      angleUnit: "degrees",
+      speedUnit: "km/h"
+    }
+  };
+  var DISTANCE_METRICS = /* @__PURE__ */ new Set([
+    "Carry",
+    "Total",
+    "Side",
+    "SideTotal",
+    "CarrySide",
+    "TotalSide",
+    "Height",
+    "MaxHeight",
+    "Curve"
+  ]);
+  var SMALL_DISTANCE_METRICS = /* @__PURE__ */ new Set([
+    "LowPointDistance"
+  ]);
+  var ANGLE_METRICS = /* @__PURE__ */ new Set([
+    "AttackAngle",
+    "ClubPath",
+    "FaceAngle",
+    "FaceToPath",
+    "DynamicLoft",
+    "LaunchAngle",
+    "LaunchDirection",
+    "LandingAngle"
+  ]);
+  var SPEED_METRICS = /* @__PURE__ */ new Set([
+    "ClubSpeed",
+    "BallSpeed",
+    "Tempo"
+  ]);
+  var DEFAULT_UNIT_SYSTEM = UNIT_SYSTEMS["789012"];
+  var SPEED_LABELS = {
+    "mph": "mph",
+    "m/s": "m/s"
+  };
+  var DISTANCE_LABELS = {
+    "yards": "yds",
+    "meters": "m"
+  };
+  var SMALL_DISTANCE_LABELS = {
+    "inches": "in",
+    "cm": "cm"
+  };
   function migrateLegacyPref(stored) {
     switch (stored) {
       case "metric":
@@ -68,6 +125,10 @@
         return { speed: "mph", distance: "yards" };
     }
   }
+  var FIXED_UNIT_LABELS = {
+    SpinRate: "rpm",
+    HangTime: "s"
+  };
   function extractUnitParams(metadataParams) {
     const result = {};
     for (const [key, value] of Object.entries(metadataParams)) {
@@ -182,86 +243,47 @@
     const parsed = parseFloat(value);
     return isNaN(parsed) ? null : parsed;
   }
-  var DEFAULT_UNIT_CHOICE, UNIT_SYSTEMS, DISTANCE_METRICS, SMALL_DISTANCE_METRICS, ANGLE_METRICS, SPEED_METRICS, DEFAULT_UNIT_SYSTEM, SPEED_LABELS, DISTANCE_LABELS, SMALL_DISTANCE_LABELS, FIXED_UNIT_LABELS;
-  var init_unit_normalization = __esm({
-    "src/shared/unit_normalization.ts"() {
-      DEFAULT_UNIT_CHOICE = { speed: "mph", distance: "yards" };
-      UNIT_SYSTEMS = {
-        // Imperial (yards, degrees) - most common
-        "789012": {
-          id: "789012",
-          name: "Imperial",
-          distanceUnit: "yards",
-          angleUnit: "degrees",
-          speedUnit: "mph"
-        },
-        // Metric (meters, radians)
-        "789013": {
-          id: "789013",
-          name: "Metric (rad)",
-          distanceUnit: "meters",
-          angleUnit: "radians",
-          speedUnit: "km/h"
-        },
-        // Metric (meters, degrees) - less common
-        "789014": {
-          id: "789014",
-          name: "Metric (deg)",
-          distanceUnit: "meters",
-          angleUnit: "degrees",
-          speedUnit: "km/h"
-        }
-      };
-      DISTANCE_METRICS = /* @__PURE__ */ new Set([
-        "Carry",
-        "Total",
-        "Side",
-        "SideTotal",
-        "CarrySide",
-        "TotalSide",
-        "Height",
-        "MaxHeight",
-        "Curve"
-      ]);
-      SMALL_DISTANCE_METRICS = /* @__PURE__ */ new Set([
-        "LowPointDistance"
-      ]);
-      ANGLE_METRICS = /* @__PURE__ */ new Set([
-        "AttackAngle",
-        "ClubPath",
-        "FaceAngle",
-        "FaceToPath",
-        "DynamicLoft",
-        "LaunchAngle",
-        "LaunchDirection",
-        "LandingAngle"
-      ]);
-      SPEED_METRICS = /* @__PURE__ */ new Set([
-        "ClubSpeed",
-        "BallSpeed",
-        "Tempo"
-      ]);
-      DEFAULT_UNIT_SYSTEM = UNIT_SYSTEMS["789012"];
-      SPEED_LABELS = {
-        "mph": "mph",
-        "m/s": "m/s"
-      };
-      DISTANCE_LABELS = {
-        "yards": "yds",
-        "meters": "m"
-      };
-      SMALL_DISTANCE_LABELS = {
-        "inches": "in",
-        "cm": "cm"
-      };
-      FIXED_UNIT_LABELS = {
-        SpinRate: "rpm",
-        HangTime: "s"
-      };
-    }
-  });
 
   // src/shared/tsv_writer.ts
+  var METRIC_COLUMN_ORDER = [
+    // Speed & Efficiency
+    "ClubSpeed",
+    "BallSpeed",
+    "SmashFactor",
+    // Club Delivery
+    "AttackAngle",
+    "ClubPath",
+    "FaceAngle",
+    "FaceToPath",
+    "SwingDirection",
+    "DynamicLoft",
+    // Launch & Spin
+    "LaunchAngle",
+    "LaunchDirection",
+    "SpinRate",
+    "SpinAxis",
+    "SpinLoft",
+    // Distance
+    "Carry",
+    "Total",
+    // Dispersion
+    "Side",
+    "SideTotal",
+    "CarrySide",
+    "TotalSide",
+    "Curve",
+    // Ball Flight
+    "Height",
+    "MaxHeight",
+    "LandingAngle",
+    "HangTime",
+    // Impact
+    "LowPointDistance",
+    "ImpactHeight",
+    "ImpactOffset",
+    // Other
+    "Tempo"
+  ];
   function escapeTsvField(value) {
     return value.replace(/\t/g, " ").replace(/[\n\r]/g, " ");
   }
@@ -334,64 +356,15 @@
     parts.push(headerRow, ...rows);
     return parts.join("\n");
   }
-  var METRIC_COLUMN_ORDER;
-  var init_tsv_writer = __esm({
-    "src/shared/tsv_writer.ts"() {
-      init_unit_normalization();
-      init_constants();
-      METRIC_COLUMN_ORDER = [
-        // Speed & Efficiency
-        "ClubSpeed",
-        "BallSpeed",
-        "SmashFactor",
-        // Club Delivery
-        "AttackAngle",
-        "ClubPath",
-        "FaceAngle",
-        "FaceToPath",
-        "SwingDirection",
-        "DynamicLoft",
-        // Launch & Spin
-        "LaunchAngle",
-        "LaunchDirection",
-        "SpinRate",
-        "SpinAxis",
-        "SpinLoft",
-        // Distance
-        "Carry",
-        "Total",
-        // Dispersion
-        "Side",
-        "SideTotal",
-        "CarrySide",
-        "TotalSide",
-        "Curve",
-        // Ball Flight
-        "Height",
-        "MaxHeight",
-        "LandingAngle",
-        "HangTime",
-        // Impact
-        "LowPointDistance",
-        "ImpactHeight",
-        "ImpactOffset",
-        // Other
-        "Tempo"
-      ];
-    }
-  });
 
   // src/shared/prompt_types.ts
-  var BUILTIN_PROMPTS;
-  var init_prompt_types = __esm({
-    "src/shared/prompt_types.ts"() {
-      BUILTIN_PROMPTS = [
-        {
-          id: "session-overview-beginner",
-          name: "Session Overview",
-          tier: "beginner",
-          topic: "overview",
-          template: `You are a friendly golf coach reviewing a player's Trackman session. Your job is to encourage them and help them improve.
+  var BUILTIN_PROMPTS = [
+    {
+      id: "session-overview-beginner",
+      name: "Session Overview",
+      tier: "beginner",
+      topic: "overview",
+      template: `You are a friendly golf coach reviewing a player's Trackman session. Your job is to encourage them and help them improve.
 
 Here is the tab-separated Trackman golf session data from their session today:
 
@@ -403,13 +376,13 @@ Please review this data and give the player a warm, encouraging summary. Include
 - A short encouraging closing message
 
 Use simple language. Avoid heavy technical jargon. Speak directly to the player like a supportive coach.`
-        },
-        {
-          id: "club-breakdown-intermediate",
-          name: "Club-by-Club Breakdown",
-          tier: "intermediate",
-          topic: "club-breakdown",
-          template: `You are a golf performance analyst reviewing a player's Trackman session data.
+    },
+    {
+      id: "club-breakdown-intermediate",
+      name: "Club-by-Club Breakdown",
+      tier: "intermediate",
+      topic: "club-breakdown",
+      template: `You are a golf performance analyst reviewing a player's Trackman session data.
 
 Here is the tab-separated Trackman golf session data:
 
@@ -426,13 +399,13 @@ Then provide an overall summary:
 - What 1 to 2 adjustments would most improve overall performance?
 
 Use moderate technical depth. Briefly explain what metrics mean when you reference them.`
-        },
-        {
-          id: "consistency-analysis-advanced",
-          name: "Consistency Analysis",
-          tier: "advanced",
-          topic: "consistency",
-          template: `You are a technical golf data analyst. Analyze the following Trackman session data with a numbers-first approach.
+    },
+    {
+      id: "consistency-analysis-advanced",
+      name: "Consistency Analysis",
+      tier: "advanced",
+      topic: "consistency",
+      template: `You are a technical golf data analyst. Analyze the following Trackman session data with a numbers-first approach.
 
 Tab-separated Trackman golf session data:
 
@@ -446,13 +419,13 @@ Perform a consistency analysis across all shots and clubs:
 - Provide a consistency rating summary per club and overall
 
 Reference specific metric values and numbers throughout. Prioritize data over general advice.`
-        },
-        {
-          id: "launch-spin-intermediate",
-          name: "Launch & Spin Optimization",
-          tier: "intermediate",
-          topic: "launch-spin",
-          template: `You are a golf performance analyst specializing in launch conditions and spin optimization.
+    },
+    {
+      id: "launch-spin-intermediate",
+      name: "Launch & Spin Optimization",
+      tier: "intermediate",
+      topic: "launch-spin",
+      template: `You are a golf performance analyst specializing in launch conditions and spin optimization.
 
 Here is the tab-separated Trackman golf session data:
 
@@ -469,13 +442,13 @@ For clubs that are outside optimal windows:
 - Suggest specific adjustments to move toward optimal conditions
 
 Use moderate technical depth and explain what metrics mean for players who are learning.`
-        },
-        {
-          id: "distance-gapping-beginner",
-          name: "Distance Gapping Report",
-          tier: "beginner",
-          topic: "distance-gapping",
-          template: `You are a friendly golf coach helping a player understand their distance gapping.
+    },
+    {
+      id: "distance-gapping-beginner",
+      name: "Distance Gapping Report",
+      tier: "beginner",
+      topic: "distance-gapping",
+      template: `You are a friendly golf coach helping a player understand their distance gapping.
 
 Here is the tab-separated Trackman golf session data:
 
@@ -488,13 +461,13 @@ Please review the carry and total distances for each club in this session. Then:
 - Give 1 to 2 friendly suggestions for the player's bag setup or club selection
 
 Keep it simple and encouraging. Focus on practical take-aways the player can use on the course.`
-        },
-        {
-          id: "shot-shape-intermediate",
-          name: "Shot Shape & Dispersion",
-          tier: "intermediate",
-          topic: "shot-shape",
-          template: `You are a golf performance analyst reviewing a player's shot shape and dispersion patterns.
+    },
+    {
+      id: "shot-shape-intermediate",
+      name: "Shot Shape & Dispersion",
+      tier: "intermediate",
+      topic: "shot-shape",
+      template: `You are a golf performance analyst reviewing a player's shot shape and dispersion patterns.
 
 Here is the tab-separated Trackman golf session data:
 
@@ -512,13 +485,13 @@ Provide:
 - 1 to 2 actionable suggestions to tighten their pattern
 
 Use moderate technical depth. Briefly explain what each metric means.`
-        },
-        {
-          id: "club-delivery-advanced",
-          name: "Club Delivery Analysis",
-          tier: "advanced",
-          topic: "club-delivery",
-          template: `You are a technical golf analyst conducting a detailed club delivery analysis.
+    },
+    {
+      id: "club-delivery-advanced",
+      name: "Club Delivery Analysis",
+      tier: "advanced",
+      topic: "club-delivery",
+      template: `You are a technical golf analyst conducting a detailed club delivery analysis.
 
 Tab-separated Trackman golf session data:
 
@@ -537,13 +510,13 @@ For each major club category (driver, irons, wedges):
 - Flag any delivery patterns that suggest mechanical inefficiency
 
 Prioritize numbers and specific metric values. Provide a ranked list of delivery improvements by expected performance impact.`
-        },
-        {
-          id: "quick-summary-beginner",
-          name: "Quick Session Summary",
-          tier: "beginner",
-          topic: "quick-summary",
-          template: `You are a friendly golf coach. Give the player a fast, upbeat summary of their Trackman session.
+    },
+    {
+      id: "quick-summary-beginner",
+      name: "Quick Session Summary",
+      tier: "beginner",
+      topic: "quick-summary",
+      template: `You are a friendly golf coach. Give the player a fast, upbeat summary of their Trackman session.
 
 Here is the tab-separated Trackman golf session data from their session:
 
@@ -556,10 +529,8 @@ Provide a very short, friendly summary in 3 to 4 bullet points only. Cover:
 - One quick positive takeaway to leave them feeling good
 
 Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
-        }
-      ];
     }
-  });
+  ];
 
   // src/shared/prompt_builder.ts
   function assemblePrompt(prompt, tsvData, metadata) {
@@ -581,10 +552,6 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
   function countSessionShots(session) {
     return session.club_groups.reduce((total, club) => total + club.shots.length, 0);
   }
-  var init_prompt_builder = __esm({
-    "src/shared/prompt_builder.ts"() {
-    }
-  });
 
   // src/shared/custom_prompts.ts
   async function loadCustomPrompts() {
@@ -595,391 +562,420 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     const promptsResult = await chrome.storage.sync.get(keys);
     return ids.map((id) => promptsResult[CUSTOM_PROMPT_KEY_PREFIX + id]).filter((p) => p !== void 0);
   }
-  var init_custom_prompts = __esm({
-    "src/shared/custom_prompts.ts"() {
-      init_constants();
-    }
-  });
 
   // src/popup/popup.ts
-  var require_popup = __commonJS({
-    "src/popup/popup.ts"() {
-      init_constants();
-      init_unit_normalization();
-      init_unit_normalization();
-      init_tsv_writer();
-      init_prompt_types();
-      init_prompt_builder();
-      init_custom_prompts();
-      var cachedData = null;
-      var cachedUnitChoice = DEFAULT_UNIT_CHOICE;
-      var cachedSurface = "Mat";
-      var cachedCustomPrompts = [];
-      var AI_URLS = {
-        "ChatGPT": "https://chatgpt.com",
-        "Claude": "https://claude.ai",
-        "Gemini": "https://gemini.google.com"
-      };
-      async function renderPromptSelect(select) {
-        const customPrompts = await loadCustomPrompts();
-        cachedCustomPrompts = customPrompts;
-        select.innerHTML = "";
-        if (customPrompts.length > 0) {
-          const myGroup = document.createElement("optgroup");
-          myGroup.label = "My Prompts";
-          for (const cp of customPrompts) {
-            const opt = document.createElement("option");
-            opt.value = cp.id;
-            opt.textContent = cp.name;
-            myGroup.appendChild(opt);
-          }
-          select.appendChild(myGroup);
-        }
-        const tiers = [
-          { label: "Beginner", value: "beginner" },
-          { label: "Intermediate", value: "intermediate" },
-          { label: "Advanced", value: "advanced" }
-        ];
-        for (const tier of tiers) {
-          const group = document.createElement("optgroup");
-          group.label = tier.label;
-          for (const p of BUILTIN_PROMPTS.filter((b) => b.tier === tier.value)) {
-            const opt = document.createElement("option");
-            opt.value = p.id;
-            opt.textContent = p.name;
-            group.appendChild(opt);
-          }
-          select.appendChild(group);
-        }
+  function computeClubAverage(shots, metricName) {
+    const values = shots.map((s) => s.metrics[metricName]).filter((v) => v !== void 0 && v !== "").map((v) => parseFloat(String(v)));
+    const numericValues = values.filter((v) => !isNaN(v));
+    if (numericValues.length === 0) return null;
+    const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+    return Math.round(avg * 10) / 10;
+  }
+  var cachedData = null;
+  var cachedUnitChoice = DEFAULT_UNIT_CHOICE;
+  var cachedSurface = "Mat";
+  var cachedCustomPrompts = [];
+  var AI_URLS = {
+    "ChatGPT": "https://chatgpt.com",
+    "Claude": "https://claude.ai",
+    "Gemini": "https://gemini.google.com"
+  };
+  function renderStatCard() {
+    const container = document.getElementById("stat-card");
+    if (!container) return;
+    const hasData = cachedData?.club_groups && cachedData.club_groups.length > 0;
+    container.style.display = hasData ? "" : "none";
+    if (!hasData) return;
+    const unitSystem = getApiSourceUnitSystem(cachedData.metadata_params);
+    const contentEl = document.getElementById("stat-card-content");
+    const carryHeader = `Carry(${DISTANCE_LABELS[cachedUnitChoice.distance]})`;
+    const speedHeader = `Speed(${SPEED_LABELS[cachedUnitChoice.speed]})`;
+    let html = `<div class="stat-card-row stat-card-header">
+    <span>Club</span>
+    <span>Shots</span>
+    <span>${carryHeader}</span>
+    <span>${speedHeader}</span>
+  </div>`;
+    for (const club of cachedData.club_groups) {
+      const shotCount = club.shots.length;
+      const rawCarry = computeClubAverage(club.shots, "Carry");
+      const rawSpeed = computeClubAverage(club.shots, "ClubSpeed");
+      const carry = rawCarry !== null ? String(normalizeMetricValue(rawCarry, "Carry", unitSystem, cachedUnitChoice)) : "\u2014";
+      const speed = rawSpeed !== null ? String(normalizeMetricValue(rawSpeed, "ClubSpeed", unitSystem, cachedUnitChoice)) : "\u2014";
+      html += `<div class="stat-card-row">
+      <span class="stat-card-club">${club.club_name}</span>
+      <span class="stat-card-value">${shotCount}</span>
+      <span class="stat-card-value">${carry}</span>
+      <span class="stat-card-value">${speed}</span>
+    </div>`;
+    }
+    contentEl.innerHTML = html;
+  }
+  async function renderPromptSelect(select) {
+    const customPrompts = await loadCustomPrompts();
+    cachedCustomPrompts = customPrompts;
+    select.innerHTML = "";
+    if (customPrompts.length > 0) {
+      const myGroup = document.createElement("optgroup");
+      myGroup.label = "My Prompts";
+      for (const cp of customPrompts) {
+        const opt = document.createElement("option");
+        opt.value = cp.id;
+        opt.textContent = cp.name;
+        myGroup.appendChild(opt);
       }
-      function findPromptById(id) {
-        const builtIn = BUILTIN_PROMPTS.find((p) => p.id === id);
-        if (builtIn) return builtIn;
-        return cachedCustomPrompts.find((p) => p.id === id);
+      select.appendChild(myGroup);
+    }
+    const tiers = [
+      { label: "Beginner", value: "beginner" },
+      { label: "Intermediate", value: "intermediate" },
+      { label: "Advanced", value: "advanced" }
+    ];
+    for (const tier of tiers) {
+      const group = document.createElement("optgroup");
+      group.label = tier.label;
+      for (const p of BUILTIN_PROMPTS.filter((b) => b.tier === tier.value)) {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        group.appendChild(opt);
       }
-      function updatePreview() {
-        const previewEl = document.getElementById("prompt-preview-content");
-        const promptSelect = document.getElementById("prompt-select");
-        if (!previewEl || !promptSelect) return;
-        if (!cachedData) {
-          previewEl.textContent = "(No shot data captured yet)";
-          return;
-        }
-        const prompt = findPromptById(promptSelect.value);
-        if (!prompt) {
-          previewEl.textContent = "";
-          return;
-        }
-        const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
-        const metadata = {
-          date: cachedData.date,
-          shotCount: countSessionShots(cachedData),
-          unitLabel: buildUnitLabel(cachedUnitChoice),
-          hittingSurface: cachedSurface
-        };
-        previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
-      }
-      document.addEventListener("DOMContentLoaded", async () => {
-        console.log("TrackPull popup initialized");
-        try {
-          const result = await new Promise((resolve) => {
-            chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA], resolve);
-          });
-          const data = result[STORAGE_KEYS.TRACKMAN_DATA];
-          console.log("Popup loaded data:", data ? "has data" : "no data");
-          cachedData = data ?? null;
-          updateShotCount(data);
-          updateExportButtonVisibility(data);
-          const unitResult = await new Promise((resolve) => {
-            chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, STORAGE_KEYS.INCLUDE_AVERAGES, "unitPreference"], resolve);
-          });
-          let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT];
-          let distanceUnit = unitResult[STORAGE_KEYS.DISTANCE_UNIT];
-          if (!speedUnit || !distanceUnit) {
-            const migrated = migrateLegacyPref(unitResult["unitPreference"]);
-            speedUnit = migrated.speed;
-            distanceUnit = migrated.distance;
-            chrome.storage.local.set({
-              [STORAGE_KEYS.SPEED_UNIT]: speedUnit,
-              [STORAGE_KEYS.DISTANCE_UNIT]: distanceUnit
-            });
-            chrome.storage.local.remove("unitPreference");
-          }
-          cachedUnitChoice = {
-            speed: speedUnit,
-            distance: distanceUnit
-          };
-          const surface = unitResult[STORAGE_KEYS.HITTING_SURFACE] ?? "Mat";
-          cachedSurface = surface;
-          const speedSelect = document.getElementById("speed-unit");
-          const distanceSelect = document.getElementById("distance-unit");
-          if (speedSelect) {
-            speedSelect.value = speedUnit;
-            speedSelect.addEventListener("change", () => {
-              chrome.storage.local.set({ [STORAGE_KEYS.SPEED_UNIT]: speedSelect.value });
-              cachedUnitChoice = { ...cachedUnitChoice, speed: speedSelect.value };
-            });
-          }
-          if (distanceSelect) {
-            distanceSelect.value = distanceUnit;
-            distanceSelect.addEventListener("change", () => {
-              chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
-              cachedUnitChoice = { ...cachedUnitChoice, distance: distanceSelect.value };
-            });
-          }
-          const surfaceSelect = document.getElementById("surface-select");
-          if (surfaceSelect) {
-            surfaceSelect.value = surface;
-            surfaceSelect.addEventListener("change", () => {
-              chrome.storage.local.set({ [STORAGE_KEYS.HITTING_SURFACE]: surfaceSelect.value });
-              cachedSurface = surfaceSelect.value;
-            });
-          }
-          const includeAveragesCheckbox = document.getElementById("include-averages-checkbox");
-          if (includeAveragesCheckbox) {
-            const stored = unitResult[STORAGE_KEYS.INCLUDE_AVERAGES];
-            includeAveragesCheckbox.checked = stored === void 0 ? true : Boolean(stored);
-            includeAveragesCheckbox.addEventListener("change", () => {
-              chrome.storage.local.set({ [STORAGE_KEYS.INCLUDE_AVERAGES]: includeAveragesCheckbox.checked });
-            });
-          }
-          chrome.runtime.onMessage.addListener((message) => {
-            if (message.type === "DATA_UPDATED") {
-              cachedData = message.data ?? null;
-              updateShotCount(message.data);
-              updateExportButtonVisibility(message.data);
-              updatePreview();
-            }
-            return true;
-          });
-          const exportBtn = document.getElementById("export-btn");
-          if (exportBtn) {
-            exportBtn.addEventListener("click", handleExportClick);
-          }
-          const clearBtn = document.getElementById("clear-btn");
-          if (clearBtn) {
-            clearBtn.addEventListener("click", handleClearClick);
-          }
-          const settingsBtn = document.getElementById("settings-btn");
-          if (settingsBtn) {
-            settingsBtn.addEventListener("click", () => {
-              chrome.runtime.openOptionsPage();
-            });
-          }
-          const promptSelect = document.getElementById("prompt-select");
-          if (promptSelect) {
-            await renderPromptSelect(promptSelect);
-            const promptResult = await new Promise((resolve) => {
-              chrome.storage.local.get([STORAGE_KEYS.SELECTED_PROMPT_ID], resolve);
-            });
-            const savedPromptId = promptResult[STORAGE_KEYS.SELECTED_PROMPT_ID];
-            if (savedPromptId) {
-              promptSelect.value = savedPromptId;
-              if (promptSelect.value !== savedPromptId) {
-                promptSelect.value = "quick-summary-beginner";
-                chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: "quick-summary-beginner" });
-              }
-            }
-            promptSelect.addEventListener("change", () => {
-              chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
-              updatePreview();
-            });
-          }
-          const aiServiceSelect = document.getElementById("ai-service-select");
-          if (aiServiceSelect) {
-            const syncResult = await new Promise((resolve) => {
-              chrome.storage.sync.get([STORAGE_KEYS.AI_SERVICE], resolve);
-            });
-            const savedService = syncResult[STORAGE_KEYS.AI_SERVICE];
-            if (savedService) {
-              aiServiceSelect.value = savedService;
-            }
-            aiServiceSelect.addEventListener("change", () => {
-              chrome.storage.sync.set({ [STORAGE_KEYS.AI_SERVICE]: aiServiceSelect.value });
-              updatePreview();
-            });
-          }
-          updatePreview();
-          const copyTsvBtn = document.getElementById("copy-tsv-btn");
-          if (copyTsvBtn) {
-            copyTsvBtn.addEventListener("click", async () => {
-              if (!cachedData) return;
-              const tsvText = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
-              try {
-                await navigator.clipboard.writeText(tsvText);
-                showToast("Shot data copied!", "success");
-              } catch (err) {
-                console.error("Clipboard write failed:", err);
-                showToast("Failed to copy data", "error");
-              }
-            });
-          }
-          const openAiBtn = document.getElementById("open-ai-btn");
-          if (openAiBtn) {
-            openAiBtn.addEventListener("click", async () => {
-              if (!cachedData || !promptSelect || !aiServiceSelect) return;
-              const selectedPromptId = promptSelect.value;
-              const selectedService = aiServiceSelect.value;
-              const prompt = findPromptById(selectedPromptId);
-              if (!prompt) return;
-              const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
-              const metadata = {
-                date: cachedData.date,
-                shotCount: countSessionShots(cachedData),
-                unitLabel: buildUnitLabel(cachedUnitChoice),
-                hittingSurface: cachedSurface
-              };
-              const assembled = assemblePrompt(prompt, tsvData, metadata);
-              try {
-                await navigator.clipboard.writeText(assembled);
-                chrome.tabs.create({ url: AI_URLS[selectedService] });
-                showToast(`Prompt + data copied \u2014 paste into ${selectedService}`, "success");
-              } catch (err) {
-                console.error("AI launch failed:", err);
-                showToast("Failed to copy prompt", "error");
-              }
-            });
-          }
-          const copyPromptBtn = document.getElementById("copy-prompt-btn");
-          if (copyPromptBtn) {
-            copyPromptBtn.addEventListener("click", async () => {
-              if (!cachedData || !promptSelect) return;
-              const selectedPromptId = promptSelect.value;
-              const prompt = findPromptById(selectedPromptId);
-              if (!prompt) return;
-              const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
-              const metadata = {
-                date: cachedData.date,
-                shotCount: countSessionShots(cachedData),
-                unitLabel: buildUnitLabel(cachedUnitChoice),
-                hittingSurface: cachedSurface
-              };
-              const assembled = assemblePrompt(prompt, tsvData, metadata);
-              try {
-                await navigator.clipboard.writeText(assembled);
-                showToast("Prompt + data copied!", "success");
-              } catch (err) {
-                console.error("Clipboard write failed:", err);
-                showToast("Failed to copy prompt", "error");
-              }
-            });
-          }
-        } catch (error) {
-          console.error("Error loading popup data:", error);
-          showToast("Error loading shot count", "error");
-        }
+      select.appendChild(group);
+    }
+  }
+  function findPromptById(id) {
+    const builtIn = BUILTIN_PROMPTS.find((p) => p.id === id);
+    if (builtIn) return builtIn;
+    return cachedCustomPrompts.find((p) => p.id === id);
+  }
+  function updatePreview() {
+    const previewEl = document.getElementById("prompt-preview-content");
+    const promptSelect = document.getElementById("prompt-select");
+    if (!previewEl || !promptSelect) return;
+    if (!cachedData) {
+      previewEl.textContent = "(No shot data captured yet)";
+      return;
+    }
+    const prompt = findPromptById(promptSelect.value);
+    if (!prompt) {
+      previewEl.textContent = "";
+      return;
+    }
+    const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
+    const metadata = {
+      date: cachedData.date,
+      shotCount: countSessionShots(cachedData),
+      unitLabel: buildUnitLabel(cachedUnitChoice),
+      hittingSurface: cachedSurface
+    };
+    previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
+  }
+  document.addEventListener("DOMContentLoaded", async () => {
+    console.log("TrackPull popup initialized");
+    try {
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA], resolve);
       });
-      function updateShotCount(data) {
-        const container = document.getElementById("shot-count-container");
-        const shotCountElement = document.getElementById("shot-count");
-        if (!container || !shotCountElement) return;
-        if (!data || typeof data !== "object") {
-          container.classList.add("empty-state");
-          return;
+      const data = result[STORAGE_KEYS.TRACKMAN_DATA];
+      console.log("Popup loaded data:", data ? "has data" : "no data");
+      cachedData = data ?? null;
+      updateShotCount(data);
+      updateExportButtonVisibility(data);
+      const unitResult = await new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, STORAGE_KEYS.INCLUDE_AVERAGES, "unitPreference"], resolve);
+      });
+      let speedUnit = unitResult[STORAGE_KEYS.SPEED_UNIT];
+      let distanceUnit = unitResult[STORAGE_KEYS.DISTANCE_UNIT];
+      if (!speedUnit || !distanceUnit) {
+        const migrated = migrateLegacyPref(unitResult["unitPreference"]);
+        speedUnit = migrated.speed;
+        distanceUnit = migrated.distance;
+        chrome.storage.local.set({
+          [STORAGE_KEYS.SPEED_UNIT]: speedUnit,
+          [STORAGE_KEYS.DISTANCE_UNIT]: distanceUnit
+        });
+        chrome.storage.local.remove("unitPreference");
+      }
+      cachedUnitChoice = {
+        speed: speedUnit,
+        distance: distanceUnit
+      };
+      const surface = unitResult[STORAGE_KEYS.HITTING_SURFACE] ?? "Mat";
+      cachedSurface = surface;
+      const speedSelect = document.getElementById("speed-unit");
+      const distanceSelect = document.getElementById("distance-unit");
+      if (speedSelect) {
+        speedSelect.value = speedUnit;
+        speedSelect.addEventListener("change", () => {
+          chrome.storage.local.set({ [STORAGE_KEYS.SPEED_UNIT]: speedSelect.value });
+          cachedUnitChoice = { ...cachedUnitChoice, speed: speedSelect.value };
+          renderStatCard();
+        });
+      }
+      if (distanceSelect) {
+        distanceSelect.value = distanceUnit;
+        distanceSelect.addEventListener("change", () => {
+          chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
+          cachedUnitChoice = { ...cachedUnitChoice, distance: distanceSelect.value };
+          renderStatCard();
+        });
+      }
+      const surfaceSelect = document.getElementById("surface-select");
+      if (surfaceSelect) {
+        surfaceSelect.value = surface;
+        surfaceSelect.addEventListener("change", () => {
+          chrome.storage.local.set({ [STORAGE_KEYS.HITTING_SURFACE]: surfaceSelect.value });
+          cachedSurface = surfaceSelect.value;
+        });
+      }
+      const includeAveragesCheckbox = document.getElementById("include-averages-checkbox");
+      if (includeAveragesCheckbox) {
+        const stored = unitResult[STORAGE_KEYS.INCLUDE_AVERAGES];
+        includeAveragesCheckbox.checked = stored === void 0 ? true : Boolean(stored);
+        includeAveragesCheckbox.addEventListener("change", () => {
+          chrome.storage.local.set({ [STORAGE_KEYS.INCLUDE_AVERAGES]: includeAveragesCheckbox.checked });
+        });
+      }
+      chrome.runtime.onMessage.addListener((message) => {
+        if (message.type === "DATA_UPDATED") {
+          cachedData = message.data ?? null;
+          updateShotCount(message.data);
+          updateExportButtonVisibility(message.data);
+          updatePreview();
+          renderStatCard();
         }
-        const sessionData = data;
-        const clubGroups = sessionData["club_groups"];
-        if (!clubGroups || !Array.isArray(clubGroups)) {
-          container.classList.add("empty-state");
-          return;
+        if (message.type === "HISTORY_ERROR") {
+          showToast(message.error, "error");
         }
-        let totalShots = 0;
-        for (const club of clubGroups) {
-          const shots = club["shots"];
-          if (shots && Array.isArray(shots)) {
-            totalShots += shots.length;
+        return true;
+      });
+      const exportBtn = document.getElementById("export-btn");
+      if (exportBtn) {
+        exportBtn.addEventListener("click", handleExportClick);
+      }
+      const clearBtn = document.getElementById("clear-btn");
+      if (clearBtn) {
+        clearBtn.addEventListener("click", handleClearClick);
+      }
+      const settingsBtn = document.getElementById("settings-btn");
+      if (settingsBtn) {
+        settingsBtn.addEventListener("click", () => {
+          chrome.runtime.openOptionsPage();
+        });
+      }
+      const promptSelect = document.getElementById("prompt-select");
+      if (promptSelect) {
+        await renderPromptSelect(promptSelect);
+        const promptResult = await new Promise((resolve) => {
+          chrome.storage.local.get([STORAGE_KEYS.SELECTED_PROMPT_ID], resolve);
+        });
+        const savedPromptId = promptResult[STORAGE_KEYS.SELECTED_PROMPT_ID];
+        if (savedPromptId) {
+          promptSelect.value = savedPromptId;
+          if (promptSelect.value !== savedPromptId) {
+            promptSelect.value = "quick-summary-beginner";
+            chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: "quick-summary-beginner" });
           }
         }
-        container.classList.remove("empty-state");
-        shotCountElement.textContent = totalShots.toString();
+        promptSelect.addEventListener("change", () => {
+          chrome.storage.local.set({ [STORAGE_KEYS.SELECTED_PROMPT_ID]: promptSelect.value });
+          updatePreview();
+        });
       }
-      function updateExportButtonVisibility(data) {
-        const exportRow = document.getElementById("export-row");
-        const aiSection = document.getElementById("ai-section");
-        const clearBtn = document.getElementById("clear-btn");
-        const hasValidData = data && typeof data === "object" && data["club_groups"];
-        if (exportRow) exportRow.style.display = hasValidData ? "flex" : "none";
-        if (aiSection) aiSection.style.display = hasValidData ? "block" : "none";
-        if (clearBtn) clearBtn.style.display = hasValidData ? "block" : "none";
+      const aiServiceSelect = document.getElementById("ai-service-select");
+      if (aiServiceSelect) {
+        const syncResult = await new Promise((resolve) => {
+          chrome.storage.sync.get([STORAGE_KEYS.AI_SERVICE], resolve);
+        });
+        const savedService = syncResult[STORAGE_KEYS.AI_SERVICE];
+        if (savedService) {
+          aiServiceSelect.value = savedService;
+        }
+        aiServiceSelect.addEventListener("change", () => {
+          chrome.storage.sync.set({ [STORAGE_KEYS.AI_SERVICE]: aiServiceSelect.value });
+          updatePreview();
+        });
       }
-      async function handleExportClick() {
-        const exportBtn = document.getElementById("export-btn");
-        if (!exportBtn) return;
-        showStatusMessage("Preparing CSV...", false);
-        exportBtn.disabled = true;
-        try {
-          const response = await new Promise((resolve) => {
-            chrome.runtime.sendMessage({ type: "EXPORT_CSV_REQUEST" }, (resp) => {
-              resolve(resp || { success: false, error: "No response from service worker" });
-            });
-          });
-          if (response.success) {
-            showToast(`Exported successfully: ${response.filename || "ShotData.csv"}`, "success");
-          } else {
-            showToast(response.error || "Export failed", "error");
+      updatePreview();
+      renderStatCard();
+      const copyTsvBtn = document.getElementById("copy-tsv-btn");
+      if (copyTsvBtn) {
+        copyTsvBtn.addEventListener("click", async () => {
+          if (!cachedData) return;
+          const tsvText = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
+          try {
+            await navigator.clipboard.writeText(tsvText);
+            showToast("Shot data copied!", "success");
+          } catch (err) {
+            console.error("Clipboard write failed:", err);
+            showToast("Failed to copy data", "error");
           }
-        } catch (error) {
-          console.error("Error during export:", error);
-          showToast("Export failed", "error");
-        } finally {
-          exportBtn.disabled = false;
-        }
+        });
       }
-      function showToast(message, type) {
-        const container = document.getElementById("toast-container");
-        if (!container) return;
-        const existingToast = container.querySelector(".toast");
-        if (existingToast) {
-          existingToast.remove();
-        }
-        const toast = document.createElement("div");
-        toast.className = `toast ${type}`;
-        toast.textContent = message;
-        toast.setAttribute("role", type === "error" ? "alert" : "status");
-        container.appendChild(toast);
-        setTimeout(() => {
-          if (toast.parentNode) {
-            toast.classList.add("hiding");
-            setTimeout(() => {
-              toast.remove();
-            }, 300);
+      const openAiBtn = document.getElementById("open-ai-btn");
+      if (openAiBtn) {
+        openAiBtn.addEventListener("click", async () => {
+          if (!cachedData || !promptSelect || !aiServiceSelect) return;
+          const selectedPromptId = promptSelect.value;
+          const selectedService = aiServiceSelect.value;
+          const prompt = findPromptById(selectedPromptId);
+          if (!prompt) return;
+          const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
+          const metadata = {
+            date: cachedData.date,
+            shotCount: countSessionShots(cachedData),
+            unitLabel: buildUnitLabel(cachedUnitChoice),
+            hittingSurface: cachedSurface
+          };
+          const assembled = assemblePrompt(prompt, tsvData, metadata);
+          try {
+            await navigator.clipboard.writeText(assembled);
+            chrome.tabs.create({ url: AI_URLS[selectedService] });
+            showToast(`Prompt + data copied \u2014 paste into ${selectedService}`, "success");
+          } catch (err) {
+            console.error("AI launch failed:", err);
+            showToast("Failed to copy prompt", "error");
           }
-        }, type === "error" ? 5e3 : 3e3);
+        });
       }
-      function showStatusMessage(message, isError = false) {
-        const statusElement = document.getElementById("status-message");
-        if (!statusElement) return;
-        statusElement.textContent = message;
-        statusElement.classList.remove("status-error", "status-success");
-        statusElement.classList.add(isError ? "status-error" : "status-success");
+      const copyPromptBtn = document.getElementById("copy-prompt-btn");
+      if (copyPromptBtn) {
+        copyPromptBtn.addEventListener("click", async () => {
+          if (!cachedData || !promptSelect) return;
+          const selectedPromptId = promptSelect.value;
+          const prompt = findPromptById(selectedPromptId);
+          if (!prompt) return;
+          const tsvData = writeTsv(cachedData, cachedUnitChoice, cachedSurface);
+          const metadata = {
+            date: cachedData.date,
+            shotCount: countSessionShots(cachedData),
+            unitLabel: buildUnitLabel(cachedUnitChoice),
+            hittingSurface: cachedSurface
+          };
+          const assembled = assemblePrompt(prompt, tsvData, metadata);
+          try {
+            await navigator.clipboard.writeText(assembled);
+            showToast("Prompt + data copied!", "success");
+          } catch (err) {
+            console.error("Clipboard write failed:", err);
+            showToast("Failed to copy prompt", "error");
+          }
+        });
       }
-      async function handleClearClick() {
-        const clearBtn = document.getElementById("clear-btn");
-        if (!clearBtn) return;
-        showStatusMessage("Clearing session data...", false);
-        clearBtn.disabled = true;
-        try {
-          await new Promise((resolve, reject) => {
-            chrome.storage.local.remove(STORAGE_KEYS.TRACKMAN_DATA, () => {
-              if (chrome.runtime.lastError) {
-                reject(new Error(chrome.runtime.lastError.message));
-              } else {
-                resolve();
-              }
-            });
-          });
-          cachedData = null;
-          updateShotCount(null);
-          updateExportButtonVisibility(null);
-          showToast("Session data cleared", "success");
-        } catch (error) {
-          console.error("Error clearing session data:", error);
-          showToast("Failed to clear data", "error");
-        } finally {
-          clearBtn.disabled = false;
-        }
-      }
+    } catch (error) {
+      console.error("Error loading popup data:", error);
+      showToast("Error loading shot count", "error");
     }
   });
-  require_popup();
+  function updateShotCount(data) {
+    const container = document.getElementById("shot-count-container");
+    const shotCountElement = document.getElementById("shot-count");
+    if (!container || !shotCountElement) return;
+    if (!data || typeof data !== "object") {
+      container.classList.add("empty-state");
+      return;
+    }
+    const sessionData = data;
+    const clubGroups = sessionData["club_groups"];
+    if (!clubGroups || !Array.isArray(clubGroups)) {
+      container.classList.add("empty-state");
+      return;
+    }
+    let totalShots = 0;
+    for (const club of clubGroups) {
+      const shots = club["shots"];
+      if (shots && Array.isArray(shots)) {
+        totalShots += shots.length;
+      }
+    }
+    container.classList.remove("empty-state");
+    shotCountElement.textContent = totalShots.toString();
+  }
+  function updateExportButtonVisibility(data) {
+    const exportRow = document.getElementById("export-row");
+    const aiSection = document.getElementById("ai-section");
+    const clearBtn = document.getElementById("clear-btn");
+    const hasValidData = data && typeof data === "object" && data["club_groups"];
+    if (exportRow) exportRow.style.display = hasValidData ? "flex" : "none";
+    if (aiSection) aiSection.style.display = hasValidData ? "block" : "none";
+    if (clearBtn) clearBtn.style.display = hasValidData ? "block" : "none";
+  }
+  async function handleExportClick() {
+    const exportBtn = document.getElementById("export-btn");
+    if (!exportBtn) return;
+    showStatusMessage("Preparing CSV...", false);
+    exportBtn.disabled = true;
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "EXPORT_CSV_REQUEST" }, (resp) => {
+          resolve(resp || { success: false, error: "No response from service worker" });
+        });
+      });
+      if (response.success) {
+        showToast(`Exported successfully: ${response.filename || "ShotData.csv"}`, "success");
+      } else {
+        showToast(response.error || "Export failed", "error");
+      }
+    } catch (error) {
+      console.error("Error during export:", error);
+      showToast("Export failed", "error");
+    } finally {
+      exportBtn.disabled = false;
+    }
+  }
+  function showToast(message, type) {
+    const container = document.getElementById("toast-container");
+    if (!container) return;
+    const existingToast = container.querySelector(".toast");
+    if (existingToast) {
+      existingToast.remove();
+    }
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    toast.setAttribute("role", type === "error" ? "alert" : "status");
+    container.appendChild(toast);
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.classList.add("hiding");
+        setTimeout(() => {
+          toast.remove();
+        }, 300);
+      }
+    }, type === "error" ? 5e3 : 3e3);
+  }
+  function showStatusMessage(message, isError = false) {
+    const statusElement = document.getElementById("status-message");
+    if (!statusElement) return;
+    statusElement.textContent = message;
+    statusElement.classList.remove("status-error", "status-success");
+    statusElement.classList.add(isError ? "status-error" : "status-success");
+  }
+  async function handleClearClick() {
+    const clearBtn = document.getElementById("clear-btn");
+    if (!clearBtn) return;
+    showStatusMessage("Clearing session data...", false);
+    clearBtn.disabled = true;
+    try {
+      await new Promise((resolve, reject) => {
+        chrome.storage.local.remove(STORAGE_KEYS.TRACKMAN_DATA, () => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve();
+          }
+        });
+      });
+      cachedData = null;
+      updateShotCount(null);
+      updateExportButtonVisibility(null);
+      renderStatCard();
+      showToast("Session data cleared", "success");
+    } catch (error) {
+      console.error("Error clearing session data:", error);
+      showToast("Failed to clear data", "error");
+    } finally {
+      clearBtn.disabled = false;
+    }
+  }
 })();
