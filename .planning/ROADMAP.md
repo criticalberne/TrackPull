@@ -52,7 +52,7 @@
 **Milestone Goal:** Add session persistence, visual at-a-glance summaries, and intelligent prompt matching so users can track improvement over time without leaving the extension.
 
 - [x] **Phase 13: Visual Stat Card** — Popup displays avg carry, avg club speed, and shot count by club for the current session (completed 2026-03-06)
-- [ ] **Phase 14: Session History Storage** — Sessions are automatically persisted to local storage with deduplication and rolling eviction
+- [x] **Phase 14: Session History Storage** — Sessions are automatically persisted to local storage with deduplication and rolling eviction (completed 2026-03-06)
 - [ ] **Phase 15: Session History UI** — User can browse, re-export, and delete past sessions from within the popup
 - [ ] **Phase 16: Smart Prompt Suggestions** — Prompt dropdown annotates the best-fit built-in prompt based on available metrics
 
@@ -80,7 +80,7 @@ Plans:
   2. Capturing the same report a second time updates the existing entry rather than creating a duplicate
   3. When 20 saved sessions are present, capturing a new session evicts the oldest one rather than failing silently
   4. If a storage write fails (quota exceeded), the extension shows a toast notification rather than dropping the session silently
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [ ] 14-01-PLAN.md — Types, constants, and TDD history module (save, dedup, eviction)
 - [ ] 14-02-PLAN.md — Service worker integration and popup error toast
@@ -127,7 +127,7 @@ Plans:
 | 11. Export Format Toggle | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 12. Prompt Preview | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 13. Visual Stat Card | 1/1 | Complete    | 2026-03-06 | - |
-| 14. Session History Storage | 1/2 | In Progress|  | - |
+| 14. Session History Storage | 2/2 | Complete   | 2026-03-06 | - |
 | 15. Session History UI | v1.6 | 0/? | Not started | - |
 | 16. Smart Prompt Suggestions | v1.6 | 0/? | Not started | - |
 
