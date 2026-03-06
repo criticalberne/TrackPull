@@ -127,7 +127,7 @@ Plans:
 | 11. Export Format Toggle | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 12. Prompt Preview | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 13. Visual Stat Card | 1/1 | Complete    | 2026-03-06 | - |
-| 14. Session History Storage | 2/2 | Complete   | 2026-03-06 | - |
+| 14. Session History Storage | 2/2 | Complete    | 2026-03-06 | - |
 | 15. Session History UI | v1.6 | 0/? | Not started | - |
 | 16. Smart Prompt Suggestions | v1.6 | 0/? | Not started | - |
 
