@@ -47,7 +47,7 @@
 
 </details>
 
-### 🚧 v1.6 Data Intelligence (In Progress)
+### v1.6 Data Intelligence (In Progress)
 
 **Milestone Goal:** Add session persistence, visual at-a-glance summaries, and intelligent prompt matching so users can track improvement over time without leaving the extension.
 
@@ -67,7 +67,9 @@
   2. Stat card shows values in the user's selected units (yards/meters, mph/m/s) — not raw SI values
   3. Stat card updates automatically when a new report is loaded (DATA_UPDATED event fires) without requiring popup close/reopen
   4. Stat card is absent (or shows empty state) when no session data has been captured yet
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 13-01-PLAN.md — Stat card computation, HTML/CSS, and popup integration
 
 ### Phase 14: Session History Storage
 **Goal**: Every captured session is automatically saved to local storage and retrievable by the service worker, with storage safety guaranteed
@@ -121,7 +123,7 @@
 | 10. Empty State Guidance | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 11. Export Format Toggle | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 12. Prompt Preview | v1.5 | 1/1 | Complete | 2026-03-03 |
-| 13. Visual Stat Card | v1.6 | 0/? | Not started | - |
+| 13. Visual Stat Card | v1.6 | 0/1 | Planned | - |
 | 14. Session History Storage | v1.6 | 0/? | Not started | - |
 | 15. Session History UI | v1.6 | 0/? | Not started | - |
 | 16. Smart Prompt Suggestions | v1.6 | 0/? | Not started | - |
