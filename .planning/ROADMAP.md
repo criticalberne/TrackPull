@@ -95,7 +95,7 @@ Plans:
   3. User can load a past session and copy it as TSV to clipboard
   4. User can load a past session and send it to AI analysis (ChatGPT, Claude, or Gemini)
   5. User can delete individual sessions from the history list, and can clear all history at once
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 15-01-PLAN.md — History module functions (delete, clear), UI helpers, and EXPORT_CSV_FROM_DATA message type
 - [ ] 15-02-PLAN.md — Popup history UI: collapsible list, session loading, banner, delete/clear actions
@@ -134,7 +134,7 @@ Plans:
 | 12. Prompt Preview | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 13. Visual Stat Card | 1/1 | Complete    | 2026-03-06 | - |
 | 14. Session History Storage | 2/2 | Complete    | 2026-03-06 | - |
-| 15. Session History UI | v1.6 | 0/? | Not started | - |
+| 15. Session History UI | 1/2 | In Progress|  | - |
 | 16. Smart Prompt Suggestions | v1.6 | 0/? | Not started | - |
 
 ---

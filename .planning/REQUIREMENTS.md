@@ -12,12 +12,12 @@ Requirements for v1.6 Data Intelligence milestone. Each maps to roadmap phases.
 - [x] **HIST-01**: Sessions are automatically saved to local storage when captured from a Trackman report
 - [x] **HIST-02**: Duplicate sessions (same report_id) update in place rather than creating new entries
 - [ ] **HIST-03**: User can browse a list of saved sessions showing date, shot count, and clubs used
-- [ ] **HIST-04**: User can load a past session and re-export it as CSV
+- [x] **HIST-04**: User can load a past session and re-export it as CSV
 - [ ] **HIST-05**: User can load a past session and copy it as TSV to clipboard
 - [ ] **HIST-06**: User can load a past session and send it to AI analysis
 - [x] **HIST-07**: Oldest sessions are evicted when storage cap is reached (20 sessions max)
-- [ ] **HIST-08**: User can delete individual sessions from history
-- [ ] **HIST-09**: User can clear all session history
+- [x] **HIST-08**: User can delete individual sessions from history
+- [x] **HIST-09**: User can clear all session history
 
 ### Visual Summary
 
@@ -60,12 +60,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HIST-01 | Phase 14 | Complete |
 | HIST-02 | Phase 14 | Complete |
 | HIST-03 | Phase 15 | Pending |
-| HIST-04 | Phase 15 | Pending |
+| HIST-04 | Phase 15 | Complete |
 | HIST-05 | Phase 15 | Pending |
 | HIST-06 | Phase 15 | Pending |
 | HIST-07 | Phase 14 | Complete |
-| HIST-08 | Phase 15 | Pending |
-| HIST-09 | Phase 15 | Pending |
+| HIST-08 | Phase 15 | Complete |
+| HIST-09 | Phase 15 | Complete |
 | VIS-01 | Phase 13 | Complete |
 | VIS-02 | Phase 13 | Complete |
 | VIS-03 | Phase 13 | Complete |

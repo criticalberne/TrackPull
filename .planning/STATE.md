@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Data Intelligence
-status: completed
-stopped_at: Phase 15 context gathered
-last_updated: "2026-03-06T05:24:17.867Z"
-last_activity: 2026-03-06 — Phase 14 Plan 02 complete (session history integration)
+status: in_progress
+stopped_at: Phase 15 Plan 01 complete
+last_updated: "2026-03-06T05:43:00.000Z"
+last_activity: 2026-03-06 — Phase 15 Plan 01 complete (history backend contracts)
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 5
+  completed_plans: 4
+  percent: 80
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** v1.6 Data Intelligence — Phase 14: Session History Storage
+**Current focus:** v1.6 Data Intelligence — Phase 15: Session History UI
 
 ## Current Position
 
-Phase: 14 of 16 (Session History Storage) -- COMPLETE
-Plan: 2 of 2 complete
-Status: Phase 14 complete
-Last activity: 2026-03-06 — Phase 14 Plan 02 complete (session history integration)
+Phase: 15 of 16 (Session History UI)
+Plan: 1 of 2 complete
+Status: Plan 01 complete, Plan 02 remaining
+Last activity: 2026-03-06 — Phase 15 Plan 01 complete (history backend contracts)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -56,6 +56,8 @@ Recent decisions relevant to v1.6:
 - History sorted descending by captured_at; re-capture refreshes timestamp (dedup by report_id)
 - Toast error timeout already 5s for error type -- no change needed in Plan 02
 - Fire-and-forget pattern: sendResponse before history save, .catch for popup-closed safety
+- formatClubSummary truncates at 3 clubs with "+N more" suffix
+- EXPORT_CSV_FROM_DATA mirrors EXPORT_CSV_REQUEST but accepts inline SessionData for history exports
 
 ### Pending Todos
 
@@ -68,6 +70,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-06T05:24:17.865Z
-Stopped at: Phase 15 context gathered
-Resume file: .planning/phases/15-session-history-ui/15-CONTEXT.md
+Last session: 2026-03-06T05:43:00.000Z
+Stopped at: Completed 15-01-PLAN.md
+Resume file: .planning/phases/15-session-history-ui/15-01-SUMMARY.md
