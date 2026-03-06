@@ -95,7 +95,10 @@ Plans:
   3. User can load a past session and copy it as TSV to clipboard
   4. User can load a past session and send it to AI analysis (ChatGPT, Claude, or Gemini)
   5. User can delete individual sessions from the history list, and can clear all history at once
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 15-01-PLAN.md — History module functions (delete, clear), UI helpers, and EXPORT_CSV_FROM_DATA message type
+- [ ] 15-02-PLAN.md — Popup history UI: collapsible list, session loading, banner, delete/clear actions
 
 ### Phase 16: Smart Prompt Suggestions
 **Goal**: The prompt dropdown surfaces the best-fit built-in prompt for the current session's data so users spend less time picking a prompt
@@ -107,7 +110,10 @@ Plans:
   3. Full Bag Fitting prompt is only recommended when the session contains data from multiple clubs (single-club sessions lack sufficient data for bag-level analysis)
   4. The badge updates when a new report is loaded (DATA_UPDATED) without requiring popup close/reopen
   5. The user's current prompt selection is never auto-changed — the badge is advisory only
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 15-01-PLAN.md — History module functions (delete, clear), UI helpers, and EXPORT_CSV_FROM_DATA message type
+- [ ] 15-02-PLAN.md — Popup history UI: collapsible list, session loading, banner, delete/clear actions
 
 ## Progress
 
