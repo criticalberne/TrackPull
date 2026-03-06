@@ -66,54 +66,6 @@ export function saveSessionToHistory(session: SessionData): Promise<void> {
 }
 
 /**
- * Delete a single session from history by report_id.
- */
-export function deleteSessionFromHistory(reportId: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get(
-      [STORAGE_KEYS.SESSION_HISTORY],
-      (result: Record<string, unknown>) => {
-        if (chrome.runtime.lastError) {
-          return reject(new Error(chrome.runtime.lastError.message));
-        }
-
-        const existing = (result[STORAGE_KEYS.SESSION_HISTORY] as HistoryEntry[] | undefined) ?? [];
-        const filtered = existing.filter(
-          (entry) => entry.snapshot.report_id !== reportId
-        );
-
-        chrome.storage.local.set(
-          { [STORAGE_KEYS.SESSION_HISTORY]: filtered },
-          () => {
-            if (chrome.runtime.lastError) {
-              return reject(new Error(chrome.runtime.lastError.message));
-            }
-            resolve();
-          }
-        );
-      }
-    );
-  });
-}
-
-/**
- * Clear all session history.
- */
-export function clearAllHistory(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.set(
-      { [STORAGE_KEYS.SESSION_HISTORY]: [] },
-      () => {
-        if (chrome.runtime.lastError) {
-          return reject(new Error(chrome.runtime.lastError.message));
-        }
-        resolve();
-      }
-    );
-  });
-}
-
-/**
  * Map storage error strings to user-friendly messages.
  */
 export function getHistoryErrorMessage(error: string): string {

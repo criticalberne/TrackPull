@@ -447,7 +447,7 @@
 
     .stat-card-row {
       display: grid;
-      grid-template-columns: 1fr auto auto auto;
+      grid-template-columns: 1fr 3rem 5rem 5rem;
       gap: 8px;
       padding: 4px 0;
       font-size: 13px;
@@ -464,7 +464,7 @@
     }
 
     .stat-card-value {
-      text-align: right;
+      text-align: left;
       font-variant-numeric: tabular-nums;
       color: var(--color-text-body);
     }
@@ -476,101 +476,10 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-
-    /* History banner */
-    #history-banner {
-      background: var(--color-accent-light);
-      padding: 8px 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-radius: 6px;
-      margin-bottom: 8px;
-      font-size: 13px;
-      color: var(--color-text-body);
-    }
-
-    #history-banner-dismiss {
-      background: none;
-      border: none;
-      font-size: 18px;
-      cursor: pointer;
-      color: var(--color-text-muted);
-      padding: 0 4px;
-    }
-
-    /* History section */
-    details#history-section {
-      margin: 12px 0;
-    }
-
-    details#history-section > summary {
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--color-text-muted);
-      padding: 4px 0;
-      user-select: none;
-    }
-
-    .history-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 6px 0;
-      cursor: pointer;
-      border-bottom: 1px solid var(--color-border);
-    }
-
-    .history-row:hover {
-      background: var(--color-bg-subtle);
-    }
-
-    .history-info {
-      font-size: 12px;
-      color: var(--color-text-body);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex: 1;
-    }
-
-    .history-delete-btn {
-      background: none;
-      border: none;
-      font-size: 16px;
-      color: var(--color-text-muted);
-      cursor: pointer;
-      padding: 2px 6px;
-      flex-shrink: 0;
-    }
-
-    .history-delete-btn:hover {
-      color: var(--color-danger);
-    }
-
-    .history-clear-all {
-      background: none;
-      border: none;
-      color: var(--color-danger);
-      font-size: 12px;
-      cursor: pointer;
-      padding: 8px 0;
-      width: 100%;
-      text-align: center;
-    }
-
-    .history-clear-all:hover {
-      text-decoration: underline;
-    }
   </style>
   <script src="./popup.js"></script>
 </head>
 <body>
-  <div id="history-banner" style="display:none;">
-    <span id="history-banner-text"></span>
-    <button id="history-banner-dismiss" title="Return to live session">&times;</button>
-  </div>
   <div class="header-row">
     <h1>TrackPull</h1>
     <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">
@@ -647,11 +556,6 @@
       <pre id="prompt-preview-content"></pre>
     </details>
   </div>
-  <details id="history-section" style="display:none;">
-    <summary>Session History</summary>
-    <div id="history-list-content" style="max-height: 200px; overflow-y: auto;">
-    </div>
-  </details>
   <button id="clear-btn" style="display:none">Clear Session Data</button>
   <div id="status-message"></div>
   <div id="toast-container" style="position: fixed; top: 0; left: 0; right: 0; z-index: 1000;"></div>
