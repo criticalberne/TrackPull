@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Data Intelligence
-status: completed
-stopped_at: Phase 14 context gathered
-last_updated: "2026-03-06T04:34:00.806Z"
-last_activity: 2026-03-06 — Phase 13 Plan 01 complete (stat card)
+status: in-progress
+stopped_at: Phase 14 Plan 01 complete
+last_updated: "2026-03-06T04:47:00Z"
+last_activity: 2026-03-06 — Phase 14 Plan 01 complete (session history storage)
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  total_plans: 3
+  completed_plans: 2
   percent: 25
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** v1.6 Data Intelligence — Phase 13: Visual Stat Card
+**Current focus:** v1.6 Data Intelligence — Phase 14: Session History Storage
 
 ## Current Position
 
-Phase: 13 of 16 (Visual Stat Card)
+Phase: 14 of 16 (Session History Storage)
 Plan: 1 of 1 complete
-Status: Phase 13 plan 01 complete
-Last activity: 2026-03-06 — Phase 13 Plan 01 complete (stat card)
+Status: Phase 14 plan 01 complete
+Last activity: 2026-03-06 — Phase 14 Plan 01 complete (session history storage)
 
-Progress: [##░░░░░░░░] 25%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -52,6 +52,8 @@ Recent decisions relevant to v1.6:
 - History UI placement (popup inline vs. options page) — measure actual v1.5 popup height before committing; research flags this as needing a concrete UX decision
 - Used jsdom vitest environment to test computeClubAverage exported from popup.ts (module has top-level document.addEventListener)
 - Placed renderStatCard initial call after updatePreview() to ensure cachedUnitChoice is resolved before first render
+- SessionSnapshot = Omit<SessionData, 'raw_api_data'> with destructure-based stripping at runtime
+- History sorted descending by captured_at; re-capture refreshes timestamp (dedup by report_id)
 
 ### Pending Todos
 
@@ -64,6 +66,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-06T04:34:00.804Z
-Stopped at: Phase 14 context gathered
-Resume file: .planning/phases/14-session-history-storage/14-CONTEXT.md
+Last session: 2026-03-06T04:47:00Z
+Stopped at: Completed 14-01-PLAN.md
+Resume file: .planning/phases/14-session-history-storage/14-01-SUMMARY.md
