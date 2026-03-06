@@ -430,6 +430,52 @@
       background-color: var(--color-icon-hover-bg);
       color: var(--color-accent);
     }
+
+    /* Stat card */
+    details#stat-card {
+      margin: 12px 0;
+    }
+
+    details#stat-card > summary {
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      padding: 4px 0;
+      user-select: none;
+    }
+
+    .stat-card-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 13px;
+      align-items: baseline;
+    }
+
+    .stat-card-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 4px;
+      margin-bottom: 2px;
+    }
+
+    .stat-card-value {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--color-text-body);
+    }
+
+    .stat-card-club {
+      color: var(--color-text-primary);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   </style>
   <script src="./popup.js"></script>
 </head>
@@ -448,6 +494,10 @@
       <p class="empty-guidance-hint">Shot data is captured automatically when you view a report</p>
     </div>
   </div>
+  <details id="stat-card" style="display:none;">
+    <summary>Session Stats</summary>
+    <div id="stat-card-content"></div>
+  </details>
   <div class="unit-selectors">
     <div class="unit-group">
       <label for="speed-unit">Speed</label>

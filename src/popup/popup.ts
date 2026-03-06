@@ -3,10 +3,9 @@
  */
 
 import { STORAGE_KEYS } from "../shared/constants";
-import { migrateLegacyPref } from "../shared/unit_normalization";
+import { migrateLegacyPref, getApiSourceUnitSystem, normalizeMetricValue, DISTANCE_LABELS, SPEED_LABELS, DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import type { SessionData, Shot } from "../models/types";
 import type { UnitChoice } from "../shared/unit_normalization";
-import { DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import { writeTsv } from "../shared/tsv_writer";
 import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
@@ -38,6 +37,52 @@ const AI_URLS: Record<string, string> = {
   "Claude": "https://claude.ai",
   "Gemini": "https://gemini.google.com",
 };
+
+function renderStatCard(): void {
+  const container = document.getElementById("stat-card") as HTMLDetailsElement | null;
+  if (!container) return;
+
+  const hasData = cachedData?.club_groups && cachedData.club_groups.length > 0;
+  container.style.display = hasData ? "" : "none";
+  if (!hasData) return;
+
+  const unitSystem = getApiSourceUnitSystem(cachedData!.metadata_params);
+  const contentEl = document.getElementById("stat-card-content")!;
+
+  // Build header row
+  const carryHeader = `Carry(${DISTANCE_LABELS[cachedUnitChoice.distance]})`;
+  const speedHeader = `Speed(${SPEED_LABELS[cachedUnitChoice.speed]})`;
+
+  let html = `<div class="stat-card-row stat-card-header">
+    <span>Club</span>
+    <span>Shots</span>
+    <span>${carryHeader}</span>
+    <span>${speedHeader}</span>
+  </div>`;
+
+  // Build club rows -- club order follows SessionData.club_groups order (Trackman report order)
+  for (const club of cachedData!.club_groups) {
+    const shotCount = club.shots.length;
+    const rawCarry = computeClubAverage(club.shots, "Carry");
+    const rawSpeed = computeClubAverage(club.shots, "ClubSpeed");
+
+    const carry = rawCarry !== null
+      ? String(normalizeMetricValue(rawCarry, "Carry", unitSystem, cachedUnitChoice))
+      : "\u2014";
+    const speed = rawSpeed !== null
+      ? String(normalizeMetricValue(rawSpeed, "ClubSpeed", unitSystem, cachedUnitChoice))
+      : "\u2014";
+
+    html += `<div class="stat-card-row">
+      <span class="stat-card-club">${club.club_name}</span>
+      <span class="stat-card-value">${shotCount}</span>
+      <span class="stat-card-value">${carry}</span>
+      <span class="stat-card-value">${speed}</span>
+    </div>`;
+  }
+
+  contentEl.innerHTML = html;
+}
 
 async function renderPromptSelect(select: HTMLSelectElement): Promise<void> {
   const customPrompts = await loadCustomPrompts();
@@ -163,6 +208,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       speedSelect.addEventListener("change", () => {
         chrome.storage.local.set({ [STORAGE_KEYS.SPEED_UNIT]: speedSelect.value });
         cachedUnitChoice = { ...cachedUnitChoice, speed: speedSelect.value as "mph" | "m/s" };
+        renderStatCard();
       });
     }
 
@@ -171,6 +217,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       distanceSelect.addEventListener("change", () => {
         chrome.storage.local.set({ [STORAGE_KEYS.DISTANCE_UNIT]: distanceSelect.value });
         cachedUnitChoice = { ...cachedUnitChoice, distance: distanceSelect.value as "yards" | "meters" };
+        renderStatCard();
       });
     }
 
@@ -198,6 +245,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateShotCount(message.data);
         updateExportButtonVisibility(message.data);
         updatePreview();
+        renderStatCard();
       }
       return true;
     });
@@ -263,6 +311,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Initial preview render (after both selects have their saved values restored)
     updatePreview();
+    renderStatCard();
 
     // Copy TSV button handler (CLIP-01, CLIP-02, CLIP-03)
     const copyTsvBtn = document.getElementById("copy-tsv-btn");
@@ -473,6 +522,7 @@ async function handleClearClick(): Promise<void> {
     cachedData = null;
     updateShotCount(null);
     updateExportButtonVisibility(null);
+    renderStatCard();
     showToast("Session data cleared", "success");
   } catch (error) {
     console.error("Error clearing session data:", error);
