@@ -51,7 +51,7 @@
 
 **Milestone Goal:** Add session persistence, visual at-a-glance summaries, and intelligent prompt matching so users can track improvement over time without leaving the extension.
 
-- [ ] **Phase 13: Visual Stat Card** — Popup displays avg carry, avg club speed, and shot count by club for the current session
+- [x] **Phase 13: Visual Stat Card** — Popup displays avg carry, avg club speed, and shot count by club for the current session (completed 2026-03-06)
 - [ ] **Phase 14: Session History Storage** — Sessions are automatically persisted to local storage with deduplication and rolling eviction
 - [ ] **Phase 15: Session History UI** — User can browse, re-export, and delete past sessions from within the popup
 - [ ] **Phase 16: Smart Prompt Suggestions** — Prompt dropdown annotates the best-fit built-in prompt based on available metrics
@@ -67,7 +67,7 @@
   2. Stat card shows values in the user's selected units (yards/meters, mph/m/s) — not raw SI values
   3. Stat card updates automatically when a new report is loaded (DATA_UPDATED event fires) without requiring popup close/reopen
   4. Stat card is absent (or shows empty state) when no session data has been captured yet
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] 13-01-PLAN.md — Stat card computation, HTML/CSS, and popup integration
 
@@ -123,7 +123,7 @@ Plans:
 | 10. Empty State Guidance | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 11. Export Format Toggle | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 12. Prompt Preview | v1.5 | 1/1 | Complete | 2026-03-03 |
-| 13. Visual Stat Card | v1.6 | 0/1 | Planned | - |
+| 13. Visual Stat Card | 1/1 | Complete   | 2026-03-06 | - |
 | 14. Session History Storage | v1.6 | 0/? | Not started | - |
 | 15. Session History UI | v1.6 | 0/? | Not started | - |
 | 16. Smart Prompt Suggestions | v1.6 | 0/? | Not started | - |

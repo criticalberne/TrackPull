@@ -21,9 +21,9 @@ Requirements for v1.6 Data Intelligence milestone. Each maps to roadmap phases.
 
 ### Visual Summary
 
-- [ ] **VIS-01**: Popup displays a stat card showing avg carry distance, avg club speed, and shot count by club for the current session
-- [ ] **VIS-02**: Stat card updates when new data is captured (DATA_UPDATED)
-- [ ] **VIS-03**: Stat card respects user's unit preferences (yards/meters, mph/m/s)
+- [x] **VIS-01**: Popup displays a stat card showing avg carry distance, avg club speed, and shot count by club for the current session
+- [x] **VIS-02**: Stat card updates when new data is captured (DATA_UPDATED)
+- [x] **VIS-03**: Stat card respects user's unit preferences (yards/meters, mph/m/s)
 
 ### Smart Prompts
 
@@ -66,9 +66,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HIST-07 | Phase 14 | Pending |
 | HIST-08 | Phase 15 | Pending |
 | HIST-09 | Phase 15 | Pending |
-| VIS-01 | Phase 13 | Pending |
-| VIS-02 | Phase 13 | Pending |
-| VIS-03 | Phase 13 | Pending |
+| VIS-01 | Phase 13 | Complete |
+| VIS-02 | Phase 13 | Complete |
+| VIS-03 | Phase 13 | Complete |
 | PROMPT-01 | Phase 16 | Pending |
 | PROMPT-02 | Phase 16 | Pending |
 
