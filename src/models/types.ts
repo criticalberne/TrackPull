@@ -27,6 +27,15 @@ export interface SessionData {
   metadata_params: Record<string, string>;
 }
 
+/** SessionData without raw_api_data — safe for persistent storage. */
+export type SessionSnapshot = Omit<SessionData, "raw_api_data">;
+
+/** A single entry in the session history array. */
+export interface HistoryEntry {
+  captured_at: number;
+  snapshot: SessionSnapshot;
+}
+
 export interface CaptureInfo {
   url: string;
   status: number;
