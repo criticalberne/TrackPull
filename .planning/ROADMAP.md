@@ -123,7 +123,7 @@ Plans:
 | 10. Empty State Guidance | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 11. Export Format Toggle | v1.5 | 1/1 | Complete | 2026-03-03 |
 | 12. Prompt Preview | v1.5 | 1/1 | Complete | 2026-03-03 |
-| 13. Visual Stat Card | 1/1 | Complete   | 2026-03-06 | - |
+| 13. Visual Stat Card | 1/1 | Complete    | 2026-03-06 | - |
 | 14. Session History Storage | v1.6 | 0/? | Not started | - |
 | 15. Session History UI | v1.6 | 0/? | Not started | - |
 | 16. Smart Prompt Suggestions | v1.6 | 0/? | Not started | - |
