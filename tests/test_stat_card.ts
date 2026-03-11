@@ -26,7 +26,7 @@ beforeAll(() => {
   };
 });
 
-import { computeClubAverage } from "../src/popup/popup";
+import { computeClubAverage, escapeHtml } from "../src/popup/popup";
 import {
   normalizeMetricValue,
   getApiSourceUnitSystem,
@@ -96,6 +96,14 @@ describe("computeClubAverage", () => {
     ];
     // (10 + 11 + 11) / 3 = 10.666... -> 10.7
     expect(computeClubAverage(shots2, "Carry")).toBe(10.7);
+  });
+});
+
+
+
+describe("escapeHtml", () => {
+  it("escapes dangerous HTML characters", () => {
+    expect(escapeHtml(`<img src=x onerror="alert(1)">'&`)).toBe("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;&#39;&amp;");
   });
 });
 

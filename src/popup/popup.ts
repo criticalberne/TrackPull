@@ -26,6 +26,15 @@ export function computeClubAverage(
   return Math.round(avg * 10) / 10;
 }
 
+export function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 // Pre-fetched data for synchronous clipboard access (avoids focus-loss errors)
 let cachedData: SessionData | null = null;
 let cachedUnitChoice: UnitChoice = DEFAULT_UNIT_CHOICE;
@@ -74,7 +83,7 @@ function renderStatCard(): void {
       : "\u2014";
 
     html += `<div class="stat-card-row">
-      <span class="stat-card-club">${club.club_name}</span>
+      <span class="stat-card-club">${escapeHtml(club.club_name)}</span>
       <span class="stat-card-value">${shotCount}</span>
       <span class="stat-card-value">${carry}</span>
       <span class="stat-card-value">${speed}</span>
