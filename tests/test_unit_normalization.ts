@@ -14,6 +14,7 @@ import {
   convertAngle,
   convertSpeed,
   convertSmallDistance,
+  convertMillimeters,
   getSmallDistanceUnit,
   normalizeMetricValue,
   migrateLegacyPref,
@@ -21,6 +22,7 @@ import {
   ANGLE_METRICS,
   SPEED_METRICS,
   SMALL_DISTANCE_METRICS,
+  MILLIMETER_METRICS,
   UNIT_SYSTEMS,
   type UnitChoice,
 } from "../src/shared/unit_normalization";
@@ -319,6 +321,8 @@ describe("Metric Category Classification", () => {
     expect(DISTANCE_METRICS.has("Side")).toBeTruthy();
     expect(DISTANCE_METRICS.has("Height")).toBeTruthy();
     expect(SMALL_DISTANCE_METRICS.has("LowPointDistance")).toBeTruthy();
+    expect(MILLIMETER_METRICS.has("ImpactHeight")).toBeTruthy();
+    expect(MILLIMETER_METRICS.has("ImpactOffset")).toBeTruthy();
     expect(DISTANCE_METRICS.has("CarrySide")).toBeTruthy();
     expect(DISTANCE_METRICS.has("TotalSide")).toBeTruthy();
     expect(DISTANCE_METRICS.has("MaxHeight")).toBeTruthy();
@@ -713,6 +717,26 @@ describe("convertSmallDistance", () => {
   });
 });
 
+describe("convertMillimeters", () => {
+  it("converts meters to millimeters", () => {
+    const result = convertMillimeters(0.0056);
+    expect(result).toBeCloseTo(5.6, 4);
+  });
+
+  it("preserves negative values", () => {
+    const result = convertMillimeters(-0.0012);
+    expect(result).toBeCloseTo(-1.2, 4);
+  });
+
+  it("returns null for null input", () => {
+    expect(convertMillimeters(null)).toBeNull();
+  });
+
+  it("returns empty string for empty input", () => {
+    expect(convertMillimeters("")).toBe("");
+  });
+});
+
 describe("getSmallDistanceUnit", () => {
   it("returns inches when distance is yards", () => {
     expect(getSmallDistanceUnit({ speed: "mph", distance: "yards" })).toBe("inches");
@@ -741,6 +765,18 @@ describe("getMetricUnitLabel with LowPointDistance", () => {
   });
 });
 
+describe("getMetricUnitLabel with impact metrics", () => {
+  it("returns 'mm' for ImpactHeight regardless of unit choice", () => {
+    expect(getMetricUnitLabel("ImpactHeight", { speed: "mph", distance: "yards" })).toBe("mm");
+    expect(getMetricUnitLabel("ImpactHeight", { speed: "m/s", distance: "meters" })).toBe("mm");
+  });
+
+  it("returns 'mm' for ImpactOffset regardless of unit choice", () => {
+    expect(getMetricUnitLabel("ImpactOffset", { speed: "mph", distance: "yards" })).toBe("mm");
+    expect(getMetricUnitLabel("ImpactOffset", { speed: "m/s", distance: "meters" })).toBe("mm");
+  });
+});
+
 describe("normalizeMetricValue with LowPointDistance", () => {
   const apiSource = getApiSourceUnitSystem({ nd_001: "789012" });
 
@@ -757,6 +793,27 @@ describe("normalizeMetricValue with LowPointDistance", () => {
   it("handles larger LowPointDistance values", () => {
     const result = normalizeMetricValue(0.05, "LowPointDistance", apiSource, { speed: "mph", distance: "yards" });
     expect(result).toBeCloseTo(2.0, 1); // 0.05 * 39.3701 ≈ 1.969 → rounded to 2.0
+  });
+});
+
+describe("normalizeMetricValue with impact metrics", () => {
+  const apiSource = getApiSourceUnitSystem({ nd_001: "789012" });
+
+  it("converts ImpactHeight meters to rounded millimeters", () => {
+    const result = normalizeMetricValue(0.0056, "ImpactHeight", apiSource, { speed: "mph", distance: "yards" });
+    expect(result).toBe(6);
+  });
+
+  it("converts ImpactOffset meters to rounded millimeters", () => {
+    const result = normalizeMetricValue(-0.0012, "ImpactOffset", apiSource, { speed: "m/s", distance: "meters" });
+    expect(result).toBe(-1);
+  });
+
+  it("uses millimeters regardless of user distance preference", () => {
+    const imperial = normalizeMetricValue(0.0049, "ImpactHeight", apiSource, { speed: "mph", distance: "yards" });
+    const metric = normalizeMetricValue(0.0049, "ImpactHeight", apiSource, { speed: "m/s", distance: "meters" });
+    expect(imperial).toBe(5);
+    expect(metric).toBe(5);
   });
 });
 

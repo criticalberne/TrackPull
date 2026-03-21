@@ -249,6 +249,19 @@ describe("CSV Writer: Fixed unit labels", () => {
 
     expect(header).toContain("Landing Angle (°)");
   });
+
+  it("labels impact metrics with mm", () => {
+    const session = makeSession(
+      { ImpactHeight: "0.0056", ImpactOffset: "-0.0012" },
+      ["ImpactHeight", "ImpactOffset"]
+    );
+
+    const csv = writeCsv(session, false, undefined, imperial);
+    const header = csv.split("\n")[0];
+
+    expect(header).toContain("Impact Height (mm)");
+    expect(header).toContain("Impact Offset (mm)");
+  });
 });
 
 describe("CSV Writer: Conversion correctness", () => {
@@ -327,5 +340,35 @@ describe("CSV Writer: Conversion correctness", () => {
     expect(imperialHeader).not.toContain("Smash Factor (");
     expect(metricHeader).toContain("Smash Factor");
     expect(metricHeader).not.toContain("Smash Factor (");
+  });
+
+  it("exports impact metrics as rounded whole millimeters", () => {
+    const session = makeSession(
+      { ImpactHeight: "0.0056", ImpactOffset: "-0.0012" },
+      ["ImpactHeight", "ImpactOffset"]
+    );
+
+    const csv = writeCsv(session, false, undefined, metric);
+    const [headerRow, dataRow] = csv.split("\n");
+    const headers = headerRow.split(",");
+    const values = dataRow.split(",");
+
+    expect(values[headers.indexOf("Impact Height (mm)")]).toBe("6");
+    expect(values[headers.indexOf("Impact Offset (mm)")]).toBe("-1");
+  });
+
+  it("keeps missing impact metrics blank", () => {
+    const session = makeSession(
+      {},
+      ["ImpactHeight", "ImpactOffset"]
+    );
+
+    const csv = writeCsv(session, false, undefined, imperial);
+    const [headerRow, dataRow] = csv.split("\n");
+    const headers = headerRow.split(",");
+    const values = dataRow.split(",");
+
+    expect(values[headers.indexOf("Impact Height (mm)")]).toBe("");
+    expect(values[headers.indexOf("Impact Offset (mm)")]).toBe("");
   });
 });

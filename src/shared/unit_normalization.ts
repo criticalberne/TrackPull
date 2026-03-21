@@ -80,6 +80,15 @@ export const SMALL_DISTANCE_METRICS = new Set([
 ]);
 
 /**
+ * Trackman impact location metrics are always displayed in millimeters.
+ * The API returns these values in meters.
+ */
+export const MILLIMETER_METRICS = new Set([
+  "ImpactHeight",
+  "ImpactOffset",
+]);
+
+/**
  * Metrics that use angle units.
  */
 export const ANGLE_METRICS = new Set([
@@ -152,6 +161,8 @@ export function migrateLegacyPref(stored: string | undefined): UnitChoice {
 export const FIXED_UNIT_LABELS: Record<string, string> = {
   SpinRate: "rpm",
   HangTime: "s",
+  ImpactHeight: "mm",
+  ImpactOffset: "mm",
 };
 
 /**
@@ -342,6 +353,20 @@ export function convertSmallDistance(
 }
 
 /**
+ * Convert a distance value from meters to millimeters.
+ */
+export function convertMillimeters(
+  value: number | string | null
+): number | string | null {
+  if (value === null || value === "") return value;
+
+  const numValue = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(numValue)) return value;
+
+  return numValue * 1000;
+}
+
+/**
  * Normalize a metric value based on unit system alignment and user's unit choice.
  *
  * Converts values from the source units to target output units:
@@ -366,7 +391,9 @@ export function normalizeMetricValue(
 
   let converted: number;
 
-  if (SMALL_DISTANCE_METRICS.has(metricName)) {
+  if (MILLIMETER_METRICS.has(metricName)) {
+    converted = convertMillimeters(numValue) as number;
+  } else if (SMALL_DISTANCE_METRICS.has(metricName)) {
     converted = convertSmallDistance(
       numValue,
       getSmallDistanceUnit(unitChoice)
@@ -395,6 +422,9 @@ export function normalizeMetricValue(
 
   // SpinRate: round to whole numbers
   if (metricName === "SpinRate") return Math.round(converted);
+
+  // Impact location metrics are displayed as whole millimeters.
+  if (MILLIMETER_METRICS.has(metricName)) return Math.round(converted);
 
   // Round to 1 decimal place for consistency
   return Math.round(converted * 10) / 10;

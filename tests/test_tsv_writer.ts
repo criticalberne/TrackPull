@@ -331,6 +331,35 @@ describe("TSV Writer: unit conversion", () => {
     // 182.88m = 200 yds exactly
     expect(dataRow).toContain("200");
   });
+
+  it("labels impact metrics with mm and exports rounded millimeters", () => {
+    const session = makeSession(
+      { ImpactHeight: "0.0056", ImpactOffset: "-0.0012" },
+      ["ImpactHeight", "ImpactOffset"]
+    );
+
+    const tsv = writeTsv(session, metric);
+    const [headerRow, dataRow] = tsv.split("\n");
+    const headers = headerRow.split("\t");
+    const values = dataRow.split("\t");
+
+    expect(headers).toContain("Impact Height (mm)");
+    expect(headers).toContain("Impact Offset (mm)");
+    expect(values[headers.indexOf("Impact Height (mm)")]).toBe("6");
+    expect(values[headers.indexOf("Impact Offset (mm)")]).toBe("-1");
+  });
+
+  it("keeps missing impact metrics blank", () => {
+    const session = makeSession({}, ["ImpactHeight", "ImpactOffset"]);
+
+    const tsv = writeTsv(session, imperial);
+    const [headerRow, dataRow] = tsv.split("\n");
+    const headers = headerRow.split("\t");
+    const values = dataRow.split("\t");
+
+    expect(values[headers.indexOf("Impact Height (mm)")]).toBe("");
+    expect(values[headers.indexOf("Impact Offset (mm)")]).toBe("");
+  });
 });
 
 describe("TSV Writer: multi-club sessions", () => {
