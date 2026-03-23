@@ -108,7 +108,6 @@ export const ANGLE_METRICS = new Set([
 export const SPEED_METRICS = new Set([
   "ClubSpeed",
   "BallSpeed",
-  "Tempo",
 ]);
 
 /**
@@ -161,6 +160,7 @@ export function migrateLegacyPref(stored: string | undefined): UnitChoice {
 export const FIXED_UNIT_LABELS: Record<string, string> = {
   SpinRate: "rpm",
   HangTime: "s",
+  Tempo: "s",
   ImpactHeight: "mm",
   ImpactOffset: "mm",
 };
@@ -425,6 +425,10 @@ export function normalizeMetricValue(
 
   // Impact location metrics are displayed as whole millimeters.
   if (MILLIMETER_METRICS.has(metricName)) return Math.round(converted);
+
+  // SmashFactor / Tempo: round to 2 decimal places
+  if (metricName === "SmashFactor" || metricName === "Tempo")
+    return Math.round(converted * 100) / 100;
 
   // Round to 1 decimal place for consistency
   return Math.round(converted * 10) / 10;

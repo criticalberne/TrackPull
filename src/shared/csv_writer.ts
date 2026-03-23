@@ -165,7 +165,9 @@ export function writeCsv(
 
           if (numericValues.length > 0) {
             const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
-            const rounded = Math.round(avg * 10) / 10;
+            const rounded = (metric === "SmashFactor" || metric === "Tempo")
+              ? Math.round(avg * 100) / 100
+              : Math.round(avg * 10) / 10;
             avgRow[colName] = String(normalizeMetricValue(rounded, metric, unitSystem, unitChoice));
           } else {
             avgRow[colName] = "";

@@ -339,7 +339,7 @@ describe("Metric Category Classification", () => {
   it("correctly classifies speed metrics", () => {
     expect(SPEED_METRICS.has("ClubSpeed")).toBeTruthy();
     expect(SPEED_METRICS.has("BallSpeed")).toBeTruthy();
-    expect(SPEED_METRICS.has("Tempo")).toBeTruthy();
+    expect(SPEED_METRICS.has("Tempo")).toBeFalsy();
   });
 
   it("excludes non-metric keys from categories", () => {

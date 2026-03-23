@@ -200,7 +200,8 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
         SELECTED_PROMPT_ID: "selectedPromptId",
         AI_SERVICE: "aiService",
         HITTING_SURFACE: "hittingSurface",
-        INCLUDE_AVERAGES: "includeAverages"
+        INCLUDE_AVERAGES: "includeAverages",
+        SESSION_HISTORY: "sessionHistory"
       };
     }
   });

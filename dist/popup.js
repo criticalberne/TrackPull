@@ -86,6 +86,10 @@
   var SMALL_DISTANCE_METRICS = /* @__PURE__ */ new Set([
     "LowPointDistance"
   ]);
+  var MILLIMETER_METRICS = /* @__PURE__ */ new Set([
+    "ImpactHeight",
+    "ImpactOffset"
+  ]);
   var ANGLE_METRICS = /* @__PURE__ */ new Set([
     "AttackAngle",
     "ClubPath",
@@ -98,8 +102,7 @@
   ]);
   var SPEED_METRICS = /* @__PURE__ */ new Set([
     "ClubSpeed",
-    "BallSpeed",
-    "Tempo"
+    "BallSpeed"
   ]);
   var DEFAULT_UNIT_SYSTEM = UNIT_SYSTEMS["789012"];
   var SPEED_LABELS = {
@@ -127,7 +130,10 @@
   }
   var FIXED_UNIT_LABELS = {
     SpinRate: "rpm",
-    HangTime: "s"
+    HangTime: "s",
+    Tempo: "s",
+    ImpactHeight: "mm",
+    ImpactOffset: "mm"
   };
   function extractUnitParams(metadataParams) {
     const result = {};
@@ -204,11 +210,19 @@
     if (isNaN(numValue)) return value;
     return toSmallUnit === "inches" ? numValue * 39.3701 : numValue * 100;
   }
+  function convertMillimeters(value) {
+    if (value === null || value === "") return value;
+    const numValue = typeof value === "string" ? parseFloat(value) : value;
+    if (isNaN(numValue)) return value;
+    return numValue * 1e3;
+  }
   function normalizeMetricValue(value, metricName, reportUnitSystem, unitChoice = DEFAULT_UNIT_CHOICE) {
     const numValue = parseNumericValue(value);
     if (numValue === null) return value;
     let converted;
-    if (SMALL_DISTANCE_METRICS.has(metricName)) {
+    if (MILLIMETER_METRICS.has(metricName)) {
+      converted = convertMillimeters(numValue);
+    } else if (SMALL_DISTANCE_METRICS.has(metricName)) {
       converted = convertSmallDistance(
         numValue,
         getSmallDistanceUnit(unitChoice)
@@ -235,6 +249,9 @@
       converted = numValue;
     }
     if (metricName === "SpinRate") return Math.round(converted);
+    if (MILLIMETER_METRICS.has(metricName)) return Math.round(converted);
+    if (metricName === "SmashFactor" || metricName === "Tempo")
+      return Math.round(converted * 100) / 100;
     return Math.round(converted * 10) / 10;
   }
   function parseNumericValue(value) {
@@ -571,6 +588,9 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
     return Math.round(avg * 10) / 10;
   }
+  function escapeHtml(value) {
+    return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
   var cachedData = null;
   var cachedUnitChoice = DEFAULT_UNIT_CHOICE;
   var cachedSurface = "Mat";
@@ -603,7 +623,7 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
       const carry = rawCarry !== null ? String(normalizeMetricValue(rawCarry, "Carry", unitSystem, cachedUnitChoice)) : "\u2014";
       const speed = rawSpeed !== null ? String(normalizeMetricValue(rawSpeed, "ClubSpeed", unitSystem, cachedUnitChoice)) : "\u2014";
       html += `<div class="stat-card-row">
-      <span class="stat-card-club">${club.club_name}</span>
+      <span class="stat-card-club">${escapeHtml(club.club_name)}</span>
       <span class="stat-card-value">${shotCount}</span>
       <span class="stat-card-value">${carry}</span>
       <span class="stat-card-value">${speed}</span>
