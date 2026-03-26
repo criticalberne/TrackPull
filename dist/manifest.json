@@ -5,6 +5,10 @@
   "description": "Pull shot data from Trackman reports",
   "permissions": ["storage", "downloads", "clipboardWrite"],
   "host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"],
+  "optional_host_permissions": [
+    "https://api.trackmangolf.com/*",
+    "https://portal.trackmangolf.com/*"
+  ],
   "background": {"service_worker": "background.js"},
   "content_scripts": [
     {

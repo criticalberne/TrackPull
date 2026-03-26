@@ -11,6 +11,7 @@ import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
 import { assemblePrompt, buildUnitLabel, countSessionShots } from "../shared/prompt_builder";
 import { loadCustomPrompts } from "../shared/custom_prompts";
+import { hasPortalPermission, requestPortalPermission, PORTAL_ORIGINS } from "../shared/portalPermissions";
 
 export function computeClubAverage(
   shots: Shot[],
@@ -162,6 +163,17 @@ function updatePreview(): void {
   };
 
   previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
+}
+
+function renderPortalSection(granted: boolean): void {
+  const section = document.getElementById("portal-section");
+  const denied = document.getElementById("portal-denied");
+  const ready = document.getElementById("portal-ready");
+  if (!section || !denied || !ready) return;
+
+  section.style.display = "block";
+  denied.style.display = granted ? "none" : "block";
+  ready.style.display = granted ? "block" : "none";
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -324,6 +336,53 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Initial preview render (after both selects have their saved values restored)
     updatePreview();
     renderStatCard();
+
+    // Portal permission check on every popup open (D-05)
+    const portalGranted = await hasPortalPermission();
+    renderPortalSection(portalGranted);
+
+    // Portal import button — requests permission if not granted (D-01, D-02)
+    const portalImportBtn = document.getElementById("portal-import-btn");
+    if (portalImportBtn) {
+      portalImportBtn.addEventListener("click", async () => {
+        const granted = await hasPortalPermission();
+        if (!granted) {
+          const newlyGranted = await requestPortalPermission();
+          renderPortalSection(newlyGranted);
+          return;
+        }
+        // Phase 24 will implement actual import flow
+        console.log("TrackPull: Portal import — not yet implemented");
+      });
+    }
+
+    // Grant Access button — re-trigger permission request (D-03)
+    const portalGrantBtn = document.getElementById("portal-grant-btn");
+    if (portalGrantBtn) {
+      portalGrantBtn.addEventListener("click", async () => {
+        const granted = await requestPortalPermission();
+        renderPortalSection(granted);
+      });
+    }
+
+    // Reactive UI update when permission granted/revoked externally
+    chrome.permissions.onAdded.addListener((permissions) => {
+      const portalOriginsGranted = PORTAL_ORIGINS.some(
+        (origin) => permissions.origins?.includes(origin)
+      );
+      if (portalOriginsGranted) {
+        renderPortalSection(true);
+      }
+    });
+
+    chrome.permissions.onRemoved.addListener((permissions) => {
+      const portalOriginsRemoved = PORTAL_ORIGINS.some(
+        (origin) => permissions.origins?.includes(origin)
+      );
+      if (portalOriginsRemoved) {
+        renderPortalSection(false);
+      }
+    });
 
     // Copy TSV button handler (CLIP-01, CLIP-02, CLIP-03)
     const copyTsvBtn = document.getElementById("copy-tsv-btn");

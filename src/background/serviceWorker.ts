@@ -7,6 +7,7 @@ import { writeCsv } from "../shared/csv_writer";
 import type { SessionData } from "../models/types";
 import { migrateLegacyPref, DEFAULT_UNIT_CHOICE, type UnitChoice, type SpeedUnit, type DistanceUnit } from "../shared/unit_normalization";
 import { saveSessionToHistory, getHistoryErrorMessage } from "../shared/history";
+import { hasPortalPermission } from "../shared/portalPermissions";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("TrackPull extension installed");
@@ -25,6 +26,10 @@ interface GetDataRequest {
   type: "GET_DATA";
 }
 
+interface PortalImportRequest {
+  type: "PORTAL_IMPORT_REQUEST";
+}
+
 function getDownloadErrorMessage(originalError: string): string {
   if (originalError.includes("invalid")) {
     return "Invalid download format";
@@ -38,7 +43,7 @@ function getDownloadErrorMessage(originalError: string): string {
   return originalError;
 }
 
-type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest;
+type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest | PortalImportRequest;
 
 chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendResponse) => {
   if (message.type === "GET_DATA") {
@@ -118,6 +123,19 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
       }
     });
+    return true;
+  }
+
+  if (message.type === "PORTAL_IMPORT_REQUEST") {
+    (async () => {
+      const granted = await hasPortalPermission();
+      if (!granted) {
+        sendResponse({ success: false, error: "Portal permission not granted" });
+        return;
+      }
+      // Phase 22 will implement GraphQL client and actual import
+      sendResponse({ success: false, error: "Not implemented" });
+    })();
     return true;
   }
 });

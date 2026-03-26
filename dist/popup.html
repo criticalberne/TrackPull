@@ -556,6 +556,21 @@
       <pre id="prompt-preview-content"></pre>
     </details>
   </div>
+  <!-- Portal Import section — per D-03, D-04: always rendered, visibility controlled by JS -->
+  <div id="portal-section" class="ai-section" style="display:none;">
+    <h2>Import from Portal</h2>
+    <!-- Shown when permission not yet granted (D-03, D-04) -->
+    <div id="portal-denied" style="display:none;">
+      <p id="portal-denied-msg" style="font-size:13px; color:var(--color-status-error); margin:0 0 8px 0;">
+        Portal access is required to import sessions from your Trackman account.
+      </p>
+      <button id="portal-grant-btn" class="btn-primary">Grant Access</button>
+    </div>
+    <!-- Shown when permission is granted -->
+    <div id="portal-ready" style="display:none;">
+      <button id="portal-import-btn" class="btn-primary">Import from Portal</button>
+    </div>
+  </div>
   <button id="clear-btn" style="display:none">Clear Session Data</button>
   <div id="status-message"></div>
   <div id="toast-container" style="position: fixed; top: 0; left: 0; right: 0; z-index: 1000;"></div>

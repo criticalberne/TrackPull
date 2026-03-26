@@ -580,6 +580,18 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     return ids.map((id) => promptsResult[CUSTOM_PROMPT_KEY_PREFIX + id]).filter((p) => p !== void 0);
   }
 
+  // src/shared/portalPermissions.ts
+  var PORTAL_ORIGINS = [
+    "https://api.trackmangolf.com/*",
+    "https://portal.trackmangolf.com/*"
+  ];
+  async function hasPortalPermission() {
+    return chrome.permissions.contains({ origins: [...PORTAL_ORIGINS] });
+  }
+  async function requestPortalPermission() {
+    return chrome.permissions.request({ origins: [...PORTAL_ORIGINS] });
+  }
+
   // src/popup/popup.ts
   function computeClubAverage(shots, metricName) {
     const values = shots.map((s) => s.metrics[metricName]).filter((v) => v !== void 0 && v !== "").map((v) => parseFloat(String(v)));
@@ -689,6 +701,15 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
       hittingSurface: cachedSurface
     };
     previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
+  }
+  function renderPortalSection(granted) {
+    const section = document.getElementById("portal-section");
+    const denied = document.getElementById("portal-denied");
+    const ready = document.getElementById("portal-ready");
+    if (!section || !denied || !ready) return;
+    section.style.display = "block";
+    denied.style.display = granted ? "none" : "block";
+    ready.style.display = granted ? "block" : "none";
   }
   document.addEventListener("DOMContentLoaded", async () => {
     console.log("TrackPull popup initialized");
@@ -818,6 +839,43 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
       }
       updatePreview();
       renderStatCard();
+      const portalGranted = await hasPortalPermission();
+      renderPortalSection(portalGranted);
+      const portalImportBtn = document.getElementById("portal-import-btn");
+      if (portalImportBtn) {
+        portalImportBtn.addEventListener("click", async () => {
+          const granted = await hasPortalPermission();
+          if (!granted) {
+            const newlyGranted = await requestPortalPermission();
+            renderPortalSection(newlyGranted);
+            return;
+          }
+          console.log("TrackPull: Portal import \u2014 not yet implemented");
+        });
+      }
+      const portalGrantBtn = document.getElementById("portal-grant-btn");
+      if (portalGrantBtn) {
+        portalGrantBtn.addEventListener("click", async () => {
+          const granted = await requestPortalPermission();
+          renderPortalSection(granted);
+        });
+      }
+      chrome.permissions.onAdded.addListener((permissions) => {
+        const portalOriginsGranted = PORTAL_ORIGINS.some(
+          (origin) => permissions.origins?.includes(origin)
+        );
+        if (portalOriginsGranted) {
+          renderPortalSection(true);
+        }
+      });
+      chrome.permissions.onRemoved.addListener((permissions) => {
+        const portalOriginsRemoved = PORTAL_ORIGINS.some(
+          (origin) => permissions.origins?.includes(origin)
+        );
+        if (portalOriginsRemoved) {
+          renderPortalSection(false);
+        }
+      });
       const copyTsvBtn = document.getElementById("copy-tsv-btn");
       if (copyTsvBtn) {
         copyTsvBtn.addEventListener("click", async () => {
