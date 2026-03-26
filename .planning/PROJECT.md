@@ -40,16 +40,20 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 
 ### Active
 
-<!-- v1.6 Data Intelligence -->
+<!-- v1.6 Trackman Portal Integration -->
 
-- [ ] Session history — persist sessions in chrome.storage, browse/re-export from popup
-- [ ] Session comparison — delta columns comparing club averages across sessions
-- [ ] Visual shot summary — stat card in popup (avg carry, avg club speed, shot count by club)
-- [ ] Smart prompt suggestions — highlighted label on data-matched prompt in dropdown
+- [ ] GraphQL client with cookie-based auth for `api.trackmangolf.com/graphql`
+- [ ] Activity list query via `me.activities` returning all user sessions
+- [ ] Activity browser UI in popup for selecting and importing sessions
+- [ ] Shot data pull via `node(id)` query with full Stroke.measurement parsing
+- [ ] Mapping GraphQL Measurement fields into existing SessionData format
+- [ ] Imported sessions usable through existing export/AI/history pipeline
 
 ### Future
 
-(None)
+- Session history UI completion — browse, copy, AI-launch, and manage past sessions from popup
+- Session comparison — delta columns comparing club averages across sessions
+- Smart prompt suggestions — highlighted label on data-matched prompt in dropdown
 
 ### Out of Scope
 
@@ -73,7 +77,7 @@ Tech stack: Chrome MV3 extension, esbuild, vitest. Zero production dependencies.
 ## Constraints
 
 - **Platform**: Chrome Extension (Manifest V3) — required for API interception and page injection
-- **Host**: Only runs on `web-dynamic-reports.trackmangolf.com` — Trackman's report domain
+- **Host**: Runs on `web-dynamic-reports.trackmangolf.com` (reports) and `portal.trackmangolf.com` / `api.trackmangolf.com` (portal integration)
 - **Dependencies**: Zero production dependencies — Chrome APIs only
 - **Auth**: No auth layer — relies on user being logged into Trackman website
 
@@ -99,16 +103,57 @@ Tech stack: Chrome MV3 extension, esbuild, vitest. Zero production dependencies.
 | Native details/summary for prompt preview | No JS state management needed; browser handles expand/collapse | ✓ Good |
 | textContent (not innerHTML) for preview | Prevents XSS from user-defined prompts in preview widget | ✓ Good |
 | includeAverages default true | Backward compatible — existing users continue getting averages in exports | ✓ Good |
+| FlightScope as calibration reference, not runtime dependency | Hosted third-party tooling is useful for backtesting, but production logic must remain local and independently authored | ✓ Adopted for v1.7 |
+| Spin confidence over inferred spin replacement | Flagging uncertainty is safer and more explainable than silently overwriting Trackman values with modeled estimates | ✓ Adopted for v1.7 |
+| GraphQL API over scraping for portal data | Direct API access is reliable, returns 60+ fields, and works for old sessions without report URLs | — Pending |
+| Cookie auth via credentials:include | HTTP-only cookies handled by browser; no API key management needed | — Pending |
 
-## Current Milestone: v1.6 Data Intelligence
+## Current Milestone: v1.6 Trackman Portal Integration
 
-**Goal:** Add session persistence, cross-session comparison, visual summaries, and intelligent prompt matching.
+**Goal:** Direct GraphQL API access to pull any session from a user's Trackman account — including old sessions without report URLs.
 
 **Target features:**
-- Session history — persist sessions in chrome.storage, browse/re-export from popup
-- Session comparison — delta columns comparing club averages across sessions
-- Visual shot summary — stat card in popup (avg carry, avg club speed, shot count by club)
-- Smart prompt suggestions — highlighted label on data-matched prompt in dropdown
+- GraphQL client hitting `api.trackmangolf.com/graphql` with cookie-based auth
+- Activity list via `me.activities` query showing all user sessions
+- Activity browser UI in popup — "Import from Portal" flow with date, stroke count, type
+- Single-session pull via `node(id)` query with full `Stroke.measurement` data (60+ fields)
+- Parser mapping GraphQL `Measurement` fields into existing `SessionData` format
+- Imported sessions flow through existing export/AI/history pipeline unchanged
+
+## Paused Milestones
+
+### v1.7 Flight Intelligence
+**Reason:** Paused to prioritize portal integration — unlocks access to all historical sessions.
+
+**Deferred features:**
+- Dataset capture and backtest tooling
+- Local ball-flight engine
+- Calibration and spin confidence
+- Product integration for spin confidence
+
+### v1.6 Data Intelligence (original)
+**Reason:** Phases 13-14 shipped. Remaining UX work (history UI, smart prompts) deferred.
+
+**Deferred features:**
+- Session history UI completion
+- Smart prompt suggestions
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
 
 ---
-*Last updated: 2026-03-03 after starting v1.6 milestone*
+*Last updated: 2026-03-26 after starting v1.6 Trackman Portal Integration milestone*
