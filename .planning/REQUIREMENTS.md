@@ -120,25 +120,25 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIS-03 | Phase 13 | Complete |
 | PROMPT-01 | Phase 16 | Pending |
 | PROMPT-02 | Phase 16 | Pending |
-| PERM-01 | — | Pending |
-| PERM-02 | — | Pending |
-| PERM-03 | — | Pending |
-| BROWSE-01 | — | Pending |
-| BROWSE-02 | — | Pending |
-| BROWSE-03 | — | Pending |
-| BROWSE-04 | — | Pending |
-| PIPE-01 | — | Pending |
-| PIPE-02 | — | Pending |
-| PIPE-03 | — | Pending |
-| RESIL-01 | — | Pending |
-| RESIL-02 | — | Pending |
-| RESIL-03 | — | Pending |
+| PERM-01 | Phase 21 | Pending |
+| PERM-02 | Phase 22 | Pending |
+| PERM-03 | Phase 22 | Pending |
+| BROWSE-01 | Phase 25 | Pending |
+| BROWSE-02 | Phase 24 | Pending |
+| BROWSE-03 | Phase 25 | Pending |
+| BROWSE-04 | Phase 25 | Pending |
+| PIPE-01 | Phase 23 | Pending |
+| PIPE-02 | Phase 24 | Pending |
+| PIPE-03 | Phase 23 | Pending |
+| RESIL-01 | Phase 24 | Pending |
+| RESIL-02 | Phase 24 | Pending |
+| RESIL-03 | Phase 22 | Pending |
 
 **Coverage:**
-- v1.6 requirements: 13 total
-- Mapped to phases: 0 (awaiting roadmap)
-- Unmapped: 13 ⚠️
+- v1.6 Portal Integration requirements: 13 total
+- Mapped to phases: 13 (phases 21-25)
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-03*
-*Last updated: 2026-03-26 after starting v1.6 Trackman Portal Integration milestone*
+*Last updated: 2026-03-26 — v1.6 Portal Integration traceability complete (phases 21-25)*
