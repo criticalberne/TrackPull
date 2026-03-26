@@ -156,4 +156,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after starting v1.6 Trackman Portal Integration milestone*
+*Last updated: 2026-03-26 — Phase 21 complete: runtime permission foundation for portal domains*
