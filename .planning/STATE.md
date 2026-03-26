@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Trackman Portal Integration
 status: executing
-stopped_at: Phase 22 Plan 01 complete
-last_updated: "2026-03-26T22:30:05Z"
+stopped_at: Completed 22-02-PLAN.md (Task 1); awaiting human-verify checkpoint (Task 2)
+last_updated: "2026-03-26T22:36:02.442Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 13
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  completed_phases: 4
+  total_plans: 8
+  completed_plans: 7
   percent: 46
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 22
-Plan: 1 of 2 complete
-Status: Plan 01 complete, Plan 02 remaining
-Last activity: 2026-03-26 — Phase 22 Plan 01 complete (graphql_client module)
+Plan: 2 of 2 complete
+Status: Ready to execute
+Last activity: 2026-03-26
 
 Progress: [█████░░░░░] 46%
 
@@ -58,6 +58,7 @@ Recent decisions relevant to this milestone:
 - executeQuery uses credentials:include for ambient browser cookie auth — no token management needed
 - classifyAuthResult checks error code (UNAUTHENTICATED) then message substrings before falling through to generic error
 - HEALTH_CHECK_QUERY targets me { id } — minimal query sufficient for auth detection
+- [Phase 22]: PortalState string union over boolean — four states (denied/not-logged-in/ready/error) cleanly without additional parameters
 
 ### Pending Todos
 
@@ -77,6 +78,6 @@ Recent decisions relevant to this milestone:
 
 ## Session Continuity
 
-Last session: 2026-03-26T22:30:05Z
-Stopped at: Completed 22-01-PLAN.md
-Resume file: .planning/phases/22-graphql-client-cookie-auth/22-01-SUMMARY.md
+Last session: 2026-03-26T22:36:02.440Z
+Stopped at: Completed 22-02-PLAN.md (Task 1); awaiting human-verify checkpoint (Task 2)
+Resume file: None

@@ -72,7 +72,7 @@
 **Milestone Goal:** Direct GraphQL API access to pull any session from a user's Trackman account — including old sessions without report URLs — and route them through the existing export, AI, and history pipeline unchanged.
 
 - [x] **Phase 21: Manifest and Permissions Foundation** — Extension requests portal API access at runtime without disrupting existing users (completed 2026-03-26)
-- [ ] **Phase 22: GraphQL Client and Cookie Auth** — Authenticated GraphQL communication established and verified against the live Trackman API
+- [x] **Phase 22: GraphQL Client and Cookie Auth** — Authenticated GraphQL communication established and verified against the live Trackman API (completed 2026-03-26)
 - [ ] **Phase 23: GraphQL-to-SessionData Parser** — Measurement fields mapped to SessionData with defensive null handling and deduplication identity
 - [ ] **Phase 24: Service Worker Import Flow** — FETCH_ACTIVITIES and IMPORT_SESSION handlers with fire-and-forget status tracking
 - [ ] **Phase 25: Activity Browser UI** — Popup panel for browsing, filtering, and importing portal sessions
@@ -213,7 +213,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 22-01-PLAN.md — GraphQL client module with executeQuery, classifyAuthResult, and health-check query (TDD)
-- [ ] 22-02-PLAN.md — Service worker auth check handler, popup three-state portal section, login link
+- [x] 22-02-PLAN.md — Service worker auth check handler, popup three-state portal section, login link
 **UI hint**: yes
 
 ### Phase 23: GraphQL-to-SessionData Parser
@@ -276,7 +276,7 @@ Plans:
 | 19. Calibration and Spin Confidence | v1.7 | 0/1 | Paused | - |
 | 20. Product Integration and Validation | v1.7 | 0/1 | Paused | - |
 | 21. Manifest and Permissions Foundation | v1.6 PI | 1/1 | Complete    | 2026-03-26 |
-| 22. GraphQL Client and Cookie Auth | v1.6 PI | 1/2 | In progress | - |
+| 22. GraphQL Client and Cookie Auth | v1.6 PI | 2/2 | Complete   | 2026-03-26 |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/0 | Not started | - |
 | 24. Service Worker Import Flow | v1.6 PI | 0/0 | Not started | - |
 | 25. Activity Browser UI | v1.6 PI | 0/0 | Not started | - |
