@@ -49,7 +49,7 @@
 
 </details>
 
-### v1.6 Data Intelligence (Paused)
+### Data Intelligence (Paused)
 
 **Milestone Goal:** Add session persistence, visual at-a-glance summaries, and intelligent prompt matching so users can track improvement over time without leaving the extension.
 
@@ -58,7 +58,7 @@
 - [ ] **Phase 15: Session History UI** — Deferred while v1.7 Flight Intelligence is active
 - [ ] **Phase 16: Smart Prompt Suggestions** — Deferred while v1.7 Flight Intelligence is active
 
-### v1.7 Flight Intelligence (Paused)
+### Flight Intelligence (Paused)
 
 **Milestone Goal:** Build a local ball-flight and spin-confidence system that can be calibrated against real Trackman sessions and backtested against user-captured FlightScope reference outputs before it affects exports or AI analysis.
 
