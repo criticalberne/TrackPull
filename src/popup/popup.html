@@ -566,6 +566,18 @@
       </p>
       <button id="portal-grant-btn" class="btn-primary">Grant Access</button>
     </div>
+    <!-- Shown when permission granted but user not logged into Trackman (D-02) -->
+    <div id="portal-not-logged-in" style="display:none;">
+      <p style="font-size:13px; color:var(--color-status-error); margin:0 0 8px 0;">
+        Log into <a href="#" id="portal-login-link" style="color:var(--color-link);">portal.trackmangolf.com</a> to import sessions.
+      </p>
+    </div>
+    <!-- Shown when portal error (non-auth) occurs (D-04) -->
+    <div id="portal-error" style="display:none;">
+      <p id="portal-error-msg" style="font-size:13px; color:var(--color-status-error); margin:0 0 8px 0;">
+        Unable to reach Trackman — try again later.
+      </p>
+    </div>
     <!-- Shown when permission is granted -->
     <div id="portal-ready" style="display:none;">
       <button id="portal-import-btn" class="btn-primary">Import from Portal</button>

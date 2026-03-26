@@ -8,6 +8,7 @@ import type { SessionData } from "../models/types";
 import { migrateLegacyPref, DEFAULT_UNIT_CHOICE, type UnitChoice, type SpeedUnit, type DistanceUnit } from "../shared/unit_normalization";
 import { saveSessionToHistory, getHistoryErrorMessage } from "../shared/history";
 import { hasPortalPermission } from "../shared/portalPermissions";
+import { executeQuery, classifyAuthResult, HEALTH_CHECK_QUERY } from "../shared/graphql_client";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("TrackPull extension installed");
@@ -30,6 +31,10 @@ interface PortalImportRequest {
   type: "PORTAL_IMPORT_REQUEST";
 }
 
+interface PortalAuthCheckRequest {
+  type: "PORTAL_AUTH_CHECK";
+}
+
 function getDownloadErrorMessage(originalError: string): string {
   if (originalError.includes("invalid")) {
     return "Invalid download format";
@@ -43,7 +48,7 @@ function getDownloadErrorMessage(originalError: string): string {
   return originalError;
 }
 
-type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest | PortalImportRequest;
+type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest | PortalImportRequest | PortalAuthCheckRequest;
 
 chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendResponse) => {
   if (message.type === "GET_DATA") {
@@ -123,6 +128,32 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
       }
     });
+    return true;
+  }
+
+  if (message.type === "PORTAL_AUTH_CHECK") {
+    (async () => {
+      const granted = await hasPortalPermission();
+      if (!granted) {
+        sendResponse({ success: true, status: "denied" });
+        return;
+      }
+      try {
+        const result = await executeQuery<{ me: { id: string } | null }>(HEALTH_CHECK_QUERY);
+        const authStatus = classifyAuthResult(result);
+        if (authStatus.kind === "error") {
+          console.error("TrackPull: GraphQL health check error:", authStatus.message);
+        }
+        sendResponse({
+          success: true,
+          status: authStatus.kind,
+          message: authStatus.kind === "error" ? authStatus.message : undefined,
+        });
+      } catch (err) {
+        console.error("TrackPull: GraphQL health check failed:", err);
+        sendResponse({ success: true, status: "error", message: "Unable to reach Trackman — try again later" });
+      }
+    })();
     return true;
   }
 

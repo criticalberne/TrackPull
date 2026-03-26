@@ -702,14 +702,22 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     };
     previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
   }
-  function renderPortalSection(granted) {
+  function renderPortalSection(state, errorMsg) {
     const section = document.getElementById("portal-section");
     const denied = document.getElementById("portal-denied");
+    const notLoggedIn = document.getElementById("portal-not-logged-in");
     const ready = document.getElementById("portal-ready");
-    if (!section || !denied || !ready) return;
+    const errorDiv = document.getElementById("portal-error");
+    if (!section || !denied || !notLoggedIn || !ready || !errorDiv) return;
     section.style.display = "block";
-    denied.style.display = granted ? "none" : "block";
-    ready.style.display = granted ? "block" : "none";
+    denied.style.display = state === "denied" ? "block" : "none";
+    notLoggedIn.style.display = state === "not-logged-in" ? "block" : "none";
+    ready.style.display = state === "ready" ? "block" : "none";
+    errorDiv.style.display = state === "error" ? "block" : "none";
+    if (state === "error" && errorMsg) {
+      const errorMsgEl = document.getElementById("portal-error-msg");
+      if (errorMsgEl) errorMsgEl.textContent = errorMsg;
+    }
   }
   document.addEventListener("DOMContentLoaded", async () => {
     console.log("TrackPull popup initialized");
@@ -839,15 +847,31 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
       }
       updatePreview();
       renderStatCard();
-      const portalGranted = await hasPortalPermission();
-      renderPortalSection(portalGranted);
+      try {
+        const authResponse = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ type: "PORTAL_AUTH_CHECK" }, resolve);
+        });
+        if (authResponse.success && authResponse.status) {
+          const stateMap = {
+            denied: "denied",
+            unauthenticated: "not-logged-in",
+            authenticated: "ready",
+            error: "error"
+          };
+          renderPortalSection(stateMap[authResponse.status] ?? "error", authResponse.message);
+        } else {
+          renderPortalSection("error", "Unable to check portal status");
+        }
+      } catch {
+        renderPortalSection("error", "Unable to check portal status");
+      }
       const portalImportBtn = document.getElementById("portal-import-btn");
       if (portalImportBtn) {
         portalImportBtn.addEventListener("click", async () => {
           const granted = await hasPortalPermission();
           if (!granted) {
             const newlyGranted = await requestPortalPermission();
-            renderPortalSection(newlyGranted);
+            renderPortalSection(newlyGranted ? "ready" : "denied");
             return;
           }
           console.log("TrackPull: Portal import \u2014 not yet implemented");
@@ -857,7 +881,14 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
       if (portalGrantBtn) {
         portalGrantBtn.addEventListener("click", async () => {
           const granted = await requestPortalPermission();
-          renderPortalSection(granted);
+          renderPortalSection(granted ? "ready" : "denied");
+        });
+      }
+      const portalLoginLink = document.getElementById("portal-login-link");
+      if (portalLoginLink) {
+        portalLoginLink.addEventListener("click", (e) => {
+          e.preventDefault();
+          chrome.tabs.create({ url: "https://portal.trackmangolf.com" });
         });
       }
       chrome.permissions.onAdded.addListener((permissions) => {
@@ -865,7 +896,7 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           (origin) => permissions.origins?.includes(origin)
         );
         if (portalOriginsGranted) {
-          renderPortalSection(true);
+          renderPortalSection("ready");
         }
       });
       chrome.permissions.onRemoved.addListener((permissions) => {
@@ -873,7 +904,7 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           (origin) => permissions.origins?.includes(origin)
         );
         if (portalOriginsRemoved) {
-          renderPortalSection(false);
+          renderPortalSection("denied");
         }
       });
       const copyTsvBtn = document.getElementById("copy-tsv-btn");

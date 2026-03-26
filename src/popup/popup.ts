@@ -165,15 +165,26 @@ function updatePreview(): void {
   previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
 }
 
-function renderPortalSection(granted: boolean): void {
+type PortalState = "denied" | "not-logged-in" | "ready" | "error";
+
+function renderPortalSection(state: PortalState, errorMsg?: string): void {
   const section = document.getElementById("portal-section");
   const denied = document.getElementById("portal-denied");
+  const notLoggedIn = document.getElementById("portal-not-logged-in");
   const ready = document.getElementById("portal-ready");
-  if (!section || !denied || !ready) return;
+  const errorDiv = document.getElementById("portal-error");
+  if (!section || !denied || !notLoggedIn || !ready || !errorDiv) return;
 
   section.style.display = "block";
-  denied.style.display = granted ? "none" : "block";
-  ready.style.display = granted ? "block" : "none";
+  denied.style.display = state === "denied" ? "block" : "none";
+  notLoggedIn.style.display = state === "not-logged-in" ? "block" : "none";
+  ready.style.display = state === "ready" ? "block" : "none";
+  errorDiv.style.display = state === "error" ? "block" : "none";
+
+  if (state === "error" && errorMsg) {
+    const errorMsgEl = document.getElementById("portal-error-msg");
+    if (errorMsgEl) errorMsgEl.textContent = errorMsg;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -337,9 +348,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     updatePreview();
     renderStatCard();
 
-    // Portal permission check on every popup open (D-05)
-    const portalGranted = await hasPortalPermission();
-    renderPortalSection(portalGranted);
+    // Portal auth check on every popup open (D-01, D-03)
+    try {
+      const authResponse = await new Promise<{ success: boolean; status?: string; message?: string }>((resolve) => {
+        chrome.runtime.sendMessage({ type: "PORTAL_AUTH_CHECK" }, resolve);
+      });
+      if (authResponse.success && authResponse.status) {
+        const stateMap: Record<string, PortalState> = {
+          denied: "denied",
+          unauthenticated: "not-logged-in",
+          authenticated: "ready",
+          error: "error",
+        };
+        renderPortalSection(stateMap[authResponse.status] ?? "error", authResponse.message);
+      } else {
+        renderPortalSection("error", "Unable to check portal status");
+      }
+    } catch {
+      renderPortalSection("error", "Unable to check portal status");
+    }
 
     // Portal import button — requests permission if not granted (D-01, D-02)
     const portalImportBtn = document.getElementById("portal-import-btn");
@@ -348,7 +375,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const granted = await hasPortalPermission();
         if (!granted) {
           const newlyGranted = await requestPortalPermission();
-          renderPortalSection(newlyGranted);
+          renderPortalSection(newlyGranted ? "ready" : "denied");
           return;
         }
         // Phase 24 will implement actual import flow
@@ -361,7 +388,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (portalGrantBtn) {
       portalGrantBtn.addEventListener("click", async () => {
         const granted = await requestPortalPermission();
-        renderPortalSection(granted);
+        renderPortalSection(granted ? "ready" : "denied");
+      });
+    }
+
+    // Portal login link — opens portal in new tab (D-02)
+    const portalLoginLink = document.getElementById("portal-login-link");
+    if (portalLoginLink) {
+      portalLoginLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        chrome.tabs.create({ url: "https://portal.trackmangolf.com" });
       });
     }
 
@@ -371,7 +407,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         (origin) => permissions.origins?.includes(origin)
       );
       if (portalOriginsGranted) {
-        renderPortalSection(true);
+        renderPortalSection("ready");
       }
     });
 
@@ -380,7 +416,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         (origin) => permissions.origins?.includes(origin)
       );
       if (portalOriginsRemoved) {
-        renderPortalSection(false);
+        renderPortalSection("denied");
       }
     });
 
