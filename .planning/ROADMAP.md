@@ -197,7 +197,9 @@ Plans:
   2. The manifest declares `api.trackmangolf.com` and `portal.trackmangolf.com` under `optional_host_permissions` (not `host_permissions`)
   3. The first time a user initiates a portal import, `chrome.permissions.request()` is triggered and the user sees the standard Chrome permission grant dialog
   4. If the user denies the permission request, the extension continues to work normally for report-based capture
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 21-01-PLAN.md — Manifest optional_host_permissions, permissions module, popup portal section, service worker guard
 
 ### Phase 22: GraphQL Client and Cookie Auth
 **Goal**: Authenticated GraphQL communication is established and verified against the live Trackman API from the service worker
@@ -270,7 +272,7 @@ Plans:
 | 18. Local Trajectory Engine | v1.7 | 0/1 | Paused | - |
 | 19. Calibration and Spin Confidence | v1.7 | 0/1 | Paused | - |
 | 20. Product Integration and Validation | v1.7 | 0/1 | Paused | - |
-| 21. Manifest and Permissions Foundation | v1.6 PI | 0/0 | Not started | - |
+| 21. Manifest and Permissions Foundation | v1.6 PI | 0/1 | Planning | - |
 | 22. GraphQL Client and Cookie Auth | v1.6 PI | 0/0 | Not started | - |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/0 | Not started | - |
 | 24. Service Worker Import Flow | v1.6 PI | 0/0 | Not started | - |
