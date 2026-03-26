@@ -71,7 +71,7 @@
 
 **Milestone Goal:** Direct GraphQL API access to pull any session from a user's Trackman account — including old sessions without report URLs — and route them through the existing export, AI, and history pipeline unchanged.
 
-- [ ] **Phase 21: Manifest and Permissions Foundation** — Extension requests portal API access at runtime without disrupting existing users
+- [x] **Phase 21: Manifest and Permissions Foundation** — Extension requests portal API access at runtime without disrupting existing users (completed 2026-03-26)
 - [ ] **Phase 22: GraphQL Client and Cookie Auth** — Authenticated GraphQL communication established and verified against the live Trackman API
 - [ ] **Phase 23: GraphQL-to-SessionData Parser** — Measurement fields mapped to SessionData with defensive null handling and deduplication identity
 - [ ] **Phase 24: Service Worker Import Flow** — FETCH_ACTIVITIES and IMPORT_SESSION handlers with fire-and-forget status tracking
@@ -199,7 +199,7 @@ Plans:
   4. If the user denies the permission request, the extension continues to work normally for report-based capture
 **Plans**: 1 plan
 Plans:
-- [ ] 21-01-PLAN.md — Manifest optional_host_permissions, permissions module, popup portal section, service worker guard
+- [x] 21-01-PLAN.md — Manifest optional_host_permissions, permissions module, popup portal section, service worker guard
 
 ### Phase 22: GraphQL Client and Cookie Auth
 **Goal**: Authenticated GraphQL communication is established and verified against the live Trackman API from the service worker
@@ -272,7 +272,7 @@ Plans:
 | 18. Local Trajectory Engine | v1.7 | 0/1 | Paused | - |
 | 19. Calibration and Spin Confidence | v1.7 | 0/1 | Paused | - |
 | 20. Product Integration and Validation | v1.7 | 0/1 | Paused | - |
-| 21. Manifest and Permissions Foundation | v1.6 PI | 0/1 | Planning | - |
+| 21. Manifest and Permissions Foundation | v1.6 PI | 1/1 | Complete    | 2026-03-26 |
 | 22. GraphQL Client and Cookie Auth | v1.6 PI | 0/0 | Not started | - |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/0 | Not started | - |
 | 24. Service Worker Import Flow | v1.6 PI | 0/0 | Not started | - |

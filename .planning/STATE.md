@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Trackman Portal Integration
-status: planning
+status: executing
 stopped_at: Phase 21 context gathered
-last_updated: "2026-03-26T20:47:06.583Z"
-last_activity: 2026-03-26 — Roadmap created for v1.6 Portal Integration (phases 21-25)
+last_updated: "2026-03-26T21:15:08.454Z"
+last_activity: 2026-03-26
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 4
+  completed_phases: 3
+  total_plans: 6
+  completed_plans: 5
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** v1.6 Trackman Portal Integration — Phase 21: Manifest and Permissions Foundation
+**Current focus:** Phase 21 — manifest-permissions-foundation
 
 ## Current Position
 
-Phase: 21 — Manifest and Permissions Foundation
-Plan: —
-Status: Not started (roadmap complete; ready for planning)
-Last activity: 2026-03-26 — Roadmap created for v1.6 Portal Integration (phases 21-25)
+Phase: 21
+Plan: Not started
+Status: Executing Phase 21
+Last activity: 2026-03-26
 
 Progress: [░░░░░░░░░░] 0%
 
