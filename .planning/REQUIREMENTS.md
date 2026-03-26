@@ -10,7 +10,7 @@ Requirements for v1.6 Trackman Portal Integration milestone. Each maps to roadma
 ### Permissions & Auth
 
 - [ ] **PERM-01**: Extension requests portal API access at runtime via `optional_host_permissions` — existing users are not disrupted on update
-- [ ] **PERM-02**: Extension can make authenticated GraphQL requests to `api.trackmangolf.com/graphql` using the browser's Trackman session cookies
+- [x] **PERM-02**: Extension can make authenticated GraphQL requests to `api.trackmangolf.com/graphql` using the browser's Trackman session cookies
 - [ ] **PERM-03**: User sees a clear message when they aren't logged into Trackman portal (auth failure feedback)
 
 ### Activity Browser
@@ -30,7 +30,7 @@ Requirements for v1.6 Trackman Portal Integration milestone. Each maps to roadma
 
 - [ ] **RESIL-01**: Session import continues in the service worker even if the popup is closed mid-import
 - [ ] **RESIL-02**: Popup reads import status from storage on open/re-open and displays progress or completion
-- [ ] **RESIL-03**: Parser handles missing, null, or unexpected fields gracefully without crashing
+- [x] **RESIL-03**: Parser handles missing, null, or unexpected fields gracefully without crashing
 
 ## Deferred v1.7 Requirements
 
@@ -121,7 +121,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROMPT-01 | Phase 16 | Pending |
 | PROMPT-02 | Phase 16 | Pending |
 | PERM-01 | Phase 21 | Pending |
-| PERM-02 | Phase 22 | Pending |
+| PERM-02 | Phase 22 | Complete |
 | PERM-03 | Phase 22 | Pending |
 | BROWSE-01 | Phase 25 | Pending |
 | BROWSE-02 | Phase 24 | Pending |
@@ -132,7 +132,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PIPE-03 | Phase 23 | Pending |
 | RESIL-01 | Phase 24 | Pending |
 | RESIL-02 | Phase 24 | Pending |
-| RESIL-03 | Phase 22 | Pending |
+| RESIL-03 | Phase 22 | Complete |
 
 **Coverage:**
 - v1.6 Portal Integration requirements: 13 total

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Trackman Portal Integration
 status: executing
-stopped_at: Phase 22 context gathered
-last_updated: "2026-03-26T21:39:17.205Z"
+stopped_at: Phase 22 Plan 01 complete
+last_updated: "2026-03-26T22:30:05Z"
 last_activity: 2026-03-26
 progress:
   total_phases: 13
   completed_phases: 3
   total_plans: 6
-  completed_plans: 5
-  percent: 0
+  completed_plans: 6
+  percent: 46
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** Phase 21 — manifest-permissions-foundation
+**Current focus:** Phase 22 — graphql-client-cookie-auth
 
 ## Current Position
 
-Phase: 21
-Plan: Not started
-Status: Executing Phase 21
-Last activity: 2026-03-26
+Phase: 22
+Plan: 1 of 2 complete
+Status: Plan 01 complete, Plan 02 remaining
+Last activity: 2026-03-26 — Phase 22 Plan 01 complete (graphql_client module)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████░░░░░] 46%
 
 ## Performance Metrics
 
@@ -55,10 +55,13 @@ Recent decisions relevant to this milestone:
 - Measurement type has 60+ fields — superset of what the interceptor captures
 - Credit milo-mac for GraphQL API discovery when pushing to GitHub
 - optional_host_permissions chosen over host_permissions to avoid disabling existing users on update
+- executeQuery uses credentials:include for ambient browser cookie auth — no token management needed
+- classifyAuthResult checks error code (UNAUTHENTICATED) then message substrings before falling through to generic error
+- HEALTH_CHECK_QUERY targets me { id } — minimal query sufficient for auth detection
 
 ### Pending Todos
 
-- Plan Phase 21 (Manifest and Permissions Foundation)
+- Plan Phase 22 Plan 02 (popup auth check + not-logged-in UX)
 
 ### Blockers/Concerns
 
@@ -74,6 +77,6 @@ Recent decisions relevant to this milestone:
 
 ## Session Continuity
 
-Last session: 2026-03-26T21:39:17.202Z
-Stopped at: Phase 22 context gathered
-Resume file: .planning/phases/22-graphql-client-cookie-auth/22-CONTEXT.md
+Last session: 2026-03-26T22:30:05Z
+Stopped at: Completed 22-01-PLAN.md
+Resume file: .planning/phases/22-graphql-client-cookie-auth/22-01-SUMMARY.md

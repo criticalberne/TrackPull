@@ -212,7 +212,7 @@ Plans:
   4. Parser gracefully handles null, missing, or unexpected response fields without throwing — unknown fields are skipped, not fatal
 **Plans**: 2 plans
 Plans:
-- [ ] 22-01-PLAN.md — GraphQL client module with executeQuery, classifyAuthResult, and health-check query (TDD)
+- [x] 22-01-PLAN.md — GraphQL client module with executeQuery, classifyAuthResult, and health-check query (TDD)
 - [ ] 22-02-PLAN.md — Service worker auth check handler, popup three-state portal section, login link
 **UI hint**: yes
 
@@ -276,7 +276,7 @@ Plans:
 | 19. Calibration and Spin Confidence | v1.7 | 0/1 | Paused | - |
 | 20. Product Integration and Validation | v1.7 | 0/1 | Paused | - |
 | 21. Manifest and Permissions Foundation | v1.6 PI | 1/1 | Complete    | 2026-03-26 |
-| 22. GraphQL Client and Cookie Auth | v1.6 PI | 0/2 | Not started | - |
+| 22. GraphQL Client and Cookie Auth | v1.6 PI | 1/2 | In progress | - |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/0 | Not started | - |
 | 24. Service Worker Import Flow | v1.6 PI | 0/0 | Not started | - |
 | 25. Activity Browser UI | v1.6 PI | 0/0 | Not started | - |
