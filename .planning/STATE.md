@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Trackman Portal Integration
-status: in_progress
-stopped_at: Roadmap created; ready to plan Phase 21
-last_updated: "2026-03-26T00:00:00.000Z"
-last_activity: 2026-03-26 — v1.6 Trackman Portal Integration roadmap created (phases 21-25)
+status: planning
+stopped_at: Phase 21 context gathered
+last_updated: "2026-03-26T20:47:06.583Z"
+last_activity: 2026-03-26 — Roadmap created for v1.6 Portal Integration (phases 21-25)
 progress:
   total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 4
   percent: 0
 ---
 
@@ -35,6 +35,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity:**
+
 - v1.3: 8 plans, 22 tasks, 5 days
 - v1.4: 2 plans, 4 tasks, 1 day
 - v1.5: 6 plans, 14 tasks, 1 day
@@ -46,6 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 See: .planning/PROJECT.md Key Decisions table (updated 2026-03-26)
 
 Recent decisions relevant to this milestone:
+
 - GraphQL API at api.trackmangolf.com/graphql is the data source — cookie-based auth via credentials:include
 - Base64 activity IDs decode to SessionActivity\n{uuid}
 - Older SESSION type activities accessible via node(id) query even without reportLink
@@ -72,6 +74,6 @@ Recent decisions relevant to this milestone:
 
 ## Session Continuity
 
-Last session: 2026-03-26T00:00:00.000Z
-Stopped at: Roadmap created; run /gsd:plan-phase 21 to begin
-Resume file: .planning/ROADMAP.md
+Last session: 2026-03-26T20:47:06.581Z
+Stopped at: Phase 21 context gathered
+Resume file: .planning/phases/21-manifest-permissions-foundation/21-CONTEXT.md
