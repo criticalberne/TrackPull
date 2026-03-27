@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Trackman Portal Integration
-status: verifying
-stopped_at: Phase 25 context gathered
-last_updated: "2026-03-27T02:36:00.569Z"
+status: executing
+stopped_at: Completed 25-01-PLAN.md
+last_updated: "2026-03-27T03:00:05.108Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 13
   completed_phases: 6
-  total_plans: 11
-  completed_plans: 10
+  total_plans: 13
+  completed_plans: 11
   percent: 46
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** Phase 24 — service-worker-import-flow
+**Current focus:** Phase 25 — activity-browser-ui
 
 ## Current Position
 
-Phase: 25
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 25 (activity-browser-ui) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-27
 
 Progress: [█████░░░░░] 46%
@@ -62,6 +62,7 @@ Recent decisions relevant to this milestone:
 - [Phase 24]: isAuthError inline helper for generic GraphQL auth detection (avoids classifyAuthResult type mismatch)
 - [Phase 24]: IMPORT_STATUS written before sendResponse for RESIL-01 popup-close safety
 - [Phase 24]: Use existing showToast for import status display — dark mode safe, avoids parallel display logic
+- [Phase 25]: ActivitySummary strokeCount and type are nullable (null not undefined) for JSON safety
 
 ### Pending Todos
 
@@ -81,6 +82,6 @@ Recent decisions relevant to this milestone:
 
 ## Session Continuity
 
-Last session: 2026-03-27T02:36:00.566Z
-Stopped at: Phase 25 context gathered
-Resume file: .planning/phases/25-activity-browser-ui/25-CONTEXT.md
+Last session: 2026-03-27T03:00:05.105Z
+Stopped at: Completed 25-01-PLAN.md
+Resume file: None

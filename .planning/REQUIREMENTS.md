@@ -15,10 +15,10 @@ Requirements for v1.6 Trackman Portal Integration milestone. Each maps to roadma
 
 ### Activity Browser
 
-- [ ] **BROWSE-01**: User can view a list of their Trackman activities showing date, stroke count, and activity type
+- [x] **BROWSE-01**: User can view a list of their Trackman activities showing date, stroke count, and activity type
 - [x] **BROWSE-02**: User can select a single activity and import its full shot data into the extension
-- [ ] **BROWSE-03**: Activities are grouped by time period (Today / This Week / This Month / Older)
-- [ ] **BROWSE-04**: User can filter activities by type (Session, Shot Analysis, Course Play, etc.)
+- [x] **BROWSE-03**: Activities are grouped by time period (Today / This Week / This Month / Older)
+- [x] **BROWSE-04**: User can filter activities by type (Session, Shot Analysis, Course Play, etc.)
 
 ### Data Pipeline
 
@@ -123,10 +123,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERM-01 | Phase 21 | Pending |
 | PERM-02 | Phase 22 | Complete |
 | PERM-03 | Phase 22 | Complete |
-| BROWSE-01 | Phase 25 | Pending |
+| BROWSE-01 | Phase 25 | Complete |
 | BROWSE-02 | Phase 24 | Complete |
-| BROWSE-03 | Phase 25 | Pending |
-| BROWSE-04 | Phase 25 | Pending |
+| BROWSE-03 | Phase 25 | Complete |
+| BROWSE-04 | Phase 25 | Complete |
 | PIPE-01 | Phase 23 | Pending |
 | PIPE-02 | Phase 24 | Complete |
 | PIPE-03 | Phase 23 | Pending |

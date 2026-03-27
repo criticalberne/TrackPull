@@ -254,7 +254,7 @@ Plans:
   4. The browser panel displays idle, loading, loaded, importing, and error states — the user always knows what is happening
 **Plans**: 2 plans
 Plans:
-- [ ] 25-01-PLAN.md — Data model expansion, pure helper functions with TDD, HTML/CSS scaffold
+- [x] 25-01-PLAN.md — Data model expansion, pure helper functions with TDD, HTML/CSS scaffold
 - [ ] 25-02-PLAN.md — Popup rendering logic, filter wiring, import handlers, visual verification
 **UI hint**: yes
 
@@ -287,7 +287,7 @@ Plans:
 | 22. GraphQL Client and Cookie Auth | v1.6 PI | 2/2 | Complete   | 2026-03-26 |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/1 | Complete    | 2026-03-27 |
 | 24. Service Worker Import Flow | v1.6 PI | 2/2 | Complete    | 2026-03-27 |
-| 25. Activity Browser UI | v1.6 PI | 0/2 | Not started | - |
+| 25. Activity Browser UI | v1.6 PI | 1/2 | In Progress|  |
 
 ---
 *Roadmap created: 2026-03-02*
