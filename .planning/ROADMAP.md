@@ -225,7 +225,9 @@ Plans:
   2. Sessions imported from the portal and sessions captured via the interceptor for the same round are deduplicated — the same session is not stored twice
   3. `metric_names` on the parsed SessionData accurately reflects only fields that were populated — no phantom metric labels
   4. A test suite covering real API response fixtures passes, with explicit cases for missing and null measurement fields
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 23-01-PLAN.md — Portal parser with alias map, UUID extraction, and TDD test suite
 
 ### Phase 24: Service Worker Import Flow
 **Goal**: The service worker can fetch the activity list and execute a full session import that persists even if the popup is closed mid-import
@@ -277,7 +279,7 @@ Plans:
 | 20. Product Integration and Validation | v1.7 | 0/1 | Paused | - |
 | 21. Manifest and Permissions Foundation | v1.6 PI | 1/1 | Complete    | 2026-03-26 |
 | 22. GraphQL Client and Cookie Auth | v1.6 PI | 2/2 | Complete   | 2026-03-26 |
-| 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/0 | Not started | - |
+| 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/1 | Not started | - |
 | 24. Service Worker Import Flow | v1.6 PI | 0/0 | Not started | - |
 | 25. Activity Browser UI | v1.6 PI | 0/0 | Not started | - |
 
