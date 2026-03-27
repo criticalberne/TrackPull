@@ -26,19 +26,17 @@ export interface StrokeMeasurement {
 }
 
 export interface GraphQLStroke {
-  id?: string | null;
-  measurement?: StrokeMeasurement | null;
-}
-
-export interface GraphQLStrokeGroup {
   club?: string | null;
-  strokes?: GraphQLStroke[] | null;
+  time?: string | null;
+  targetDistance?: number | null;
+  measurement?: StrokeMeasurement | null;
 }
 
 export interface GraphQLActivity {
   id: string;
-  date?: string | null;
-  strokeGroups?: GraphQLStrokeGroup[] | null;
+  time?: string | null;
+  strokeCount?: number | null;
+  strokes?: GraphQLStroke[] | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +52,7 @@ const GRAPHQL_METRIC_ALIAS: Record<string, string> = {
   faceAngle: "FaceAngle",
   faceToPath: "FaceToPath",
   swingDirection: "SwingDirection",
+  swingPlane: "SwingPlane",
   dynamicLoft: "DynamicLoft",
   spinRate: "SpinRate",
   spinAxis: "SpinAxis",
@@ -126,57 +125,51 @@ export function parsePortalActivity(
     if (!activity?.id) return null;
 
     const reportId = extractActivityUuid(activity.id);
-    const date = activity.date ?? "Unknown";
+    const date = activity.time ?? "Unknown";
     const allMetricNames = new Set<string>();
-    const club_groups: ClubGroup[] = [];
 
-    for (const group of activity.strokeGroups ?? []) {
-      if (!group || typeof group !== "object") continue;
+    // Group flat strokes by club name
+    const clubMap = new Map<string, Shot[]>();
 
-      const clubName = group.club || "Unknown";
-      const shots: Shot[] = [];
-      let shotNumber = 1;
+    for (const stroke of activity.strokes ?? []) {
+      if (!stroke?.measurement) continue;
 
-      for (const stroke of group.strokes ?? []) {
-        if (!stroke?.measurement) continue;
+      const clubName = stroke.club || "Unknown";
+      const shotMetrics: Record<string, string> = {};
 
-        const shotMetrics: Record<string, string> = {};
+      for (const [key, value] of Object.entries(stroke.measurement)) {
+        if (value === null || value === undefined) continue;
 
-        for (const [key, value] of Object.entries(stroke.measurement)) {
-          // Skip null/undefined
-          if (value === null || value === undefined) continue;
+        const numValue =
+          typeof value === "number" ? value : parseFloat(String(value));
+        if (isNaN(numValue)) continue;
 
-          // Resolve numeric value — skip NaN-producing strings
-          const numValue =
-            typeof value === "number" ? value : parseFloat(String(value));
-          if (isNaN(numValue)) continue;
-
-          const normalizedKey = normalizeMetricKey(key);
-          shotMetrics[normalizedKey] = `${numValue}`;
-          allMetricNames.add(normalizedKey);
-        }
-
-        // Only add the shot if it has at least one valid metric
-        if (Object.keys(shotMetrics).length > 0) {
-          shots.push({
-            shot_number: shotNumber++,
-            metrics: shotMetrics,
-          });
-        }
+        const normalizedKey = normalizeMetricKey(key);
+        shotMetrics[normalizedKey] = `${numValue}`;
+        allMetricNames.add(normalizedKey);
       }
 
-      // Only add the club group if it has at least one valid shot
-      if (shots.length > 0) {
-        club_groups.push({
-          club_name: clubName,
-          shots,
-          averages: {},
-          consistency: {},
+      if (Object.keys(shotMetrics).length > 0) {
+        const shots = clubMap.get(clubName) ?? [];
+        shots.push({
+          shot_number: shots.length + 1,
+          metrics: shotMetrics,
         });
+        clubMap.set(clubName, shots);
       }
     }
 
-    if (club_groups.length === 0) return null;
+    if (clubMap.size === 0) return null;
+
+    const club_groups: ClubGroup[] = [];
+    for (const [clubName, shots] of clubMap) {
+      club_groups.push({
+        club_name: clubName,
+        shots,
+        averages: {},
+        consistency: {},
+      });
+    }
 
     const session: SessionData = {
       date,

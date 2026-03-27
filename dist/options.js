@@ -201,7 +201,8 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
         AI_SERVICE: "aiService",
         HITTING_SURFACE: "hittingSurface",
         INCLUDE_AVERAGES: "includeAverages",
-        SESSION_HISTORY: "sessionHistory"
+        SESSION_HISTORY: "sessionHistory",
+        IMPORT_STATUS: "importStatus"
       };
     }
   });

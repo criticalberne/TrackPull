@@ -3,7 +3,7 @@
   "name": "TrackPull",
   "version": "1.5.3",
   "description": "Pull shot data from Trackman reports",
-  "permissions": ["storage", "downloads", "clipboardWrite"],
+  "permissions": ["storage", "downloads", "clipboardWrite", "tabs"],
   "host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"],
   "optional_host_permissions": [
     "https://api.trackmangolf.com/*",
@@ -22,6 +22,13 @@
       "matches": ["https://web-dynamic-reports.trackmangolf.com/*"],
       "js": ["bridge.js"],
       "run_at": "document_start",
+      "all_frames": false,
+      "world": "ISOLATED"
+    },
+    {
+      "matches": ["https://portal.trackmangolf.com/*"],
+      "js": ["portal_fetch.js"],
+      "run_at": "document_idle",
       "all_frames": false,
       "world": "ISOLATED"
     }

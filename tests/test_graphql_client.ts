@@ -17,6 +17,7 @@ function mockResponse(
     ok,
     status,
     json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
   } as unknown as Response;
 }
 
@@ -90,15 +91,15 @@ describe("graphql_client", () => {
 
   // --- classifyAuthResult tests ---
 
-  it("Test 6: classifyAuthResult returns authenticated when data.me.id is truthy and no errors", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
-      data: { me: { id: "abc123" } },
+  it("Test 6: classifyAuthResult returns authenticated when data.me.__typename is truthy and no errors", () => {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
+      data: { me: { __typename: "Me" } },
     };
     expect(classifyAuthResult(result)).toEqual({ kind: "authenticated" });
   });
 
   it("Test 7: classifyAuthResult returns unauthenticated when errors[0].extensions.code is UNAUTHENTICATED", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: null,
       errors: [
         {
@@ -111,7 +112,7 @@ describe("graphql_client", () => {
   });
 
   it("Test 8: classifyAuthResult returns unauthenticated when errors[0].message contains 'unauthorized' (case-insensitive)", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: null,
       errors: [{ message: "User is Unauthorized to access this resource" }],
     };
@@ -119,7 +120,7 @@ describe("graphql_client", () => {
   });
 
   it("Test 9: classifyAuthResult returns unauthenticated when errors[0].message contains 'not logged in' (case-insensitive)", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: null,
       errors: [{ message: "You are Not Logged In" }],
     };
@@ -127,28 +128,28 @@ describe("graphql_client", () => {
   });
 
   it("Test 10: classifyAuthResult returns unauthenticated when data is null and errors is undefined", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: null,
     };
     expect(classifyAuthResult(result)).toEqual({ kind: "unauthenticated" });
   });
 
   it("Test 11: classifyAuthResult returns unauthenticated when data.me is null", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: { me: null },
     };
     expect(classifyAuthResult(result)).toEqual({ kind: "unauthenticated" });
   });
 
-  it("Test 12: classifyAuthResult returns unauthenticated when data.me.id is empty string", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
-      data: { me: { id: "" } },
+  it("Test 12: classifyAuthResult returns unauthenticated when data.me.__typename is empty string", () => {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
+      data: { me: { __typename: "" } },
     };
     expect(classifyAuthResult(result)).toEqual({ kind: "unauthenticated" });
   });
 
   it("Test 13: classifyAuthResult returns error with user-friendly message for non-auth error code", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: null,
       errors: [
         {
@@ -164,7 +165,7 @@ describe("graphql_client", () => {
   });
 
   it("Test 14: classifyAuthResult does not throw when errors is empty array — returns unauthenticated (data is null)", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: null,
       errors: [],
     };
@@ -173,7 +174,7 @@ describe("graphql_client", () => {
   });
 
   it("Test 15: classifyAuthResult does not throw when errors[0] has no extensions property", () => {
-    const result: GraphQLResponse<{ me: { id: string } | null }> = {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: null,
       errors: [{ message: "some error without extensions" }],
     };
@@ -185,8 +186,8 @@ describe("graphql_client", () => {
     });
   });
 
-  it("Test 16: HEALTH_CHECK_QUERY contains 'me' and 'id' substrings", () => {
+  it("Test 16: HEALTH_CHECK_QUERY contains 'me' and '__typename' substrings", () => {
     expect(HEALTH_CHECK_QUERY).toContain("me");
-    expect(HEALTH_CHECK_QUERY).toContain("id");
+    expect(HEALTH_CHECK_QUERY).toContain("__typename");
   });
 });

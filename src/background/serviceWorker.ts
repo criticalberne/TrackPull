@@ -120,7 +120,10 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
           ? true
           : Boolean(result[STORAGE_KEYS.INCLUDE_AVERAGES]);
         const csvContent = writeCsv(data, includeAverages, undefined, unitChoice, surface);
-        const filename = `ShotData_${data.date || "unknown"}.csv`;
+        const rawDate = data.date || "unknown";
+        // Sanitize date for filename — remove colons and characters invalid in filenames
+        const safeDate = rawDate.replace(/[:.]/g, "-").replace(/[/\\?%*|"<>]/g, "");
+        const filename = `ShotData_${safeDate}.csv`;
 
         chrome.downloads.download(
           {
@@ -155,7 +158,7 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         return;
       }
       try {
-        const result = await executeQuery<{ me: { id: string } | null }>(HEALTH_CHECK_QUERY);
+        const result = await executeQuery<{ me: { __typename: string } | null }>(HEALTH_CHECK_QUERY);
         const authStatus = classifyAuthResult(result);
         if (authStatus.kind === "error") {
           console.error("TrackPull: GraphQL health check error:", authStatus.message);
@@ -182,12 +185,12 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
       }
       try {
         const result = await executeQuery<{
-          activities: {
-            edges: Array<{
-              node: { id: string; date: string; strokeCount?: number; type?: string };
+          me: {
+            activities: Array<{
+              id: string; time: string; strokeCount?: number; kind?: string;
             }>;
           };
-        }>(FETCH_ACTIVITIES_QUERY, { first: 20 });
+        }>(FETCH_ACTIVITIES_QUERY);
         if (result.errors && result.errors.length > 0) {
           if (isAuthError(result.errors)) {
             sendResponse({ success: false, error: "Session expired — log into portal.trackmangolf.com" });
@@ -196,13 +199,13 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
           }
           return;
         }
-        const activities: ActivitySummary[] =
-          result.data?.activities?.edges?.map((e) => ({
-            id: e.node.id,
-            date: e.node.date,
-            strokeCount: e.node.strokeCount ?? null,
-            type: e.node.type ?? null,
-          })) ?? [];
+        const rawActivities = result.data?.me?.activities ?? [];
+        const activities: ActivitySummary[] = rawActivities.slice(0, 20).map((a) => ({
+          id: a.id,
+          date: a.time,
+          strokeCount: a.strokeCount ?? null,
+          type: a.kind ?? null,
+        }));
         sendResponse({ success: true, activities });
       } catch (err) {
         console.error("TrackPull: Fetch activities failed:", err);
@@ -220,11 +223,9 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         sendResponse({ success: false, error: "Portal permission not granted" });
         return;
       }
-      // Write importing status BEFORE responding — RESIL-01: popup can close without breaking import
       await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "importing" } as ImportStatus });
       sendResponse({ success: true });
 
-      // Import continues in service worker regardless of popup state
       try {
         const result = await executeQuery<{ node: GraphQLActivity }>(
           IMPORT_SESSION_QUERY,
@@ -241,11 +242,38 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         const activity = result.data?.node;
         const session = activity ? parsePortalActivity(activity) : null;
         if (!session) {
-          // D-09: empty activity — no strokes
           await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "No shot data found for this activity" } as ImportStatus });
           return;
         }
-        // PIPE-02: write to TRACKMAN_DATA so all export/AI/history paths see the imported session
+        await chrome.storage.local.set({ [STORAGE_KEYS.TRACKMAN_DATA]: session });
+        await saveSessionToHistory(session);
+        await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "success" } as ImportStatus });
+        console.log("TrackPull: Session imported successfully:", session.report_id);
+      } catch (err) {
+        console.error("TrackPull: Import failed:", err);
+        await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Import failed — try again" } as ImportStatus });
+      }
+    })();
+    return true;
+  }
+
+  // Receives pre-fetched GraphQL data from popup (fetched via content script on portal page)
+  if (message.type === "SAVE_IMPORTED_SESSION") {
+    const { graphqlData } = message as { type: string; graphqlData: { data?: { node?: GraphQLActivity }; errors?: Array<{ message: string }> }; activityId: string };
+    (async () => {
+      await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "importing" } as ImportStatus });
+
+      try {
+        if (graphqlData.errors && graphqlData.errors.length > 0) {
+          await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: graphqlData.errors[0].message } as ImportStatus });
+          return;
+        }
+        const activity = graphqlData.data?.node;
+        const session = activity ? parsePortalActivity(activity) : null;
+        if (!session) {
+          await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "No shot data found for this activity" } as ImportStatus });
+          return;
+        }
         await chrome.storage.local.set({ [STORAGE_KEYS.TRACKMAN_DATA]: session });
         await saveSessionToHistory(session);
         await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "success" } as ImportStatus });

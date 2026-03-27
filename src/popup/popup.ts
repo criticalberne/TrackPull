@@ -6,16 +6,14 @@ import { STORAGE_KEYS } from "../shared/constants";
 import { migrateLegacyPref, getApiSourceUnitSystem, normalizeMetricValue, DISTANCE_LABELS, SPEED_LABELS, DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import type { SessionData, Shot } from "../models/types";
 import type { UnitChoice } from "../shared/unit_normalization";
-import type { ActivitySummary, ImportStatus } from "../shared/import_types";
+import type { ImportStatus } from "../shared/import_types";
+import { IMPORT_SESSION_QUERY } from "../shared/import_types";
 import { writeTsv } from "../shared/tsv_writer";
 import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
 import { assemblePrompt, buildUnitLabel, countSessionShots } from "../shared/prompt_builder";
 import { loadCustomPrompts } from "../shared/custom_prompts";
 import { hasPortalPermission, requestPortalPermission, PORTAL_ORIGINS } from "../shared/portalPermissions";
-import { formatActivityDate, getTimePeriod, filterActivities, getUniqueTypes } from "../shared/activity_helpers";
-import type { TimePeriod } from "../shared/activity_helpers";
-import { extractActivityUuid } from "../shared/portal_parser";
 
 export function computeClubAverage(
   shots: Shot[],
@@ -46,150 +44,88 @@ let cachedUnitChoice: UnitChoice = DEFAULT_UNIT_CHOICE;
 let cachedSurface: "Grass" | "Mat" = "Mat";
 let cachedCustomPrompts: CustomPrompt[] = [];
 
-/** Cached activities from the last FETCH_ACTIVITIES response. */
-let cachedActivities: ActivitySummary[] = [];
-/** Set of report_id UUIDs already in session history (for "Imported" badge). */
-let importedReportIds: Set<string> = new Set();
-
 const AI_URLS: Record<string, string> = {
   "ChatGPT": "https://chatgpt.com",
   "Claude": "https://claude.ai",
   "Gemini": "https://gemini.google.com",
 };
 
-/**
- * Read session history from storage and return the set of report_id values.
- * Used to detect already-imported activities (D-06).
- * report_id in history is the UUID extracted from the base64 activity ID.
- */
-async function fetchImportedIds(): Promise<Set<string>> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get([STORAGE_KEYS.SESSION_HISTORY], (result) => {
-      const history = (result[STORAGE_KEYS.SESSION_HISTORY] as Array<{ snapshot: { report_id: string } }>) ?? [];
-      resolve(new Set(history.map((e) => e.snapshot.report_id)));
-    });
-  });
-}
+/** URL pattern for portal activity pages. Captures the base64 activity ID. */
+const PORTAL_ACTIVITY_PATTERN = /^https:\/\/portal\.trackmangolf\.com\/player\/activities\/([A-Za-z0-9+/=]+)$/;
 
 /**
- * Render the activity list grouped by time period with filter applied.
- * Per D-04: compact single-line rows. Per D-07: flat section headers.
- * Per D-08: empty periods hidden. Per D-06: "Imported" label for already-imported.
+ * Check if the active tab is on a portal activity page.
+ * If so, show the import button. Otherwise show instructions.
  */
-function renderActivityBrowser(
-  activities: ActivitySummary[],
-  importedIds: Set<string>,
-  typeFilter: string
-): void {
-  const container = document.getElementById("activity-list-container");
-  if (!container) return;
-
-  const filtered = filterActivities(activities, typeFilter);
-
-  if (filtered.length === 0) {
-    container.innerHTML = `<div class="activity-list-empty">${
-      activities.length === 0 ? "No activities found" : "No activities match this filter"
-    }</div>`;
-    return;
-  }
-
-  const periods: TimePeriod[] = ["Today", "This Week", "This Month", "Older"];
-
-  let html = "";
-  for (const period of periods) {
-    const group = filtered.filter((a) => getTimePeriod(a.date) === period);
-    if (group.length === 0) continue;
-    html += `<div class="activity-period-header">${escapeHtml(period)}</div>`;
-    for (const activity of group) {
-      // Compare UUID (report_id in history) against decoded activity.id
-      const isImported = importedIds.has(extractActivityUuid(activity.id));
-      const dateStr = formatActivityDate(activity.date);
-      const typeStr = activity.type ? escapeHtml(activity.type) : "\u2014";
-      const countStr = activity.strokeCount !== null ? String(activity.strokeCount) : "\u2014";
-      const actionHtml = isImported
-        ? `<span class="activity-imported-label">Imported</span>`
-        : `<button class="activity-import-btn" data-activity-id="${escapeHtml(activity.id)}">Import</button>`;
-      html += `<div class="activity-row">
-        <span class="activity-date">${dateStr}</span>
-        <span class="activity-type">${typeStr}</span>
-        <span class="activity-stroke-count">${countStr}</span>
-        ${actionHtml}
-      </div>`;
-    }
-  }
-  container.innerHTML = html;
-
-  // Attach import button click handlers
-  container.querySelectorAll<HTMLButtonElement>(".activity-import-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const activityId = btn.dataset.activityId;
-      if (!activityId) return;
-      btn.disabled = true;
-      btn.textContent = "Importing...";
-      chrome.runtime.sendMessage({ type: "IMPORT_SESSION", activityId });
-      // Import result is displayed via showImportStatus (storage.onChanged listener from Phase 24)
-    });
-  });
-}
-
-/**
- * Populate the type filter dropdown with unique types from fetched activities.
- * Per D-10: dynamically populated. Per D-09: "All Types" default.
- */
-function populateTypeFilter(activities: ActivitySummary[]): void {
-  const select = document.getElementById("activity-type-filter") as HTMLSelectElement | null;
-  if (!select) return;
-
-  const types = getUniqueTypes(activities);
-  // Reset to just "All Types"
-  select.innerHTML = `<option value="">All Types</option>`;
-  for (const type of types) {
-    const opt = document.createElement("option");
-    opt.value = type;
-    opt.textContent = type;
-    select.appendChild(opt);
-  }
-}
-
-/**
- * Fetch activities from service worker and render the browser.
- * Called when portal state is "ready". Per D-01: auto-load on open.
- * Per D-12: shows loading/loaded/error states.
- */
-async function loadActivityBrowser(): Promise<void> {
-  const container = document.getElementById("activity-list-container");
-  if (container) {
-    container.innerHTML = `<div class="activity-loading">Loading activities...</div>`;
-  }
+async function checkActiveTabForActivity(): Promise<void> {
+  const detected = document.getElementById("portal-activity-detected");
+  const noActivity = document.getElementById("portal-no-activity");
+  if (!detected || !noActivity) return;
 
   try {
-    // Fetch imported IDs and activities in parallel
-    const [ids, response] = await Promise.all([
-      fetchImportedIds(),
-      new Promise<{ success: boolean; activities?: ActivitySummary[]; error?: string }>((resolve) => {
-        chrome.runtime.sendMessage({ type: "FETCH_ACTIVITIES" }, resolve);
-      }),
-    ]);
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const match = tab?.url?.match(PORTAL_ACTIVITY_PATTERN);
 
-    importedReportIds = ids;
+    if (match && tab.id) {
+      const activityId = match[1];
+      const tabId = tab.id;
+      detected.style.display = "";
+      noActivity.style.display = "none";
 
-    if (!response || !response.success) {
-      if (container) {
-        container.innerHTML = `<div class="activity-list-empty">${escapeHtml(response?.error ?? "Unable to fetch activities")}</div>`;
+      const importBtn = document.getElementById("portal-import-btn");
+      if (importBtn) {
+        importBtn.addEventListener("click", async () => {
+          (importBtn as HTMLButtonElement).disabled = true;
+          importBtn.textContent = "Importing...";
+
+          try {
+            // Fetch via content script on portal tab (same-origin cookies work)
+            const fetchResponse = await chrome.tabs.sendMessage(tabId, {
+              type: "PORTAL_GRAPHQL_FETCH",
+              query: IMPORT_SESSION_QUERY,
+              variables: { id: activityId },
+            });
+
+            if (!fetchResponse?.success) {
+              showToast(fetchResponse?.error ?? "Failed to fetch activity", "error");
+              (importBtn as HTMLButtonElement).disabled = false;
+              importBtn.textContent = "Import this session";
+              return;
+            }
+
+            // Send raw GraphQL data to service worker for parsing + saving
+            // Listen for import status change to reset button
+            const statusListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+              if (changes[STORAGE_KEYS.IMPORT_STATUS]) {
+                const status = changes[STORAGE_KEYS.IMPORT_STATUS].newValue as ImportStatus | undefined;
+                if (status && (status.state === "success" || status.state === "error")) {
+                  chrome.storage.onChanged.removeListener(statusListener);
+                  (importBtn as HTMLButtonElement).disabled = false;
+                  importBtn.textContent = status.state === "success" ? "Imported!" : "Import this session";
+                }
+              }
+            };
+            chrome.storage.onChanged.addListener(statusListener);
+
+            chrome.runtime.sendMessage({
+              type: "SAVE_IMPORTED_SESSION",
+              graphqlData: fetchResponse.data,
+              activityId,
+            });
+          } catch {
+            showToast("Unable to reach portal tab \u2014 refresh the page and try again", "error");
+            (importBtn as HTMLButtonElement).disabled = false;
+            importBtn.textContent = "Import this session";
+          }
+        });
       }
-      return;
+    } else {
+      detected.style.display = "none";
+      noActivity.style.display = "";
     }
-
-    cachedActivities = response.activities ?? [];
-    populateTypeFilter(cachedActivities);
-
-    const select = document.getElementById("activity-type-filter") as HTMLSelectElement | null;
-    const typeFilter = select?.value ?? "";
-    renderActivityBrowser(cachedActivities, importedReportIds, typeFilter);
   } catch {
-    if (container) {
-      container.innerHTML = `<div class="activity-list-empty">Unable to fetch activities \u2014 try again later</div>`;
-    }
+    detected.style.display = "none";
+    noActivity.style.display = "";
   }
 }
 
@@ -475,17 +411,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     });
 
-    // Refresh imported IDs when history changes (new import completed)
-    chrome.storage.onChanged.addListener((changes) => {
-      if (changes[STORAGE_KEYS.SESSION_HISTORY]) {
-        fetchImportedIds().then((ids) => {
-          importedReportIds = ids;
-          const select = document.getElementById("activity-type-filter") as HTMLSelectElement | null;
-          renderActivityBrowser(cachedActivities, importedReportIds, select?.value ?? "");
-        });
-      }
-    });
-
     const exportBtn = document.getElementById("export-btn");
     if (exportBtn) {
       exportBtn.addEventListener("click", handleExportClick);
@@ -549,35 +474,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     updatePreview();
     renderStatCard();
 
-    // Portal auth check on every popup open (D-01, D-03)
-    try {
-      const authResponse = await new Promise<{ success: boolean; status?: string; message?: string }>((resolve) => {
-        chrome.runtime.sendMessage({ type: "PORTAL_AUTH_CHECK" }, resolve);
-      });
-      if (authResponse.success && authResponse.status) {
-        const stateMap: Record<string, PortalState> = {
-          denied: "denied",
-          unauthenticated: "not-logged-in",
-          authenticated: "ready",
-          error: "error",
-        };
-        renderPortalSection(stateMap[authResponse.status] ?? "error", authResponse.message);
-        if (stateMap[authResponse.status] === "ready") {
-          loadActivityBrowser();
-        }
-      } else {
-        renderPortalSection("error", "Unable to check portal status");
-      }
-    } catch {
-      renderPortalSection("error", "Unable to check portal status");
-    }
-
-    // Activity type filter change handler (D-09, D-11)
-    const activityTypeFilter = document.getElementById("activity-type-filter") as HTMLSelectElement | null;
-    if (activityTypeFilter) {
-      activityTypeFilter.addEventListener("change", () => {
-        renderActivityBrowser(cachedActivities, importedReportIds, activityTypeFilter.value);
-      });
+    // Portal permission check — skip GraphQL health check (cookies don't work from service worker)
+    const portalGranted = await hasPortalPermission();
+    if (portalGranted) {
+      renderPortalSection("ready");
+      checkActiveTabForActivity();
+    } else {
+      renderPortalSection("denied");
     }
 
     // Grant Access button — re-trigger permission request (D-03)
@@ -587,7 +490,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const granted = await requestPortalPermission();
         renderPortalSection(granted ? "ready" : "denied");
         if (granted) {
-          loadActivityBrowser();
+          checkActiveTabForActivity();
         }
       });
     }
@@ -601,6 +504,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     }
 
+    const portalOpenLink = document.getElementById("portal-open-link");
+    if (portalOpenLink) {
+      portalOpenLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        chrome.tabs.create({ url: "https://portal.trackmangolf.com" });
+      });
+    }
+
     // Reactive UI update when permission granted/revoked externally
     chrome.permissions.onAdded.addListener((permissions) => {
       const portalOriginsGranted = PORTAL_ORIGINS.some(
@@ -608,7 +519,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       );
       if (portalOriginsGranted) {
         renderPortalSection("ready");
-        loadActivityBrowser();
+        checkActiveTabForActivity();
       }
     });
 

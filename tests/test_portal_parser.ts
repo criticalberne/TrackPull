@@ -11,90 +11,70 @@ import type { GraphQLActivity } from "../src/shared/portal_parser";
 
 const FIXTURE_FULL_ACTIVITY: GraphQLActivity = {
   id: btoa("SessionActivity\n550e8400-e29b-41d4-a716-446655440000"),
-  date: "2026-01-15",
-  strokeGroups: [
+  time: "2026-01-15",
+  strokes: [
     {
       club: "7-Iron",
-      strokes: [
-        {
-          id: "stroke-1",
-          measurement: {
-            clubSpeed: 85.4,
-            ballSpeed: 120.1,
-            carry: 145.2,
-            spinRate: 7200,
-            someNewField: 42.5,
-          },
-        },
-        {
-          id: "stroke-2",
-          measurement: {
-            clubSpeed: 86.0,
-            ballSpeed: 121.5,
-            carry: 148.0,
-            spinRate: 7350,
-            someNewField: 43.1,
-          },
-        },
-      ],
+      measurement: {
+        clubSpeed: 85.4,
+        ballSpeed: 120.1,
+        carry: 145.2,
+        spinRate: 7200,
+        someNewField: 42.5,
+      },
+    },
+    {
+      club: "7-Iron",
+      measurement: {
+        clubSpeed: 86.0,
+        ballSpeed: 121.5,
+        carry: 148.0,
+        spinRate: 7350,
+        someNewField: 43.1,
+      },
     },
     {
       club: "Driver",
-      strokes: [
-        {
-          id: "stroke-3",
-          measurement: {
-            clubSpeed: 112.0,
-            ballSpeed: 167.3,
-            carry: null,
-            total: 280.5,
-          },
-        },
-      ],
+      measurement: {
+        clubSpeed: 112.0,
+        ballSpeed: 167.3,
+        carry: null,
+        total: 280.5,
+      },
     },
   ],
 };
 
 const FIXTURE_NULL_FIELDS: GraphQLActivity = {
   id: btoa("SessionActivity\nabc-uuid-null-test"),
-  date: "2026-01-20",
-  strokeGroups: [
+  time: "2026-01-20",
+  strokes: [
     {
       club: "PW",
-      strokes: [
-        {
-          id: "stroke-null-1",
-          measurement: {
-            clubSpeed: 78.0,
-            ballSpeed: null,
-            carry: undefined,
-            spinRate: 9500,
-            badValue: "abc" as unknown as number,
-          },
-        },
-      ],
+      measurement: {
+        clubSpeed: 78.0,
+        ballSpeed: null,
+        carry: undefined,
+        spinRate: 9500,
+        badValue: "abc" as unknown as number,
+      },
     },
   ],
 };
 
 const FIXTURE_EMPTY: GraphQLActivity = {
   id: btoa("SessionActivity\nempty-uuid-test"),
-  date: "2026-01-25",
-  strokeGroups: [],
+  time: "2026-01-25",
+  strokes: [],
 };
 
 const FIXTURE_NO_ID: GraphQLActivity = {
   id: "",
-  date: "2026-01-25",
-  strokeGroups: [
+  time: "2026-01-25",
+  strokes: [
     {
       club: "PW",
-      strokes: [
-        {
-          id: "stroke-x",
-          measurement: { clubSpeed: 75.0 },
-        },
-      ],
+      measurement: { clubSpeed: 75.0 },
     },
   ],
 };
@@ -258,25 +238,20 @@ describe("parsePortalActivity", () => {
     it("excludes strokes with no valid numeric measurements", () => {
       const emptyStrokeActivity: GraphQLActivity = {
         id: btoa("SessionActivity\nexclude-empty-stroke"),
-        date: "2026-01-15",
-        strokeGroups: [
+        time: "2026-01-15",
+        strokes: [
           {
             club: "9-Iron",
-            strokes: [
-              {
-                id: "all-null",
-                measurement: {
-                  clubSpeed: null,
-                  ballSpeed: null,
-                },
-              },
-              {
-                id: "has-valid",
-                measurement: {
-                  clubSpeed: 80.0,
-                },
-              },
-            ],
+            measurement: {
+              clubSpeed: null,
+              ballSpeed: null,
+            },
+          },
+          {
+            club: "9-Iron",
+            measurement: {
+              clubSpeed: 80.0,
+            },
           },
         ],
       };
@@ -289,28 +264,18 @@ describe("parsePortalActivity", () => {
     it("excludes club groups with no valid strokes", () => {
       const noValidStrokesActivity: GraphQLActivity = {
         id: btoa("SessionActivity\nexclude-empty-club"),
-        date: "2026-01-15",
-        strokeGroups: [
+        time: "2026-01-15",
+        strokes: [
           {
             club: "EmptyClub",
-            strokes: [
-              {
-                id: "all-null",
-                measurement: {
-                  clubSpeed: null,
-                  ballSpeed: "invalid" as unknown as number,
-                },
-              },
-            ],
+            measurement: {
+              clubSpeed: null,
+              ballSpeed: "invalid" as unknown as number,
+            },
           },
           {
             club: "ValidClub",
-            strokes: [
-              {
-                id: "valid",
-                measurement: { clubSpeed: 90.0 },
-              },
-            ],
+            measurement: { clubSpeed: 90.0 },
           },
         ],
       };
@@ -337,19 +302,14 @@ describe("parsePortalActivity", () => {
       expect(session!.date).toBe("2026-01-15");
     });
 
-    it("uses Unknown when date is null", () => {
+    it("uses Unknown when time is null", () => {
       const activity: GraphQLActivity = {
         id: btoa("SessionActivity\nsome-uuid"),
-        date: null,
-        strokeGroups: [
+        time: null,
+        strokes: [
           {
             club: "5-Iron",
-            strokes: [
-              {
-                id: "s1",
-                measurement: { clubSpeed: 88.0 },
-              },
-            ],
+            measurement: { clubSpeed: 88.0 },
           },
         ],
       };

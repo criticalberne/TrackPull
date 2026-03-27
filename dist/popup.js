@@ -262,6 +262,30 @@
     return isNaN(parsed) ? null : parsed;
   }
 
+  // src/shared/import_types.ts
+  var IMPORT_SESSION_QUERY = `
+  query FetchActivityById($id: ID!) {
+    node(id: $id) {
+      ... on SessionActivity {
+        id
+        time
+        strokeCount
+        strokes {
+          club
+          time
+          targetDistance
+          measurement {
+            clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
+            faceToPath swingDirection swingPlane dynamicLoft spinRate spinAxis spinLoft
+            launchAngle launchDirection carry total carrySide totalSide
+            maxHeight landingAngle hangTime
+          }
+        }
+      }
+    }
+  }
+`;
+
   // src/shared/tsv_writer.ts
   var METRIC_COLUMN_ORDER = [
     // Speed & Efficiency
@@ -586,52 +610,11 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     "https://api.trackmangolf.com/*",
     "https://portal.trackmangolf.com/*"
   ];
+  async function hasPortalPermission() {
+    return chrome.permissions.contains({ origins: [...PORTAL_ORIGINS] });
+  }
   async function requestPortalPermission() {
     return chrome.permissions.request({ origins: [...PORTAL_ORIGINS] });
-  }
-
-  // src/shared/activity_helpers.ts
-  function formatActivityDate(isoDate, now) {
-    const d = /* @__PURE__ */ new Date(isoDate + "T00:00:00");
-    const ref = now ?? /* @__PURE__ */ new Date();
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const formatted = `${monthNames[d.getMonth()]} ${d.getDate()}`;
-    if (d.getFullYear() !== ref.getFullYear()) {
-      return `${formatted}, ${d.getFullYear()}`;
-    }
-    return formatted;
-  }
-  function getTimePeriod(isoDate, now) {
-    const activityDate = /* @__PURE__ */ new Date(isoDate + "T00:00:00");
-    const ref = now ?? /* @__PURE__ */ new Date();
-    const todayStart = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
-    const weekStart = new Date(todayStart);
-    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    const monthStart = new Date(ref.getFullYear(), ref.getMonth(), 1);
-    if (activityDate >= todayStart) return "Today";
-    if (activityDate >= weekStart) return "This Week";
-    if (activityDate >= monthStart) return "This Month";
-    return "Older";
-  }
-  function filterActivities(activities, typeFilter) {
-    if (!typeFilter) return activities;
-    return activities.filter((a) => a.type === typeFilter);
-  }
-  function getUniqueTypes(activities) {
-    return [...new Set(activities.map((a) => a.type).filter((t) => t !== null))].sort();
-  }
-
-  // src/shared/portal_parser.ts
-  function extractActivityUuid(base64Id) {
-    try {
-      const decoded = atob(base64Id);
-      const parts = decoded.split("\n");
-      const uuid = parts[1]?.trim();
-      if (!uuid) return base64Id;
-      return uuid;
-    } catch {
-      return base64Id;
-    }
   }
 
   // src/popup/popup.ts
@@ -649,100 +632,71 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
   var cachedUnitChoice = DEFAULT_UNIT_CHOICE;
   var cachedSurface = "Mat";
   var cachedCustomPrompts = [];
-  var cachedActivities = [];
-  var importedReportIds = /* @__PURE__ */ new Set();
   var AI_URLS = {
     "ChatGPT": "https://chatgpt.com",
     "Claude": "https://claude.ai",
     "Gemini": "https://gemini.google.com"
   };
-  async function fetchImportedIds() {
-    return new Promise((resolve) => {
-      chrome.storage.local.get([STORAGE_KEYS.SESSION_HISTORY], (result) => {
-        const history = result[STORAGE_KEYS.SESSION_HISTORY] ?? [];
-        resolve(new Set(history.map((e) => e.snapshot.report_id)));
-      });
-    });
-  }
-  function renderActivityBrowser(activities, importedIds, typeFilter) {
-    const container = document.getElementById("activity-list-container");
-    if (!container) return;
-    const filtered = filterActivities(activities, typeFilter);
-    if (filtered.length === 0) {
-      container.innerHTML = `<div class="activity-list-empty">${activities.length === 0 ? "No activities found" : "No activities match this filter"}</div>`;
-      return;
-    }
-    const periods = ["Today", "This Week", "This Month", "Older"];
-    let html = "";
-    for (const period of periods) {
-      const group = filtered.filter((a) => getTimePeriod(a.date) === period);
-      if (group.length === 0) continue;
-      html += `<div class="activity-period-header">${escapeHtml(period)}</div>`;
-      for (const activity of group) {
-        const isImported = importedIds.has(extractActivityUuid(activity.id));
-        const dateStr = formatActivityDate(activity.date);
-        const typeStr = activity.type ? escapeHtml(activity.type) : "\u2014";
-        const countStr = activity.strokeCount !== null ? String(activity.strokeCount) : "\u2014";
-        const actionHtml = isImported ? `<span class="activity-imported-label">Imported</span>` : `<button class="activity-import-btn" data-activity-id="${escapeHtml(activity.id)}">Import</button>`;
-        html += `<div class="activity-row">
-        <span class="activity-date">${dateStr}</span>
-        <span class="activity-type">${typeStr}</span>
-        <span class="activity-stroke-count">${countStr}</span>
-        ${actionHtml}
-      </div>`;
-      }
-    }
-    container.innerHTML = html;
-    container.querySelectorAll(".activity-import-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const activityId = btn.dataset.activityId;
-        if (!activityId) return;
-        btn.disabled = true;
-        btn.textContent = "Importing...";
-        chrome.runtime.sendMessage({ type: "IMPORT_SESSION", activityId });
-      });
-    });
-  }
-  function populateTypeFilter(activities) {
-    const select = document.getElementById("activity-type-filter");
-    if (!select) return;
-    const types = getUniqueTypes(activities);
-    select.innerHTML = `<option value="">All Types</option>`;
-    for (const type of types) {
-      const opt = document.createElement("option");
-      opt.value = type;
-      opt.textContent = type;
-      select.appendChild(opt);
-    }
-  }
-  async function loadActivityBrowser() {
-    const container = document.getElementById("activity-list-container");
-    if (container) {
-      container.innerHTML = `<div class="activity-loading">Loading activities...</div>`;
-    }
+  var PORTAL_ACTIVITY_PATTERN = /^https:\/\/portal\.trackmangolf\.com\/player\/activities\/([A-Za-z0-9+/=]+)$/;
+  async function checkActiveTabForActivity() {
+    const detected = document.getElementById("portal-activity-detected");
+    const noActivity = document.getElementById("portal-no-activity");
+    if (!detected || !noActivity) return;
     try {
-      const [ids, response] = await Promise.all([
-        fetchImportedIds(),
-        new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: "FETCH_ACTIVITIES" }, resolve);
-        })
-      ]);
-      importedReportIds = ids;
-      if (!response || !response.success) {
-        if (container) {
-          container.innerHTML = `<div class="activity-list-empty">${escapeHtml(response?.error ?? "Unable to fetch activities")}</div>`;
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const match = tab?.url?.match(PORTAL_ACTIVITY_PATTERN);
+      if (match && tab.id) {
+        const activityId = match[1];
+        const tabId = tab.id;
+        detected.style.display = "";
+        noActivity.style.display = "none";
+        const importBtn = document.getElementById("portal-import-btn");
+        if (importBtn) {
+          importBtn.addEventListener("click", async () => {
+            importBtn.disabled = true;
+            importBtn.textContent = "Importing...";
+            try {
+              const fetchResponse = await chrome.tabs.sendMessage(tabId, {
+                type: "PORTAL_GRAPHQL_FETCH",
+                query: IMPORT_SESSION_QUERY,
+                variables: { id: activityId }
+              });
+              if (!fetchResponse?.success) {
+                showToast(fetchResponse?.error ?? "Failed to fetch activity", "error");
+                importBtn.disabled = false;
+                importBtn.textContent = "Import this session";
+                return;
+              }
+              const statusListener = (changes) => {
+                if (changes[STORAGE_KEYS.IMPORT_STATUS]) {
+                  const status = changes[STORAGE_KEYS.IMPORT_STATUS].newValue;
+                  if (status && (status.state === "success" || status.state === "error")) {
+                    chrome.storage.onChanged.removeListener(statusListener);
+                    importBtn.disabled = false;
+                    importBtn.textContent = status.state === "success" ? "Imported!" : "Import this session";
+                  }
+                }
+              };
+              chrome.storage.onChanged.addListener(statusListener);
+              chrome.runtime.sendMessage({
+                type: "SAVE_IMPORTED_SESSION",
+                graphqlData: fetchResponse.data,
+                activityId
+              });
+            } catch {
+              showToast("Unable to reach portal tab \u2014 refresh the page and try again", "error");
+              importBtn.disabled = false;
+              importBtn.textContent = "Import this session";
+            }
+          });
         }
-        return;
+      } else {
+        detected.style.display = "none";
+        noActivity.style.display = "";
       }
-      cachedActivities = response.activities ?? [];
-      populateTypeFilter(cachedActivities);
-      const select = document.getElementById("activity-type-filter");
-      const typeFilter = select?.value ?? "";
-      renderActivityBrowser(cachedActivities, importedReportIds, typeFilter);
     } catch {
-      if (container) {
-        container.innerHTML = `<div class="activity-list-empty">Unable to fetch activities \u2014 try again later</div>`;
-      }
+      detected.style.display = "none";
+      noActivity.style.display = "";
     }
   }
   function renderStatCard() {
@@ -961,15 +915,6 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           }
         }
       });
-      chrome.storage.onChanged.addListener((changes) => {
-        if (changes[STORAGE_KEYS.SESSION_HISTORY]) {
-          fetchImportedIds().then((ids) => {
-            importedReportIds = ids;
-            const select = document.getElementById("activity-type-filter");
-            renderActivityBrowser(cachedActivities, importedReportIds, select?.value ?? "");
-          });
-        }
-      });
       const exportBtn = document.getElementById("export-btn");
       if (exportBtn) {
         exportBtn.addEventListener("click", handleExportClick);
@@ -1019,32 +964,12 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
       }
       updatePreview();
       renderStatCard();
-      try {
-        const authResponse = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: "PORTAL_AUTH_CHECK" }, resolve);
-        });
-        if (authResponse.success && authResponse.status) {
-          const stateMap = {
-            denied: "denied",
-            unauthenticated: "not-logged-in",
-            authenticated: "ready",
-            error: "error"
-          };
-          renderPortalSection(stateMap[authResponse.status] ?? "error", authResponse.message);
-          if (stateMap[authResponse.status] === "ready") {
-            loadActivityBrowser();
-          }
-        } else {
-          renderPortalSection("error", "Unable to check portal status");
-        }
-      } catch {
-        renderPortalSection("error", "Unable to check portal status");
-      }
-      const activityTypeFilter = document.getElementById("activity-type-filter");
-      if (activityTypeFilter) {
-        activityTypeFilter.addEventListener("change", () => {
-          renderActivityBrowser(cachedActivities, importedReportIds, activityTypeFilter.value);
-        });
+      const portalGranted = await hasPortalPermission();
+      if (portalGranted) {
+        renderPortalSection("ready");
+        checkActiveTabForActivity();
+      } else {
+        renderPortalSection("denied");
       }
       const portalGrantBtn = document.getElementById("portal-grant-btn");
       if (portalGrantBtn) {
@@ -1052,7 +977,7 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           const granted = await requestPortalPermission();
           renderPortalSection(granted ? "ready" : "denied");
           if (granted) {
-            loadActivityBrowser();
+            checkActiveTabForActivity();
           }
         });
       }
@@ -1063,13 +988,20 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           chrome.tabs.create({ url: "https://portal.trackmangolf.com" });
         });
       }
+      const portalOpenLink = document.getElementById("portal-open-link");
+      if (portalOpenLink) {
+        portalOpenLink.addEventListener("click", (e) => {
+          e.preventDefault();
+          chrome.tabs.create({ url: "https://portal.trackmangolf.com" });
+        });
+      }
       chrome.permissions.onAdded.addListener((permissions) => {
         const portalOriginsGranted = PORTAL_ORIGINS.some(
           (origin) => permissions.origins?.includes(origin)
         );
         if (portalOriginsGranted) {
           renderPortalSection("ready");
-          loadActivityBrowser();
+          checkActiveTabForActivity();
         }
       });
       chrome.permissions.onRemoved.addListener((permissions) => {

@@ -6,7 +6,7 @@
 
 export const GRAPHQL_ENDPOINT = "https://api.trackmangolf.com/graphql";
 
-export const HEALTH_CHECK_QUERY = `query HealthCheck { me { id } }`;
+export const HEALTH_CHECK_QUERY = `query HealthCheck { me { __typename } }`;
 
 /** Standard GraphQL response envelope. */
 export interface GraphQLResponse<T> {
@@ -40,7 +40,9 @@ export async function executeQuery<T>(
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    const body = await response.text().catch(() => "(no body)");
+    console.error(`TrackPull: GraphQL ${response.status} response:`, body);
+    throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
   }
 
   return response.json() as Promise<GraphQLResponse<T>>;
@@ -51,11 +53,11 @@ export async function executeQuery<T>(
  *
  * Classification priority:
  * 1. Errors present and non-empty → check for auth error patterns → else generic error
- * 2. No errors but data.me.id is falsy → unauthenticated
- * 3. data.me.id is truthy → authenticated
+ * 2. No errors but data.me is falsy → unauthenticated
+ * 3. data.me is truthy (has __typename) → authenticated
  */
 export function classifyAuthResult(
-  result: GraphQLResponse<{ me: { id: string } | null }>
+  result: GraphQLResponse<{ me: { __typename: string } | null }>
 ): AuthStatus {
   if (result.errors && result.errors.length > 0) {
     const code = result.errors[0].extensions?.code ?? "";
@@ -74,7 +76,7 @@ export function classifyAuthResult(
     return { kind: "error", message: "Unable to reach Trackman — try again later" };
   }
 
-  if (!result.data?.me?.id) {
+  if (!result.data?.me?.__typename) {
     return { kind: "unauthenticated" };
   }
 

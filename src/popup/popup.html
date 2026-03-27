@@ -696,16 +696,16 @@
     </div>
     <!-- Shown when permission is granted -->
     <div id="portal-ready" style="display:none;">
-      <!-- Activity type filter (D-09) -->
-      <div class="activity-filter-row">
-        <label for="activity-type-filter" class="sr-only">Filter by type</label>
-        <select id="activity-type-filter" class="activity-type-select">
-          <option value="">All Types</option>
-        </select>
+      <div id="portal-activity-detected" style="display:none;">
+        <p style="font-size:13px; color:var(--color-text-body); margin:0 0 8px 0;">
+          Activity detected on current tab:
+        </p>
+        <button id="portal-import-btn" class="btn-primary" style="width:100%;">Import this session</button>
       </div>
-      <!-- Scrollable activity list (D-03: max-height 300px) -->
-      <div id="activity-list-container" class="activity-list-container">
-        <div class="activity-loading">Loading activities...</div>
+      <div id="portal-no-activity" style="display:none;">
+        <p style="font-size:13px; color:var(--color-text-muted); margin:0;">
+          Open an activity on <a href="#" id="portal-open-link" style="color:var(--color-link);">portal.trackmangolf.com</a> and click Import.
+        </p>
       </div>
     </div>
   </div>

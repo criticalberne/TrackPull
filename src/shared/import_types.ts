@@ -19,20 +19,18 @@ export interface ActivitySummary {
 }
 
 /**
- * Fetch recent activities. Per D-06: page size 20 matches MAX_SESSIONS history cap.
- * Query shape follows Relay connection convention. If the Trackman schema uses
- * a different root field, the handler will surface the GraphQL error for adjustment.
+ * Fetch recent activities via me.activities.
+ * API field names: time (ISO date), kind (activity type), strokeCount.
+ * Service worker maps time→date, kind→type for ActivitySummary.
  */
 export const FETCH_ACTIVITIES_QUERY = `
-  query FetchActivities($first: Int!) {
-    activities(first: $first) {
-      edges {
-        node {
-          id
-          date
-          strokeCount
-          type
-        }
+  query GetPlayerActivities {
+    me {
+      activities {
+        id
+        time
+        strokeCount
+        kind
       }
     }
   }
@@ -42,24 +40,24 @@ export const FETCH_ACTIVITIES_QUERY = `
  * Fetch a single activity by ID with full stroke data.
  * The node(id:) query on base64-encoded SessionActivity IDs was confirmed
  * working during Phase 22 research.
+ * API uses flat strokes (each stroke has its own club field).
  */
 export const IMPORT_SESSION_QUERY = `
   query FetchActivityById($id: ID!) {
     node(id: $id) {
       ... on SessionActivity {
         id
-        date
-        strokeGroups {
+        time
+        strokeCount
+        strokes {
           club
-          strokes {
-            id
-            measurement {
-              clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
-              faceToPath swingDirection dynamicLoft spinRate spinAxis spinLoft
-              launchAngle launchDirection carry total side sideTotal carrySide
-              totalSide height maxHeight curve landingAngle hangTime
-              lowPointDistance impactHeight impactOffset tempo
-            }
+          time
+          targetDistance
+          measurement {
+            clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
+            faceToPath swingDirection swingPlane dynamicLoft spinRate spinAxis spinLoft
+            launchAngle launchDirection carry total carrySide totalSide
+            maxHeight landingAngle hangTime
           }
         }
       }

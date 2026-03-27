@@ -62,7 +62,7 @@ vi.mock("../src/shared/portalPermissions", () => ({
 vi.mock("../src/shared/graphql_client", () => ({
   executeQuery: vi.fn(),
   classifyAuthResult: vi.fn(),
-  HEALTH_CHECK_QUERY: "query HealthCheck { me { id } }",
+  HEALTH_CHECK_QUERY: "query HealthCheck { me { __typename } }",
 }));
 
 vi.mock("../src/shared/portal_parser", () => ({
@@ -119,14 +119,14 @@ describe("import_types module", () => {
     expect((status as Extract<ImportStatus, { state: "error" }>).message).toBe("something went wrong");
   });
 
-  it("FETCH_ACTIVITIES_QUERY contains 'activities' and 'first'", () => {
+  it("FETCH_ACTIVITIES_QUERY contains 'me' and 'activities'", () => {
+    expect(FETCH_ACTIVITIES_QUERY).toContain("me");
     expect(FETCH_ACTIVITIES_QUERY).toContain("activities");
-    expect(FETCH_ACTIVITIES_QUERY).toContain("first");
   });
 
-  it("IMPORT_SESSION_QUERY contains 'node(id: $id)' and 'strokeGroups'", () => {
+  it("IMPORT_SESSION_QUERY contains 'node(id: $id)' and 'strokes'", () => {
     expect(IMPORT_SESSION_QUERY).toContain("node(id: $id)");
-    expect(IMPORT_SESSION_QUERY).toContain("strokeGroups");
+    expect(IMPORT_SESSION_QUERY).toContain("strokes");
   });
 });
 
@@ -212,10 +212,10 @@ describe("FETCH_ACTIVITIES handler", () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
     vi.mocked(executeQuery).mockResolvedValue({
       data: {
-        activities: {
-          edges: [
-            { node: { id: "act-001", date: "2026-01-15", strokeCount: 18, type: "Session" } },
-            { node: { id: "act-002", date: "2026-01-10" } },
+        me: {
+          activities: [
+            { id: "act-001", time: "2026-01-15", strokeCount: 18, kind: "Session" },
+            { id: "act-002", time: "2026-01-10" },
           ],
         },
       },
@@ -233,10 +233,10 @@ describe("FETCH_ACTIVITIES handler", () => {
     });
   });
 
-  it("returns empty activities array when data has no edges", async () => {
+  it("returns empty activities array when data has no activities", async () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
     vi.mocked(executeQuery).mockResolvedValue({
-      data: { activities: { edges: [] } },
+      data: { me: { activities: [] } },
     });
 
     callHandler({ type: "FETCH_ACTIVITIES" }, sendResponse);
