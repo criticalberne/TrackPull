@@ -6,6 +6,7 @@ import { STORAGE_KEYS } from "../shared/constants";
 import { migrateLegacyPref, getApiSourceUnitSystem, normalizeMetricValue, DISTANCE_LABELS, SPEED_LABELS, DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import type { SessionData, Shot } from "../models/types";
 import type { UnitChoice } from "../shared/unit_normalization";
+import type { ImportStatus } from "../shared/import_types";
 import { writeTsv } from "../shared/tsv_writer";
 import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
@@ -165,6 +166,24 @@ function updatePreview(): void {
   previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
 }
 
+/**
+ * Display import result using the existing toast system (RESIL-02).
+ * For success: show a brief success toast.
+ * For error: show the error message as an error toast.
+ * For importing: show an in-progress success-styled toast.
+ * For idle/absent: no-op.
+ */
+function showImportStatus(status: ImportStatus): void {
+  if (status.state === "success") {
+    showToast("Session imported successfully", "success");
+  } else if (status.state === "error") {
+    showToast(status.message, "error");
+  } else if (status.state === "importing") {
+    showToast("Importing session...", "success");
+  }
+  // idle: no-op
+}
+
 type PortalState = "denied" | "not-logged-in" | "ready" | "error";
 
 function renderPortalSection(state: PortalState, errorMsg?: string): void {
@@ -202,6 +221,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     updateShotCount(data);
     updateExportButtonVisibility(data);
+
+    // RESIL-02: Read and display import status on popup open
+    const statusResult = await new Promise<Record<string, unknown>>((resolve) => {
+      chrome.storage.local.get([STORAGE_KEYS.IMPORT_STATUS], resolve);
+    });
+    const importStatus = statusResult[STORAGE_KEYS.IMPORT_STATUS] as ImportStatus | undefined;
+    if (importStatus && importStatus.state !== "idle") {
+      showImportStatus(importStatus);
+      // D-02: Auto-clear on read — clear success and error states after display
+      if (importStatus.state === "success" || importStatus.state === "error") {
+        chrome.storage.local.remove(STORAGE_KEYS.IMPORT_STATUS);
+      }
+    }
 
     // Unit dropdowns: read saved values, migrate from legacy key if needed
     const unitResult = await new Promise<Record<string, unknown>>((resolve) => {
@@ -283,6 +315,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         showToast((message as { type: string; error: string }).error, "error");
       }
       return true;
+    });
+
+    // Listen for import status changes while popup is open (RESIL-02 real-time updates)
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      if (namespace === "local" && changes[STORAGE_KEYS.IMPORT_STATUS]) {
+        const newStatus = changes[STORAGE_KEYS.IMPORT_STATUS].newValue as ImportStatus | undefined;
+        if (newStatus && newStatus.state !== "idle") {
+          showImportStatus(newStatus);
+          // D-02: Auto-clear completed states
+          if (newStatus.state === "success" || newStatus.state === "error") {
+            chrome.storage.local.remove(STORAGE_KEYS.IMPORT_STATUS);
+          }
+        }
+      }
     });
 
     const exportBtn = document.getElementById("export-btn");
