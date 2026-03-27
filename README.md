@@ -7,18 +7,18 @@
 [![Tests](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml/badge.svg)](https://github.com/criticalberne/TrackPull/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Grab your Trackman data and actually do something with it. Export to CSV, paste into a spreadsheet, or send it straight to ChatGPT/Claude/Gemini for analysis — all from one Chrome extension.
+Grab your Trackman data and actually do something with it. Export to CSV, paste into a spreadsheet, or send it straight to ChatGPT/Claude/Gemini for analysis, all from one Chrome extension.
 
 ## What it does
 
 - Opens a Trackman report? Data's already captured
-- **Import from Portal** — recover sessions from portal.trackmangolf.com that don't have report links
+- **Import from Portal**: recover sessions from portal.trackmangolf.com that don't have report links
 - Export as CSV or copy tab-separated values straight into Google Sheets
 - One click to launch AI analysis with your data and a golf prompt (ChatGPT, Claude, or Gemini)
 - Preview the full prompt and data before sending to AI
 - 8 built-in prompts from beginner to advanced, plus custom templates you create
 - Pick your units (mph or m/s, yards or meters) and hitting surface (mat or grass)
-- Toggle averages on or off in exports — raw shots only when you want them
+- Toggle averages on or off in exports, raw shots only when you want them
 - Dark mode that follows your system theme
 
 
@@ -50,13 +50,13 @@ Grab your Trackman data and actually do something with it. Export to CSV, paste 
 
 ### From a Trackman report (automatic)
 
-1. Open any Trackman report — the extension grabs your shot data automatically
+1. Open any Trackman report, the extension grabs your shot data automatically
 2. Click the TrackPull icon to see your shot count and set preferences
 3. Pick what you want to do:
-   - **Export CSV** — downloads a file with your data
-   - **Copy TSV** — pastes right into spreadsheets
-   - **Open in AI** — launches ChatGPT, Claude, or Gemini with a prompt and your data
-   - **Copy Prompt + Data** — for pasting into any AI chat manually
+   - **Export CSV**: downloads a file with your data
+   - **Copy TSV**: pastes right into spreadsheets
+   - **Open in AI**: launches ChatGPT, Claude, or Gemini with a prompt and your data
+   - **Copy Prompt + Data**: for pasting into any AI chat manually
 4. Expand **Prompt Preview** to inspect exactly what's being sent before you click
 
 Your hitting surface (mat/grass) is tagged in every export and prompt so the AI knows what it's working with. Uncheck "Include averages" if you just want raw shot rows.
@@ -77,10 +77,10 @@ Got old sessions on portal.trackmangolf.com that never got a report link? You ca
 
 1. Log into [portal.trackmangolf.com](https://portal.trackmangolf.com)
 2. Click **Grant Access** in the TrackPull popup (one-time)
-3. Navigate to the activity you want — click into it so the URL looks like `portal.trackmangolf.com/player/activities/...`
+3. Navigate to the activity you want, click into it so the URL looks like `portal.trackmangolf.com/player/activities/...`
 4. Open TrackPull and click **Import this session**
 
-The shot data loads into TrackPull just like a report — export, copy, or send to AI from there. This works for any session in your portal history, no matter how old. Your data was never lost — just hard to get to.
+The shot data loads into TrackPull just like a report. Export, copy, or send to AI from there. This works for any session in your portal history, no matter how old. Your data was never lost, just hard to get to.
 
 ## CSV columns
 
@@ -99,21 +99,21 @@ Columns are grouped so you can scan without hunting:
 
 ## AI prompts
 
-Select a prompt from the popup and click **Open in AI** — your data goes with it. You can also build your own in the options page.
+Select a prompt from the popup and click **Open in AI**, your data goes with it. You can also build your own in the options page.
 
 ### Beginner
-- [Understanding Your Numbers](prompts/beginner/understanding-your-numbers.md) — what each metric means and how yours compare
-- [Basic Club Recommendations](prompts/beginner/basic-club-recommendations.md) — what category of clubs fits your swing
+- [Understanding Your Numbers](prompts/beginner/understanding-your-numbers.md): what each metric means and how yours compare
+- [Basic Club Recommendations](prompts/beginner/basic-club-recommendations.md): what category of clubs fits your swing
 
 ### Intermediate
-- [Distance Gapping](prompts/intermediate/distance-gapping.md) — carry distance gaps and overlaps in your bag
-- [Shaft Flex Analysis](prompts/intermediate/shaft-flex-analysis.md) — shaft flex and weight recs from your speed and launch data
-- [Shot Shape Tendencies](prompts/intermediate/shot-shape-tendencies.md) — face angle, club path, and curvature patterns
+- [Distance Gapping](prompts/intermediate/distance-gapping.md): carry distance gaps and overlaps in your bag
+- [Shaft Flex Analysis](prompts/intermediate/shaft-flex-analysis.md): shaft flex and weight recs from your speed and launch data
+- [Shot Shape Tendencies](prompts/intermediate/shot-shape-tendencies.md): face angle, club path, and curvature patterns
 
 ### Advanced
-- [Launch & Spin Optimization](prompts/advanced/launch-spin-optimization.md) — your launch/spin vs optimal windows, with loft/shaft suggestions
-- [Club Delivery Analysis](prompts/advanced/club-delivery-analysis.md) — attack angle, dynamic loft, and low point efficiency
-- [Full Bag Fitting](prompts/advanced/full-bag-fitting.md) — the whole picture with specific club head, shaft, and setup recs
+- [Launch & Spin Optimization](prompts/advanced/launch-spin-optimization.md): your launch/spin vs optimal windows, with loft/shaft suggestions
+- [Club Delivery Analysis](prompts/advanced/club-delivery-analysis.md): attack angle, dynamic loft, and low point efficiency
+- [Full Bag Fitting](prompts/advanced/full-bag-fitting.md): the whole picture with specific club head, shaft, and setup recs
 
 ## Development
 
