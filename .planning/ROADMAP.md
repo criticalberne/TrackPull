@@ -74,7 +74,7 @@
 - [x] **Phase 21: Manifest and Permissions Foundation** — Extension requests portal API access at runtime without disrupting existing users (completed 2026-03-26)
 - [x] **Phase 22: GraphQL Client and Cookie Auth** — Authenticated GraphQL communication established and verified against the live Trackman API (completed 2026-03-26)
 - [x] **Phase 23: GraphQL-to-SessionData Parser** — Measurement fields mapped to SessionData with defensive null handling and deduplication identity (completed 2026-03-27)
-- [ ] **Phase 24: Service Worker Import Flow** — FETCH_ACTIVITIES and IMPORT_SESSION handlers with fire-and-forget status tracking
+- [x] **Phase 24: Service Worker Import Flow** — FETCH_ACTIVITIES and IMPORT_SESSION handlers with fire-and-forget status tracking (completed 2026-03-27)
 - [ ] **Phase 25: Activity Browser UI** — Popup panel for browsing, filtering, and importing portal sessions
 
 ## Phase Details
@@ -241,7 +241,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 24-01-PLAN.md — Constants, types, FETCH_ACTIVITIES and IMPORT_SESSION handlers with TDD
-- [ ] 24-02-PLAN.md — Popup import status display and build verification
+- [x] 24-02-PLAN.md — Popup import status display and build verification
 
 ### Phase 25: Activity Browser UI
 **Goal**: User can browse, filter, and import portal sessions directly from the popup without leaving the extension
@@ -283,7 +283,7 @@ Plans:
 | 21. Manifest and Permissions Foundation | v1.6 PI | 1/1 | Complete    | 2026-03-26 |
 | 22. GraphQL Client and Cookie Auth | v1.6 PI | 2/2 | Complete   | 2026-03-26 |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/1 | Complete    | 2026-03-27 |
-| 24. Service Worker Import Flow | v1.6 PI | 1/2 | In Progress|  |
+| 24. Service Worker Import Flow | v1.6 PI | 2/2 | Complete   | 2026-03-27 |
 | 25. Activity Browser UI | v1.6 PI | 0/0 | Not started | - |
 
 ---

@@ -29,7 +29,7 @@ Requirements for v1.6 Trackman Portal Integration milestone. Each maps to roadma
 ### Resilience
 
 - [x] **RESIL-01**: Session import continues in the service worker even if the popup is closed mid-import
-- [ ] **RESIL-02**: Popup reads import status from storage on open/re-open and displays progress or completion
+- [x] **RESIL-02**: Popup reads import status from storage on open/re-open and displays progress or completion
 - [x] **RESIL-03**: Parser handles missing, null, or unexpected fields gracefully without crashing
 
 ## Deferred v1.7 Requirements
@@ -131,7 +131,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PIPE-02 | Phase 24 | Complete |
 | PIPE-03 | Phase 23 | Pending |
 | RESIL-01 | Phase 24 | Complete |
-| RESIL-02 | Phase 24 | Pending |
+| RESIL-02 | Phase 24 | Complete |
 | RESIL-03 | Phase 22 | Complete |
 
 **Coverage:**
