@@ -57,7 +57,7 @@ completed: 2026-03-26
 - **Duration:** ~2 min
 - **Started:** 2026-03-26T22:33:20Z
 - **Completed:** 2026-03-26T22:35:54Z
-- **Tasks:** 1 complete (Task 2 is checkpoint:human-verify — awaiting manual verification)
+- **Tasks:** 2 complete (Task 1: auto — implementation; Task 2: human-verify — all three portal states confirmed against live Trackman portal)
 - **Files modified:** 3 (+ 2 dist files rebuilt)
 
 ## Accomplishments
@@ -93,11 +93,12 @@ None — plan executed exactly as written.
 
 ## Checkpoint Status
 
-Task 2 (`checkpoint:human-verify`) is pending manual verification:
-- Load extension from `dist/` in Chrome
-- Test three portal states: denied (no permission), not-logged-in (permission granted, logged out), ready (logged in), error handling
-- Verify login link opens `portal.trackmangolf.com` in new tab
-- Check service worker console for no unhandled errors
+Task 2 (`checkpoint:human-verify`) — VERIFIED by human:
+- All three portal states confirmed working against live Trackman portal
+- Denied state: shows "Portal access is required" with Grant Access button
+- Not-logged-in state: shows "Log into portal.trackmangolf.com to import sessions" with clickable link that opens portal in new tab
+- Authenticated (ready) state: shows "Import from Portal" button
+- No unhandled errors in service worker console
 
 ## Known Stubs
 
