@@ -41,7 +41,8 @@
     AI_SERVICE: "aiService",
     HITTING_SURFACE: "hittingSurface",
     INCLUDE_AVERAGES: "includeAverages",
-    SESSION_HISTORY: "sessionHistory"
+    SESSION_HISTORY: "sessionHistory",
+    IMPORT_STATUS: "importStatus"
   };
 
   // src/shared/unit_normalization.ts
@@ -702,6 +703,15 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     };
     previewEl.textContent = assemblePrompt(prompt, tsvData, metadata);
   }
+  function showImportStatus(status) {
+    if (status.state === "success") {
+      showToast("Session imported successfully", "success");
+    } else if (status.state === "error") {
+      showToast(status.message, "error");
+    } else if (status.state === "importing") {
+      showToast("Importing session...", "success");
+    }
+  }
   function renderPortalSection(state, errorMsg) {
     const section = document.getElementById("portal-section");
     const denied = document.getElementById("portal-denied");
@@ -730,6 +740,16 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
       cachedData = data ?? null;
       updateShotCount(data);
       updateExportButtonVisibility(data);
+      const statusResult = await new Promise((resolve) => {
+        chrome.storage.local.get([STORAGE_KEYS.IMPORT_STATUS], resolve);
+      });
+      const importStatus = statusResult[STORAGE_KEYS.IMPORT_STATUS];
+      if (importStatus && importStatus.state !== "idle") {
+        showImportStatus(importStatus);
+        if (importStatus.state === "success" || importStatus.state === "error") {
+          chrome.storage.local.remove(STORAGE_KEYS.IMPORT_STATUS);
+        }
+      }
       const unitResult = await new Promise((resolve) => {
         chrome.storage.local.get([STORAGE_KEYS.SPEED_UNIT, STORAGE_KEYS.DISTANCE_UNIT, STORAGE_KEYS.HITTING_SURFACE, STORAGE_KEYS.INCLUDE_AVERAGES, "unitPreference"], resolve);
       });
@@ -797,6 +817,17 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
           showToast(message.error, "error");
         }
         return true;
+      });
+      chrome.storage.onChanged.addListener((changes, namespace) => {
+        if (namespace === "local" && changes[STORAGE_KEYS.IMPORT_STATUS]) {
+          const newStatus = changes[STORAGE_KEYS.IMPORT_STATUS].newValue;
+          if (newStatus && newStatus.state !== "idle") {
+            showImportStatus(newStatus);
+            if (newStatus.state === "success" || newStatus.state === "error") {
+              chrome.storage.local.remove(STORAGE_KEYS.IMPORT_STATUS);
+            }
+          }
+        }
       });
       const exportBtn = document.getElementById("export-btn");
       if (exportBtn) {
