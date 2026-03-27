@@ -46,7 +46,7 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 - [ ] Activity list query via `me.activities` returning all user sessions
 - [ ] Activity browser UI in popup for selecting and importing sessions
 - [ ] Shot data pull via `node(id)` query with full Stroke.measurement parsing
-- [ ] Mapping GraphQL Measurement fields into existing SessionData format
+- [x] Mapping GraphQL Measurement fields into existing SessionData format — Phase 23
 - [ ] Imported sessions usable through existing export/AI/history pipeline
 
 ### Future
@@ -156,4 +156,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 — Phase 21 complete: runtime permission foundation for portal domains*
+*Last updated: 2026-03-27 — Phase 23 complete: GraphQL-to-SessionData parser with 29-key alias map and UUID extraction*
