@@ -263,24 +263,31 @@
   }
 
   // src/shared/import_types.ts
+  var STROKE_FIELDS = `
+  club
+  time
+  targetDistance
+  measurement {
+    clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
+    faceToPath swingDirection swingPlane dynamicLoft spinRate spinAxis spinLoft
+    launchAngle launchDirection carry total carrySide totalSide
+    maxHeight landingAngle hangTime
+  }
+`;
   var IMPORT_SESSION_QUERY = `
   query FetchActivityById($id: ID!) {
     node(id: $id) {
       ... on SessionActivity {
-        id
-        time
-        strokeCount
-        strokes {
-          club
-          time
-          targetDistance
-          measurement {
-            clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
-            faceToPath swingDirection swingPlane dynamicLoft spinRate spinAxis spinLoft
-            launchAngle launchDirection carry total carrySide totalSide
-            maxHeight landingAngle hangTime
-          }
-        }
+        id time strokeCount strokes { ${STROKE_FIELDS} }
+      }
+      ... on VirtualRangeSessionActivity {
+        id time strokeCount strokes { ${STROKE_FIELDS} }
+      }
+      ... on ShotAnalysisSessionActivity {
+        id time strokeCount strokes { ${STROKE_FIELDS} }
+      }
+      ... on CombineTestActivity {
+        id time strokes { ${STROKE_FIELDS} }
       }
     }
   }
