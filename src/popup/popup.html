@@ -476,6 +476,122 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+    /* Activity browser (Phase 25) */
+    .activity-filter-row {
+      margin-top: 8px;
+    }
+
+    .activity-type-select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid var(--color-accent);
+      border-radius: 6px;
+      background: var(--color-bg-card);
+      color: var(--color-text-body);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .activity-type-select:focus {
+      outline: 2px solid var(--color-accent);
+      outline-offset: -1px;
+    }
+
+    .activity-list-container {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+
+    .activity-period-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      padding: 6px 8px 2px 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: var(--color-bg-surface);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .activity-row {
+      display: grid;
+      grid-template-columns: 5rem 1fr 3rem auto;
+      gap: 8px;
+      padding: 6px 8px;
+      font-size: 13px;
+      align-items: center;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .activity-row:first-child {
+      border-top: none;
+    }
+
+    .activity-date {
+      font-variant-numeric: tabular-nums;
+      color: var(--color-text-body);
+      white-space: nowrap;
+    }
+
+    .activity-type {
+      color: var(--color-text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .activity-stroke-count {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--color-text-body);
+    }
+
+    .activity-import-btn {
+      padding: 4px 10px;
+      font-size: 12px;
+      white-space: nowrap;
+      color: var(--color-text-on-accent);
+      background-color: var(--color-accent);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .activity-import-btn:hover {
+      background-color: var(--color-accent-hover);
+    }
+
+    .activity-import-btn:disabled {
+      background-color: var(--color-disabled);
+      cursor: not-allowed;
+    }
+
+    .activity-imported-label {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      padding: 4px 0;
+      text-align: right;
+    }
+
+    .activity-list-empty {
+      padding: 16px 8px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
+
+    .activity-loading {
+      padding: 16px 8px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--color-text-muted);
+    }
   </style>
   <script src="./popup.js"></script>
 </head>
@@ -580,7 +696,17 @@
     </div>
     <!-- Shown when permission is granted -->
     <div id="portal-ready" style="display:none;">
-      <button id="portal-import-btn" class="btn-primary">Import from Portal</button>
+      <!-- Activity type filter (D-09) -->
+      <div class="activity-filter-row">
+        <label for="activity-type-filter" class="sr-only">Filter by type</label>
+        <select id="activity-type-filter" class="activity-type-select">
+          <option value="">All Types</option>
+        </select>
+      </div>
+      <!-- Scrollable activity list (D-03: max-height 300px) -->
+      <div id="activity-list-container" class="activity-list-container">
+        <div class="activity-loading">Loading activities...</div>
+      </div>
     </div>
   </div>
   <button id="clear-btn" style="display:none">Clear Session Data</button>
