@@ -9,6 +9,10 @@ import { migrateLegacyPref, DEFAULT_UNIT_CHOICE, type UnitChoice, type SpeedUnit
 import { saveSessionToHistory, getHistoryErrorMessage } from "../shared/history";
 import { hasPortalPermission } from "../shared/portalPermissions";
 import { executeQuery, classifyAuthResult, HEALTH_CHECK_QUERY } from "../shared/graphql_client";
+import { parsePortalActivity } from "../shared/portal_parser";
+import type { GraphQLActivity } from "../shared/portal_parser";
+import type { ImportStatus, ActivitySummary } from "../shared/import_types";
+import { FETCH_ACTIVITIES_QUERY, IMPORT_SESSION_QUERY } from "../shared/import_types";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("TrackPull extension installed");
@@ -27,12 +31,24 @@ interface GetDataRequest {
   type: "GET_DATA";
 }
 
-interface PortalImportRequest {
-  type: "PORTAL_IMPORT_REQUEST";
+interface FetchActivitiesRequest {
+  type: "FETCH_ACTIVITIES";
+}
+
+interface ImportSessionRequest {
+  type: "IMPORT_SESSION";
+  activityId: string;
 }
 
 interface PortalAuthCheckRequest {
   type: "PORTAL_AUTH_CHECK";
+}
+
+function isAuthError(errors: Array<{ message: string; extensions?: { code?: string } }>): boolean {
+  if (errors.length === 0) return false;
+  const code = errors[0].extensions?.code ?? "";
+  const msg = errors[0].message?.toLowerCase() ?? "";
+  return code === "UNAUTHENTICATED" || msg.includes("unauthorized") || msg.includes("unauthenticated") || msg.includes("not logged in");
 }
 
 function getDownloadErrorMessage(originalError: string): string {
@@ -48,7 +64,7 @@ function getDownloadErrorMessage(originalError: string): string {
   return originalError;
 }
 
-type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest | PortalImportRequest | PortalAuthCheckRequest;
+type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest | FetchActivitiesRequest | ImportSessionRequest | PortalAuthCheckRequest;
 
 chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendResponse) => {
   if (message.type === "GET_DATA") {
@@ -157,15 +173,78 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
     return true;
   }
 
-  if (message.type === "PORTAL_IMPORT_REQUEST") {
+  if (message.type === "FETCH_ACTIVITIES") {
     (async () => {
       const granted = await hasPortalPermission();
       if (!granted) {
         sendResponse({ success: false, error: "Portal permission not granted" });
         return;
       }
-      // Phase 22 will implement GraphQL client and actual import
-      sendResponse({ success: false, error: "Not implemented" });
+      try {
+        const result = await executeQuery<{ activities: { edges: Array<{ node: { id: string; date: string } }> } }>(
+          FETCH_ACTIVITIES_QUERY,
+          { first: 20 }
+        );
+        if (result.errors && result.errors.length > 0) {
+          if (isAuthError(result.errors)) {
+            sendResponse({ success: false, error: "Session expired — log into portal.trackmangolf.com" });
+          } else {
+            sendResponse({ success: false, error: "Unable to fetch activities — try again later" });
+          }
+          return;
+        }
+        const activities: ActivitySummary[] = result.data?.activities?.edges?.map(e => e.node) ?? [];
+        sendResponse({ success: true, activities });
+      } catch (err) {
+        console.error("TrackPull: Fetch activities failed:", err);
+        sendResponse({ success: false, error: "Unable to fetch activities — try again later" });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === "IMPORT_SESSION") {
+    const { activityId } = message as ImportSessionRequest;
+    (async () => {
+      const granted = await hasPortalPermission();
+      if (!granted) {
+        sendResponse({ success: false, error: "Portal permission not granted" });
+        return;
+      }
+      // Write importing status BEFORE responding — RESIL-01: popup can close without breaking import
+      await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "importing" } as ImportStatus });
+      sendResponse({ success: true });
+
+      // Import continues in service worker regardless of popup state
+      try {
+        const result = await executeQuery<{ node: GraphQLActivity }>(
+          IMPORT_SESSION_QUERY,
+          { id: activityId }
+        );
+        if (result.errors && result.errors.length > 0) {
+          if (isAuthError(result.errors)) {
+            await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Session expired — log into portal.trackmangolf.com" } as ImportStatus });
+          } else {
+            await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Unable to reach Trackman — try again later" } as ImportStatus });
+          }
+          return;
+        }
+        const activity = result.data?.node;
+        const session = activity ? parsePortalActivity(activity) : null;
+        if (!session) {
+          // D-09: empty activity — no strokes
+          await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "No shot data found for this activity" } as ImportStatus });
+          return;
+        }
+        // PIPE-02: write to TRACKMAN_DATA so all export/AI/history paths see the imported session
+        await chrome.storage.local.set({ [STORAGE_KEYS.TRACKMAN_DATA]: session });
+        await saveSessionToHistory(session);
+        await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "success" } as ImportStatus });
+        console.log("TrackPull: Session imported successfully:", session.report_id);
+      } catch (err) {
+        console.error("TrackPull: Import failed:", err);
+        await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Import failed — try again" } as ImportStatus });
+      }
     })();
     return true;
   }
