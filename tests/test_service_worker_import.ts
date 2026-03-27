@@ -208,13 +208,13 @@ describe("FETCH_ACTIVITIES handler", () => {
     });
   });
 
-  it("returns {success: true, activities} with id and date on success", async () => {
+  it("returns {success: true, activities} with id, date, strokeCount, and type on success", async () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
     vi.mocked(executeQuery).mockResolvedValue({
       data: {
         activities: {
           edges: [
-            { node: { id: "act-001", date: "2026-01-15" } },
+            { node: { id: "act-001", date: "2026-01-15", strokeCount: 18, type: "Session" } },
             { node: { id: "act-002", date: "2026-01-10" } },
           ],
         },
@@ -227,8 +227,8 @@ describe("FETCH_ACTIVITIES handler", () => {
     expect(sendResponse).toHaveBeenCalledWith({
       success: true,
       activities: [
-        { id: "act-001", date: "2026-01-15" },
-        { id: "act-002", date: "2026-01-10" },
+        { id: "act-001", date: "2026-01-15", strokeCount: 18, type: "Session" },
+        { id: "act-002", date: "2026-01-10", strokeCount: null, type: null },
       ],
     });
   });
