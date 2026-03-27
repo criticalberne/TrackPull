@@ -149,4 +149,5 @@ export const STORAGE_KEYS = {
   HITTING_SURFACE: "hittingSurface",
   INCLUDE_AVERAGES: "includeAverages",
   SESSION_HISTORY: "sessionHistory",
+  IMPORT_STATUS: "importStatus",
 } as const;
