@@ -181,10 +181,13 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         return;
       }
       try {
-        const result = await executeQuery<{ activities: { edges: Array<{ node: { id: string; date: string } }> } }>(
-          FETCH_ACTIVITIES_QUERY,
-          { first: 20 }
-        );
+        const result = await executeQuery<{
+          activities: {
+            edges: Array<{
+              node: { id: string; date: string; strokeCount?: number; type?: string };
+            }>;
+          };
+        }>(FETCH_ACTIVITIES_QUERY, { first: 20 });
         if (result.errors && result.errors.length > 0) {
           if (isAuthError(result.errors)) {
             sendResponse({ success: false, error: "Session expired — log into portal.trackmangolf.com" });
@@ -193,7 +196,13 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
           }
           return;
         }
-        const activities: ActivitySummary[] = result.data?.activities?.edges?.map(e => e.node) ?? [];
+        const activities: ActivitySummary[] =
+          result.data?.activities?.edges?.map((e) => ({
+            id: e.node.id,
+            date: e.node.date,
+            strokeCount: e.node.strokeCount ?? null,
+            type: e.node.type ?? null,
+          })) ?? [];
         sendResponse({ success: true, activities });
       } catch (err) {
         console.error("TrackPull: Fetch activities failed:", err);

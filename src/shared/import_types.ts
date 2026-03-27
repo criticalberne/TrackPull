@@ -14,6 +14,8 @@ export type ImportStatus =
 export interface ActivitySummary {
   id: string;
   date: string;
+  strokeCount: number | null;  // null if field unavailable from API
+  type: string | null;         // null if field unavailable from API
 }
 
 /**
@@ -28,6 +30,8 @@ export const FETCH_ACTIVITIES_QUERY = `
         node {
           id
           date
+          strokeCount
+          type
         }
       }
     }
