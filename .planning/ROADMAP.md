@@ -240,7 +240,7 @@ Plans:
   4. An imported session is functionally identical to a live-captured session in all export and AI paths
 **Plans**: 2 plans
 Plans:
-- [ ] 24-01-PLAN.md — Constants, types, FETCH_ACTIVITIES and IMPORT_SESSION handlers with TDD
+- [x] 24-01-PLAN.md — Constants, types, FETCH_ACTIVITIES and IMPORT_SESSION handlers with TDD
 - [ ] 24-02-PLAN.md — Popup import status display and build verification
 
 ### Phase 25: Activity Browser UI
@@ -283,7 +283,7 @@ Plans:
 | 21. Manifest and Permissions Foundation | v1.6 PI | 1/1 | Complete    | 2026-03-26 |
 | 22. GraphQL Client and Cookie Auth | v1.6 PI | 2/2 | Complete   | 2026-03-26 |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/1 | Complete    | 2026-03-27 |
-| 24. Service Worker Import Flow | v1.6 PI | 0/2 | Not started | - |
+| 24. Service Worker Import Flow | v1.6 PI | 1/2 | In Progress|  |
 | 25. Activity Browser UI | v1.6 PI | 0/0 | Not started | - |
 
 ---

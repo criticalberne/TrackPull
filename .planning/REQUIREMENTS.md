@@ -16,19 +16,19 @@ Requirements for v1.6 Trackman Portal Integration milestone. Each maps to roadma
 ### Activity Browser
 
 - [ ] **BROWSE-01**: User can view a list of their Trackman activities showing date, stroke count, and activity type
-- [ ] **BROWSE-02**: User can select a single activity and import its full shot data into the extension
+- [x] **BROWSE-02**: User can select a single activity and import its full shot data into the extension
 - [ ] **BROWSE-03**: Activities are grouped by time period (Today / This Week / This Month / Older)
 - [ ] **BROWSE-04**: User can filter activities by type (Session, Shot Analysis, Course Play, etc.)
 
 ### Data Pipeline
 
 - [ ] **PIPE-01**: GraphQL `Stroke.measurement` fields (60+) are mapped into the existing `SessionData` format with defensive null handling
-- [ ] **PIPE-02**: An imported session supports CSV export, TSV clipboard copy, AI launch, and history storage — identical to intercepted sessions
+- [x] **PIPE-02**: An imported session supports CSV export, TSV clipboard copy, AI launch, and history storage — identical to intercepted sessions
 - [ ] **PIPE-03**: Same session captured via interceptor and imported via API is deduplicated in history
 
 ### Resilience
 
-- [ ] **RESIL-01**: Session import continues in the service worker even if the popup is closed mid-import
+- [x] **RESIL-01**: Session import continues in the service worker even if the popup is closed mid-import
 - [ ] **RESIL-02**: Popup reads import status from storage on open/re-open and displays progress or completion
 - [x] **RESIL-03**: Parser handles missing, null, or unexpected fields gracefully without crashing
 
@@ -124,13 +124,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERM-02 | Phase 22 | Complete |
 | PERM-03 | Phase 22 | Complete |
 | BROWSE-01 | Phase 25 | Pending |
-| BROWSE-02 | Phase 24 | Pending |
+| BROWSE-02 | Phase 24 | Complete |
 | BROWSE-03 | Phase 25 | Pending |
 | BROWSE-04 | Phase 25 | Pending |
 | PIPE-01 | Phase 23 | Pending |
-| PIPE-02 | Phase 24 | Pending |
+| PIPE-02 | Phase 24 | Complete |
 | PIPE-03 | Phase 23 | Pending |
-| RESIL-01 | Phase 24 | Pending |
+| RESIL-01 | Phase 24 | Complete |
 | RESIL-02 | Phase 24 | Pending |
 | RESIL-03 | Phase 22 | Complete |
 

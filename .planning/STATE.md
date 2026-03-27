@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.6
 milestone_name: Trackman Portal Integration
 status: executing
-stopped_at: Phase 24 context gathered
-last_updated: "2026-03-27T01:33:33.920Z"
+stopped_at: Completed 24-01-PLAN.md
+last_updated: "2026-03-27T02:07:33.197Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 13
   completed_phases: 5
-  total_plans: 9
-  completed_plans: 8
+  total_plans: 11
+  completed_plans: 9
   percent: 46
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** Accurately capture every shot metric from a Trackman report and produce a clean, complete CSV export
-**Current focus:** Phase 23 — graphql-to-sessiondata-parser
+**Current focus:** Phase 24 — service-worker-import-flow
 
 ## Current Position
 
-Phase: 24
-Plan: Not started
-Status: Executing Phase 23
+Phase: 24 (service-worker-import-flow) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-27
 
 Progress: [█████░░░░░] 46%
@@ -59,6 +59,8 @@ Recent decisions relevant to this milestone:
 - classifyAuthResult checks error code (UNAUTHENTICATED) then message substrings before falling through to generic error
 - HEALTH_CHECK_QUERY targets me { id } — minimal query sufficient for auth detection
 - [Phase 22]: PortalState string union over boolean — four states (denied/not-logged-in/ready/error) cleanly without additional parameters
+- [Phase 24]: isAuthError inline helper for generic GraphQL auth detection (avoids classifyAuthResult type mismatch)
+- [Phase 24]: IMPORT_STATUS written before sendResponse for RESIL-01 popup-close safety
 
 ### Pending Todos
 
@@ -78,6 +80,6 @@ Recent decisions relevant to this milestone:
 
 ## Session Continuity
 
-Last session: 2026-03-27T01:33:33.917Z
-Stopped at: Phase 24 context gathered
-Resume file: .planning/phases/24-service-worker-import-flow/24-CONTEXT.md
+Last session: 2026-03-27T02:07:33.194Z
+Stopped at: Completed 24-01-PLAN.md
+Resume file: None
