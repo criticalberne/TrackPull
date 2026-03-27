@@ -6,13 +6,16 @@ import { STORAGE_KEYS } from "../shared/constants";
 import { migrateLegacyPref, getApiSourceUnitSystem, normalizeMetricValue, DISTANCE_LABELS, SPEED_LABELS, DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import type { SessionData, Shot } from "../models/types";
 import type { UnitChoice } from "../shared/unit_normalization";
-import type { ImportStatus } from "../shared/import_types";
+import type { ActivitySummary, ImportStatus } from "../shared/import_types";
 import { writeTsv } from "../shared/tsv_writer";
 import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
 import { assemblePrompt, buildUnitLabel, countSessionShots } from "../shared/prompt_builder";
 import { loadCustomPrompts } from "../shared/custom_prompts";
 import { hasPortalPermission, requestPortalPermission, PORTAL_ORIGINS } from "../shared/portalPermissions";
+import { formatActivityDate, getTimePeriod, filterActivities, getUniqueTypes } from "../shared/activity_helpers";
+import type { TimePeriod } from "../shared/activity_helpers";
+import { extractActivityUuid } from "../shared/portal_parser";
 
 export function computeClubAverage(
   shots: Shot[],
@@ -43,11 +46,152 @@ let cachedUnitChoice: UnitChoice = DEFAULT_UNIT_CHOICE;
 let cachedSurface: "Grass" | "Mat" = "Mat";
 let cachedCustomPrompts: CustomPrompt[] = [];
 
+/** Cached activities from the last FETCH_ACTIVITIES response. */
+let cachedActivities: ActivitySummary[] = [];
+/** Set of report_id UUIDs already in session history (for "Imported" badge). */
+let importedReportIds: Set<string> = new Set();
+
 const AI_URLS: Record<string, string> = {
   "ChatGPT": "https://chatgpt.com",
   "Claude": "https://claude.ai",
   "Gemini": "https://gemini.google.com",
 };
+
+/**
+ * Read session history from storage and return the set of report_id values.
+ * Used to detect already-imported activities (D-06).
+ * report_id in history is the UUID extracted from the base64 activity ID.
+ */
+async function fetchImportedIds(): Promise<Set<string>> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([STORAGE_KEYS.SESSION_HISTORY], (result) => {
+      const history = (result[STORAGE_KEYS.SESSION_HISTORY] as Array<{ snapshot: { report_id: string } }>) ?? [];
+      resolve(new Set(history.map((e) => e.snapshot.report_id)));
+    });
+  });
+}
+
+/**
+ * Render the activity list grouped by time period with filter applied.
+ * Per D-04: compact single-line rows. Per D-07: flat section headers.
+ * Per D-08: empty periods hidden. Per D-06: "Imported" label for already-imported.
+ */
+function renderActivityBrowser(
+  activities: ActivitySummary[],
+  importedIds: Set<string>,
+  typeFilter: string
+): void {
+  const container = document.getElementById("activity-list-container");
+  if (!container) return;
+
+  const filtered = filterActivities(activities, typeFilter);
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="activity-list-empty">${
+      activities.length === 0 ? "No activities found" : "No activities match this filter"
+    }</div>`;
+    return;
+  }
+
+  const periods: TimePeriod[] = ["Today", "This Week", "This Month", "Older"];
+
+  let html = "";
+  for (const period of periods) {
+    const group = filtered.filter((a) => getTimePeriod(a.date) === period);
+    if (group.length === 0) continue;
+    html += `<div class="activity-period-header">${escapeHtml(period)}</div>`;
+    for (const activity of group) {
+      // Compare UUID (report_id in history) against decoded activity.id
+      const isImported = importedIds.has(extractActivityUuid(activity.id));
+      const dateStr = formatActivityDate(activity.date);
+      const typeStr = activity.type ? escapeHtml(activity.type) : "\u2014";
+      const countStr = activity.strokeCount !== null ? String(activity.strokeCount) : "\u2014";
+      const actionHtml = isImported
+        ? `<span class="activity-imported-label">Imported</span>`
+        : `<button class="activity-import-btn" data-activity-id="${escapeHtml(activity.id)}">Import</button>`;
+      html += `<div class="activity-row">
+        <span class="activity-date">${dateStr}</span>
+        <span class="activity-type">${typeStr}</span>
+        <span class="activity-stroke-count">${countStr}</span>
+        ${actionHtml}
+      </div>`;
+    }
+  }
+  container.innerHTML = html;
+
+  // Attach import button click handlers
+  container.querySelectorAll<HTMLButtonElement>(".activity-import-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const activityId = btn.dataset.activityId;
+      if (!activityId) return;
+      btn.disabled = true;
+      btn.textContent = "Importing...";
+      chrome.runtime.sendMessage({ type: "IMPORT_SESSION", activityId });
+      // Import result is displayed via showImportStatus (storage.onChanged listener from Phase 24)
+    });
+  });
+}
+
+/**
+ * Populate the type filter dropdown with unique types from fetched activities.
+ * Per D-10: dynamically populated. Per D-09: "All Types" default.
+ */
+function populateTypeFilter(activities: ActivitySummary[]): void {
+  const select = document.getElementById("activity-type-filter") as HTMLSelectElement | null;
+  if (!select) return;
+
+  const types = getUniqueTypes(activities);
+  // Reset to just "All Types"
+  select.innerHTML = `<option value="">All Types</option>`;
+  for (const type of types) {
+    const opt = document.createElement("option");
+    opt.value = type;
+    opt.textContent = type;
+    select.appendChild(opt);
+  }
+}
+
+/**
+ * Fetch activities from service worker and render the browser.
+ * Called when portal state is "ready". Per D-01: auto-load on open.
+ * Per D-12: shows loading/loaded/error states.
+ */
+async function loadActivityBrowser(): Promise<void> {
+  const container = document.getElementById("activity-list-container");
+  if (container) {
+    container.innerHTML = `<div class="activity-loading">Loading activities...</div>`;
+  }
+
+  try {
+    // Fetch imported IDs and activities in parallel
+    const [ids, response] = await Promise.all([
+      fetchImportedIds(),
+      new Promise<{ success: boolean; activities?: ActivitySummary[]; error?: string }>((resolve) => {
+        chrome.runtime.sendMessage({ type: "FETCH_ACTIVITIES" }, resolve);
+      }),
+    ]);
+
+    importedReportIds = ids;
+
+    if (!response || !response.success) {
+      if (container) {
+        container.innerHTML = `<div class="activity-list-empty">${escapeHtml(response?.error ?? "Unable to fetch activities")}</div>`;
+      }
+      return;
+    }
+
+    cachedActivities = response.activities ?? [];
+    populateTypeFilter(cachedActivities);
+
+    const select = document.getElementById("activity-type-filter") as HTMLSelectElement | null;
+    const typeFilter = select?.value ?? "";
+    renderActivityBrowser(cachedActivities, importedReportIds, typeFilter);
+  } catch {
+    if (container) {
+      container.innerHTML = `<div class="activity-list-empty">Unable to fetch activities \u2014 try again later</div>`;
+    }
+  }
+}
 
 function renderStatCard(): void {
   const container = document.getElementById("stat-card") as HTMLDetailsElement | null;
@@ -331,6 +475,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     });
 
+    // Refresh imported IDs when history changes (new import completed)
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes[STORAGE_KEYS.SESSION_HISTORY]) {
+        fetchImportedIds().then((ids) => {
+          importedReportIds = ids;
+          const select = document.getElementById("activity-type-filter") as HTMLSelectElement | null;
+          renderActivityBrowser(cachedActivities, importedReportIds, select?.value ?? "");
+        });
+      }
+    });
+
     const exportBtn = document.getElementById("export-btn");
     if (exportBtn) {
       exportBtn.addEventListener("click", handleExportClick);
@@ -407,6 +562,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           error: "error",
         };
         renderPortalSection(stateMap[authResponse.status] ?? "error", authResponse.message);
+        if (stateMap[authResponse.status] === "ready") {
+          loadActivityBrowser();
+        }
       } else {
         renderPortalSection("error", "Unable to check portal status");
       }
@@ -414,18 +572,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       renderPortalSection("error", "Unable to check portal status");
     }
 
-    // Portal import button — requests permission if not granted (D-01, D-02)
-    const portalImportBtn = document.getElementById("portal-import-btn");
-    if (portalImportBtn) {
-      portalImportBtn.addEventListener("click", async () => {
-        const granted = await hasPortalPermission();
-        if (!granted) {
-          const newlyGranted = await requestPortalPermission();
-          renderPortalSection(newlyGranted ? "ready" : "denied");
-          return;
-        }
-        // Phase 24 will implement actual import flow
-        console.log("TrackPull: Portal import — not yet implemented");
+    // Activity type filter change handler (D-09, D-11)
+    const activityTypeFilter = document.getElementById("activity-type-filter") as HTMLSelectElement | null;
+    if (activityTypeFilter) {
+      activityTypeFilter.addEventListener("change", () => {
+        renderActivityBrowser(cachedActivities, importedReportIds, activityTypeFilter.value);
       });
     }
 
@@ -435,6 +586,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       portalGrantBtn.addEventListener("click", async () => {
         const granted = await requestPortalPermission();
         renderPortalSection(granted ? "ready" : "denied");
+        if (granted) {
+          loadActivityBrowser();
+        }
       });
     }
 
@@ -454,6 +608,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       );
       if (portalOriginsGranted) {
         renderPortalSection("ready");
+        loadActivityBrowser();
       }
     });
 
