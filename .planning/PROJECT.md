@@ -45,7 +45,7 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 - [ ] GraphQL client with cookie-based auth for `api.trackmangolf.com/graphql`
 - [ ] Activity list query via `me.activities` returning all user sessions
 - [ ] Activity browser UI in popup for selecting and importing sessions
-- [ ] Shot data pull via `node(id)` query with full Stroke.measurement parsing
+- [x] Shot data pull via `node(id)` query with full Stroke.measurement parsing — Phase 24
 - [x] Mapping GraphQL Measurement fields into existing SessionData format — Phase 23
 - [ ] Imported sessions usable through existing export/AI/history pipeline
 
@@ -71,7 +71,7 @@ Accurately capture every shot metric from a Trackman report and produce a clean,
 
 Shipped v1.5 with ~49,908 LOC TypeScript.
 Tech stack: Chrome MV3 extension, esbuild, vitest. Zero production dependencies.
-247 tests across 12 test files, all passing.
+352 tests across 20 test files, all passing.
 `dist/` tracked in git; `production.zip` gitignored.
 
 ## Constraints
