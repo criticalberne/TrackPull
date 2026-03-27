@@ -283,7 +283,7 @@ Plans:
 | 21. Manifest and Permissions Foundation | v1.6 PI | 1/1 | Complete    | 2026-03-26 |
 | 22. GraphQL Client and Cookie Auth | v1.6 PI | 2/2 | Complete   | 2026-03-26 |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/1 | Complete    | 2026-03-27 |
-| 24. Service Worker Import Flow | v1.6 PI | 2/2 | Complete   | 2026-03-27 |
+| 24. Service Worker Import Flow | v1.6 PI | 2/2 | Complete    | 2026-03-27 |
 | 25. Activity Browser UI | v1.6 PI | 0/0 | Not started | - |
 
 ---
