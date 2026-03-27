@@ -238,7 +238,10 @@ Plans:
   2. Import completes and the session is saved even if the user closes the popup before the GraphQL fetch returns
   3. When the popup is reopened after a mid-import close, it displays the import result (success or error) read from `chrome.storage.local` — no data is silently lost
   4. An imported session is functionally identical to a live-captured session in all export and AI paths
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 24-01-PLAN.md — Constants, types, FETCH_ACTIVITIES and IMPORT_SESSION handlers with TDD
+- [ ] 24-02-PLAN.md — Popup import status display and build verification
 
 ### Phase 25: Activity Browser UI
 **Goal**: User can browse, filter, and import portal sessions directly from the popup without leaving the extension
@@ -280,7 +283,7 @@ Plans:
 | 21. Manifest and Permissions Foundation | v1.6 PI | 1/1 | Complete    | 2026-03-26 |
 | 22. GraphQL Client and Cookie Auth | v1.6 PI | 2/2 | Complete   | 2026-03-26 |
 | 23. GraphQL-to-SessionData Parser | v1.6 PI | 0/1 | Complete    | 2026-03-27 |
-| 24. Service Worker Import Flow | v1.6 PI | 0/0 | Not started | - |
+| 24. Service Worker Import Flow | v1.6 PI | 0/2 | Not started | - |
 | 25. Activity Browser UI | v1.6 PI | 0/0 | Not started | - |
 
 ---
