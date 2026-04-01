@@ -20,7 +20,11 @@ const { mockStorageSet, getHandler } = vi.hoisted(() => {
   const mockRuntimeSendMessage = vi.fn();
   const mockDownload = vi.fn();
 
-  type MsgHandler = (message: unknown, sender: unknown, sendResponse: (r: unknown) => void) => boolean | undefined;
+  type MsgHandler = (
+    message: unknown,
+    sender: unknown,
+    sendResponse: (r: unknown) => void,
+  ) => boolean | undefined;
   let _handler: MsgHandler | null = null;
 
   // Install chrome global before any imports run
@@ -28,7 +32,9 @@ const { mockStorageSet, getHandler } = vi.hoisted(() => {
     runtime: {
       onInstalled: { addListener: vi.fn() },
       onMessage: {
-        addListener: (fn: MsgHandler) => { _handler = fn; },
+        addListener: (fn: MsgHandler) => {
+          _handler = fn;
+        },
       },
       sendMessage: mockRuntimeSendMessage,
       lastError: undefined,
@@ -82,7 +88,10 @@ import { parsePortalActivity } from "../src/shared/portal_parser";
 import { saveSessionToHistory } from "../src/shared/history";
 import { STORAGE_KEYS } from "../src/shared/constants";
 import type { ImportStatus } from "../src/shared/import_types";
-import { FETCH_ACTIVITIES_QUERY, IMPORT_SESSION_QUERY } from "../src/shared/import_types";
+import {
+  FETCH_ACTIVITIES_QUERY,
+  IMPORT_SESSION_QUERY,
+} from "../src/shared/import_types";
 
 // This import triggers serviceWorker.ts evaluation — chrome must already exist (set in vi.hoisted above)
 import "../src/background/serviceWorker";
@@ -90,7 +99,7 @@ import "../src/background/serviceWorker";
 // Helper to invoke the captured message handler
 function callHandler(
   message: unknown,
-  sendResponse: (r: unknown) => void
+  sendResponse: (r: unknown) => void,
 ): boolean | undefined {
   return getHandler()(message, {}, sendResponse);
 }
@@ -114,9 +123,14 @@ describe("import_types module", () => {
   });
 
   it("ImportStatus error variant has message field", () => {
-    const status: ImportStatus = { state: "error", message: "something went wrong" };
+    const status: ImportStatus = {
+      state: "error",
+      message: "something went wrong",
+    };
     expect(status.state).toBe("error");
-    expect((status as Extract<ImportStatus, { state: "error" }>).message).toBe("something went wrong");
+    expect((status as Extract<ImportStatus, { state: "error" }>).message).toBe(
+      "something went wrong",
+    );
   });
 
   it("FETCH_ACTIVITIES_QUERY contains 'me' and 'activities'", () => {
@@ -127,6 +141,13 @@ describe("import_types module", () => {
   it("IMPORT_SESSION_QUERY contains 'node(id: $id)' and 'strokes'", () => {
     expect(IMPORT_SESSION_QUERY).toContain("node(id: $id)");
     expect(IMPORT_SESSION_QUERY).toContain("strokes");
+  });
+
+  it("IMPORT_SESSION_QUERY contains RangeFindMyDistanceActivity fragment with PRO_BALL_MEASUREMENT", () => {
+    expect(IMPORT_SESSION_QUERY).toContain("RangeFindMyDistanceActivity");
+    expect(IMPORT_SESSION_QUERY).toContain("PRO_BALL_MEASUREMENT");
+    expect(IMPORT_SESSION_QUERY).toContain("isDeleted");
+    expect(IMPORT_SESSION_QUERY).toContain("isSimulated");
   });
 });
 
@@ -156,7 +177,10 @@ describe("FETCH_ACTIVITIES handler", () => {
     expect(returnValue).toBe(true);
 
     await vi.waitUntil(() => sendResponse.mock.calls.length > 0);
-    expect(sendResponse).toHaveBeenCalledWith({ success: false, error: "Portal permission not granted" });
+    expect(sendResponse).toHaveBeenCalledWith({
+      success: false,
+      error: "Portal permission not granted",
+    });
     expect(executeQuery).not.toHaveBeenCalled();
   });
 
@@ -164,7 +188,12 @@ describe("FETCH_ACTIVITIES handler", () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
     vi.mocked(executeQuery).mockResolvedValue({
       data: null,
-      errors: [{ message: "Not authenticated", extensions: { code: "UNAUTHENTICATED" } }],
+      errors: [
+        {
+          message: "Not authenticated",
+          extensions: { code: "UNAUTHENTICATED" },
+        },
+      ],
     });
 
     callHandler({ type: "FETCH_ACTIVITIES" }, sendResponse);
@@ -214,7 +243,12 @@ describe("FETCH_ACTIVITIES handler", () => {
       data: {
         me: {
           activities: [
-            { id: "act-001", time: "2026-01-15", strokeCount: 18, kind: "Session" },
+            {
+              id: "act-001",
+              time: "2026-01-15",
+              strokeCount: 18,
+              kind: "Session",
+            },
             { id: "act-002", time: "2026-01-10" },
           ],
         },
@@ -242,7 +276,10 @@ describe("FETCH_ACTIVITIES handler", () => {
     callHandler({ type: "FETCH_ACTIVITIES" }, sendResponse);
     await vi.waitUntil(() => sendResponse.mock.calls.length > 0);
 
-    expect(sendResponse).toHaveBeenCalledWith({ success: true, activities: [] });
+    expect(sendResponse).toHaveBeenCalledWith({
+      success: true,
+      activities: [],
+    });
   });
 
   it("returns generic error on network exception", async () => {
@@ -279,17 +316,26 @@ describe("IMPORT_SESSION handler", () => {
 
   it("handler returns true (async response flag)", async () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(false);
-    const returnValue = callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    const returnValue = callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
     expect(returnValue).toBe(true);
   });
 
   it("returns {success: false, error: 'Portal permission not granted'} and does NOT write IMPORT_STATUS when permission denied", async () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(false);
 
-    callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
     await vi.waitUntil(() => sendResponse.mock.calls.length > 0);
 
-    expect(sendResponse).toHaveBeenCalledWith({ success: false, error: "Portal permission not granted" });
+    expect(sendResponse).toHaveBeenCalledWith({
+      success: false,
+      error: "Portal permission not granted",
+    });
     const statusWrites = mockStorageSet.mock.calls.filter((call: unknown[]) => {
       const arg = call[0] as Record<string, unknown>;
       return STORAGE_KEYS.IMPORT_STATUS in arg;
@@ -301,16 +347,25 @@ describe("IMPORT_SESSION handler", () => {
     const callOrder: string[] = [];
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
 
-    mockStorageSet.mockImplementation(async () => { callOrder.push("storage.set"); });
-    sendResponse.mockImplementation(() => { callOrder.push("sendResponse"); });
+    mockStorageSet.mockImplementation(async () => {
+      callOrder.push("storage.set");
+    });
+    sendResponse.mockImplementation(() => {
+      callOrder.push("sendResponse");
+    });
 
     vi.mocked(executeQuery).mockImplementation(async () => {
       callOrder.push("executeQuery");
-      return { data: { node: { id: "act-001", date: "2026-01-15", strokeGroups: [] } } };
+      return {
+        data: { node: { id: "act-001", date: "2026-01-15", strokeGroups: [] } },
+      };
     });
     vi.mocked(parsePortalActivity).mockReturnValue(null);
 
-    callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
 
     await vi.waitUntil(() => callOrder.includes("executeQuery"));
 
@@ -324,15 +379,24 @@ describe("IMPORT_SESSION handler", () => {
 
   it("calls sendResponse({success: true}) BEFORE the async GraphQL query resolves", async () => {
     let resolveQuery!: (v: unknown) => void;
-    const queryPromise = new Promise((resolve) => { resolveQuery = resolve; });
+    const queryPromise = new Promise((resolve) => {
+      resolveQuery = resolve;
+    });
     const callOrder: string[] = [];
 
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
     mockStorageSet.mockResolvedValue(undefined);
-    vi.mocked(executeQuery).mockReturnValue(queryPromise as ReturnType<typeof executeQuery>);
-    sendResponse.mockImplementation(() => { callOrder.push("sendResponse"); });
+    vi.mocked(executeQuery).mockReturnValue(
+      queryPromise as ReturnType<typeof executeQuery>,
+    );
+    sendResponse.mockImplementation(() => {
+      callOrder.push("sendResponse");
+    });
 
-    callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
 
     await vi.waitUntil(() => sendResponse.mock.calls.length > 0);
     callOrder.push("queryPending");
@@ -349,21 +413,28 @@ describe("IMPORT_SESSION handler", () => {
     });
     vi.mocked(parsePortalActivity).mockReturnValue(mockSession as any);
 
-    callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
 
     await vi.waitUntil(() =>
       mockStorageSet.mock.calls.some((call: unknown[]) => {
-        const status = (call[0] as Record<string, unknown>)[STORAGE_KEYS.IMPORT_STATUS] as ImportStatus | undefined;
+        const status = (call[0] as Record<string, unknown>)[
+          STORAGE_KEYS.IMPORT_STATUS
+        ] as ImportStatus | undefined;
         return status?.state === "success";
-      })
+      }),
     );
 
     expect(mockStorageSet).toHaveBeenCalledWith(
-      expect.objectContaining({ [STORAGE_KEYS.TRACKMAN_DATA]: mockSession })
+      expect.objectContaining({ [STORAGE_KEYS.TRACKMAN_DATA]: mockSession }),
     );
     expect(saveSessionToHistory).toHaveBeenCalledWith(mockSession);
     expect(mockStorageSet).toHaveBeenCalledWith(
-      expect.objectContaining({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "success" } })
+      expect.objectContaining({
+        [STORAGE_KEYS.IMPORT_STATUS]: { state: "success" },
+      }),
     );
   });
 
@@ -374,17 +445,25 @@ describe("IMPORT_SESSION handler", () => {
     });
     vi.mocked(parsePortalActivity).mockReturnValue(null);
 
-    callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
 
     await vi.waitUntil(() =>
       mockStorageSet.mock.calls.some((call: unknown[]) => {
-        const status = (call[0] as Record<string, unknown>)[STORAGE_KEYS.IMPORT_STATUS] as ImportStatus | undefined;
+        const status = (call[0] as Record<string, unknown>)[
+          STORAGE_KEYS.IMPORT_STATUS
+        ] as ImportStatus | undefined;
         return status?.state === "error";
-      })
+      }),
     );
 
     expect(mockStorageSet).toHaveBeenCalledWith({
-      [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "No shot data found for this activity" },
+      [STORAGE_KEYS.IMPORT_STATUS]: {
+        state: "error",
+        message: "No shot data found for this activity",
+      },
     });
     expect(saveSessionToHistory).not.toHaveBeenCalled();
   });
@@ -393,16 +472,23 @@ describe("IMPORT_SESSION handler", () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
     vi.mocked(executeQuery).mockResolvedValue({
       data: null,
-      errors: [{ message: "Unauthenticated", extensions: { code: "UNAUTHENTICATED" } }],
+      errors: [
+        { message: "Unauthenticated", extensions: { code: "UNAUTHENTICATED" } },
+      ],
     });
 
-    callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
 
     await vi.waitUntil(() =>
       mockStorageSet.mock.calls.some((call: unknown[]) => {
-        const status = (call[0] as Record<string, unknown>)[STORAGE_KEYS.IMPORT_STATUS] as ImportStatus | undefined;
+        const status = (call[0] as Record<string, unknown>)[
+          STORAGE_KEYS.IMPORT_STATUS
+        ] as ImportStatus | undefined;
         return status?.state === "error";
-      })
+      }),
     );
 
     expect(mockStorageSet).toHaveBeenCalledWith({
@@ -420,13 +506,18 @@ describe("IMPORT_SESSION handler", () => {
       errors: [{ message: "Some server error" }],
     });
 
-    callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
 
     await vi.waitUntil(() =>
       mockStorageSet.mock.calls.some((call: unknown[]) => {
-        const status = (call[0] as Record<string, unknown>)[STORAGE_KEYS.IMPORT_STATUS] as ImportStatus | undefined;
+        const status = (call[0] as Record<string, unknown>)[
+          STORAGE_KEYS.IMPORT_STATUS
+        ] as ImportStatus | undefined;
         return status?.state === "error";
-      })
+      }),
     );
 
     expect(mockStorageSet).toHaveBeenCalledWith({
@@ -441,13 +532,18 @@ describe("IMPORT_SESSION handler", () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
     vi.mocked(executeQuery).mockRejectedValue(new Error("Network down"));
 
-    callHandler({ type: "IMPORT_SESSION", activityId: "act-001" }, sendResponse);
+    callHandler(
+      { type: "IMPORT_SESSION", activityId: "act-001" },
+      sendResponse,
+    );
 
     await vi.waitUntil(() =>
       mockStorageSet.mock.calls.some((call: unknown[]) => {
-        const status = (call[0] as Record<string, unknown>)[STORAGE_KEYS.IMPORT_STATUS] as ImportStatus | undefined;
+        const status = (call[0] as Record<string, unknown>)[
+          STORAGE_KEYS.IMPORT_STATUS
+        ] as ImportStatus | undefined;
         return status?.state === "error";
-      })
+      }),
     );
 
     expect(mockStorageSet).toHaveBeenCalledWith({

@@ -29,6 +29,8 @@ export interface GraphQLStroke {
   club?: string | null;
   time?: string | null;
   targetDistance?: number | null;
+  isDeleted?: boolean | null;
+  isSimulated?: boolean | null;
   measurement?: StrokeMeasurement | null;
 }
 
@@ -55,6 +57,7 @@ const GRAPHQL_METRIC_ALIAS: Record<string, string> = {
   swingPlane: "SwingPlane",
   dynamicLoft: "DynamicLoft",
   spinRate: "SpinRate",
+  ballSpin: "SpinRate",
   spinAxis: "SpinAxis",
   spinLoft: "SpinLoft",
   launchAngle: "LaunchAngle",
@@ -119,7 +122,7 @@ export function extractActivityUuid(base64Id: string): string {
  * valid club groups after filtering empty/null strokes.
  */
 export function parsePortalActivity(
-  activity: GraphQLActivity
+  activity: GraphQLActivity,
 ): SessionData | null {
   try {
     if (!activity?.id) return null;
@@ -133,6 +136,7 @@ export function parsePortalActivity(
 
     for (const stroke of activity.strokes ?? []) {
       if (!stroke?.measurement) continue;
+      if (stroke.isDeleted === true || stroke.isSimulated === true) continue;
 
       const clubName = stroke.club || "Unknown";
       const shotMetrics: Record<string, string> = {};

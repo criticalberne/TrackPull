@@ -16,7 +16,20 @@ export type TimePeriod = "Today" | "This Week" | "This Month" | "Older";
 export function formatActivityDate(isoDate: string, now?: Date): string {
   const d = new Date(isoDate + "T00:00:00");
   const ref = now ?? new Date();
-  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthNames = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   const formatted = `${monthNames[d.getMonth()]} ${d.getDate()}`;
   if (d.getFullYear() !== ref.getFullYear()) {
     return `${formatted}, ${d.getFullYear()}`;
@@ -50,7 +63,10 @@ export function getTimePeriod(isoDate: string, now?: Date): TimePeriod {
  * Filter activities by type. Empty string means "All Types" (no filter).
  * Per D-11: client-side filtering.
  */
-export function filterActivities(activities: ActivitySummary[], typeFilter: string): ActivitySummary[] {
+export function filterActivities(
+  activities: ActivitySummary[],
+  typeFilter: string,
+): ActivitySummary[] {
   if (!typeFilter) return activities;
   return activities.filter((a) => a.type === typeFilter);
 }
@@ -60,5 +76,26 @@ export function filterActivities(activities: ActivitySummary[], typeFilter: stri
  * Per D-10: dynamically populated from fetched data.
  */
 export function getUniqueTypes(activities: ActivitySummary[]): string[] {
-  return [...new Set(activities.map((a) => a.type).filter((t): t is string => t !== null))].sort();
+  return [
+    ...new Set(
+      activities.map((a) => a.type).filter((t): t is string => t !== null),
+    ),
+  ].sort();
+}
+
+/** Map raw GraphQL activity kind values to user-friendly display names. */
+const ACTIVITY_TYPE_DISPLAY: Record<string, string> = {
+  Session: "Session",
+  VirtualRangeSession: "Virtual Range",
+  ShotAnalysisSession: "Shot Analysis",
+  CombineTest: "Combine Test",
+  RangeFindMyDistance: "Find My Distance",
+};
+
+/**
+ * Format a raw activity kind string into a friendly display name.
+ * Falls back to the raw value if no mapping exists.
+ */
+export function formatActivityType(kind: string): string {
+  return ACTIVITY_TYPE_DISPLAY[kind] ?? kind;
 }

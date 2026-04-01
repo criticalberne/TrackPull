@@ -85,7 +85,9 @@ const FIXTURE_NO_ID: GraphQLActivity = {
 
 describe("extractActivityUuid", () => {
   it("decodes base64 SessionActivity format to UUID", () => {
-    const encoded = btoa("SessionActivity\n550e8400-e29b-41d4-a716-446655440000");
+    const encoded = btoa(
+      "SessionActivity\n550e8400-e29b-41d4-a716-446655440000",
+    );
     const result = extractActivityUuid(encoded);
     expect(result).toBe("550e8400-e29b-41d4-a716-446655440000");
   });
@@ -112,7 +114,7 @@ describe("parsePortalActivity", () => {
       const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
       expect(session).not.toBeNull();
       const ironGroup = session!.club_groups.find(
-        (g) => g.club_name === "7-Iron"
+        (g) => g.club_name === "7-Iron",
       );
       expect(ironGroup).toBeDefined();
       const firstShot = ironGroup!.shots[0];
@@ -126,7 +128,7 @@ describe("parsePortalActivity", () => {
       const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
       expect(session).not.toBeNull();
       const driverGroup = session!.club_groups.find(
-        (g) => g.club_name === "Driver"
+        (g) => g.club_name === "Driver",
       );
       expect(driverGroup).toBeDefined();
       const firstShot = driverGroup!.shots[0];
@@ -159,7 +161,7 @@ describe("parsePortalActivity", () => {
       const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
       expect(session).not.toBeNull();
       const ironGroup = session!.club_groups.find(
-        (g) => g.club_name === "7-Iron"
+        (g) => g.club_name === "7-Iron",
       );
       const firstShot = ironGroup!.shots[0];
       // clubSpeed -> ClubSpeed
@@ -172,7 +174,7 @@ describe("parsePortalActivity", () => {
       expect(firstShot.metrics["SpinRate"]).toBeDefined();
       // total -> Total (from driver shot)
       const driverGroup = session!.club_groups.find(
-        (g) => g.club_name === "Driver"
+        (g) => g.club_name === "Driver",
       );
       expect(driverGroup!.shots[0].metrics["Total"]).toBeDefined();
       // confirm raw camelCase is NOT used
@@ -184,7 +186,7 @@ describe("parsePortalActivity", () => {
       const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
       expect(session).not.toBeNull();
       const ironGroup = session!.club_groups.find(
-        (g) => g.club_name === "7-Iron"
+        (g) => g.club_name === "7-Iron",
       );
       const firstShot = ironGroup!.shots[0];
       // someNewField -> SomeNewField
@@ -213,7 +215,7 @@ describe("parsePortalActivity", () => {
       const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
       expect(session).not.toBeNull();
       const ironGroup = session!.club_groups.find(
-        (g) => g.club_name === "7-Iron"
+        (g) => g.club_name === "7-Iron",
       );
       const firstShot = ironGroup!.shots[0];
       expect(typeof firstShot.metrics["ClubSpeed"]).toBe("string");
@@ -231,7 +233,7 @@ describe("parsePortalActivity", () => {
       const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
       expect(session).not.toBeNull();
       expect(session!.metadata_params["activity_id"]).toBe(
-        FIXTURE_FULL_ACTIVITY.id
+        FIXTURE_FULL_ACTIVITY.id,
       );
     });
 
@@ -290,9 +292,7 @@ describe("parsePortalActivity", () => {
     it("sets report_id to extracted UUID not raw base64", () => {
       const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
       expect(session).not.toBeNull();
-      expect(session!.report_id).toBe(
-        "550e8400-e29b-41d4-a716-446655440000"
-      );
+      expect(session!.report_id).toBe("550e8400-e29b-41d4-a716-446655440000");
       expect(session!.report_id).not.toBe(FIXTURE_FULL_ACTIVITY.id);
     });
 
@@ -319,6 +319,167 @@ describe("parsePortalActivity", () => {
     });
   });
 
+  describe("isDeleted / isSimulated filtering", () => {
+    it("excludes strokes with isDeleted: true", () => {
+      const activity: GraphQLActivity = {
+        id: btoa("RangeFindMyDistanceActivity\ndelete-test-uuid"),
+        time: "2026-02-10",
+        strokes: [
+          {
+            club: "7-Iron",
+            isDeleted: true,
+            measurement: { clubSpeed: 85.0, carry: 145.0 },
+          },
+          {
+            club: "7-Iron",
+            isDeleted: false,
+            measurement: { clubSpeed: 86.0, carry: 148.0 },
+          },
+        ],
+      };
+      const session = parsePortalActivity(activity);
+      expect(session).not.toBeNull();
+      expect(session!.club_groups[0].shots).toHaveLength(1);
+      expect(session!.club_groups[0].shots[0].metrics["Carry"]).toBe("148");
+    });
+
+    it("excludes strokes with isSimulated: true", () => {
+      const activity: GraphQLActivity = {
+        id: btoa("RangeFindMyDistanceActivity\nsim-test-uuid"),
+        time: "2026-02-10",
+        strokes: [
+          {
+            club: "Driver",
+            isSimulated: true,
+            measurement: { clubSpeed: 110.0, carry: 260.0 },
+          },
+          {
+            club: "Driver",
+            isSimulated: false,
+            measurement: { clubSpeed: 112.0, carry: 270.0 },
+          },
+        ],
+      };
+      const session = parsePortalActivity(activity);
+      expect(session).not.toBeNull();
+      expect(session!.club_groups[0].shots).toHaveLength(1);
+      expect(session!.club_groups[0].shots[0].metrics["Carry"]).toBe("270");
+    });
+
+    it("keeps strokes where isDeleted and isSimulated are null/undefined", () => {
+      const activity: GraphQLActivity = {
+        id: btoa("SessionActivity\nnull-flags-uuid"),
+        time: "2026-02-10",
+        strokes: [
+          {
+            club: "PW",
+            isDeleted: null,
+            isSimulated: null,
+            measurement: { clubSpeed: 78.0 },
+          },
+          {
+            club: "PW",
+            measurement: { clubSpeed: 80.0 },
+          },
+        ],
+      };
+      const session = parsePortalActivity(activity);
+      expect(session).not.toBeNull();
+      expect(session!.club_groups[0].shots).toHaveLength(2);
+    });
+
+    it("returns null when all strokes are deleted or simulated", () => {
+      const activity: GraphQLActivity = {
+        id: btoa("RangeFindMyDistanceActivity\nall-deleted-uuid"),
+        time: "2026-02-10",
+        strokes: [
+          {
+            club: "7-Iron",
+            isDeleted: true,
+            measurement: { clubSpeed: 85.0 },
+          },
+          {
+            club: "Driver",
+            isSimulated: true,
+            measurement: { clubSpeed: 110.0 },
+          },
+        ],
+      };
+      const session = parsePortalActivity(activity);
+      expect(session).toBeNull();
+    });
+  });
+
+  describe("RangeFindMyDistanceActivity support", () => {
+    it("parses a typical RangeFindMyDistanceActivity with pro ball measurements", () => {
+      const activity: GraphQLActivity = {
+        id: btoa("RangeFindMyDistanceActivity\nfmd-uuid-001"),
+        time: "2026-03-01",
+        strokes: [
+          {
+            club: "7-Iron",
+            isDeleted: false,
+            isSimulated: false,
+            measurement: {
+              clubSpeed: 87.2,
+              ballSpeed: 123.4,
+              carry: 165.3,
+              total: 172.1,
+              spinRate: 6800,
+              launchAngle: 18.5,
+            },
+          },
+          {
+            club: "7-Iron",
+            isDeleted: false,
+            isSimulated: false,
+            measurement: {
+              clubSpeed: 86.8,
+              ballSpeed: 122.9,
+              carry: 163.7,
+              total: 170.4,
+              spinRate: 7100,
+              launchAngle: 19.1,
+            },
+          },
+          {
+            club: "PW",
+            isDeleted: false,
+            isSimulated: false,
+            measurement: {
+              clubSpeed: 78.5,
+              ballSpeed: 105.2,
+              carry: 128.4,
+              total: 133.0,
+              spinRate: 9200,
+              launchAngle: 25.3,
+            },
+          },
+        ],
+      };
+      const session = parsePortalActivity(activity);
+      expect(session).not.toBeNull();
+      expect(session!.club_groups).toHaveLength(2);
+
+      const ironGroup = session!.club_groups.find(
+        (g) => g.club_name === "7-Iron",
+      );
+      expect(ironGroup).toBeDefined();
+      expect(ironGroup!.shots).toHaveLength(2);
+
+      const pwGroup = session!.club_groups.find((g) => g.club_name === "PW");
+      expect(pwGroup).toBeDefined();
+      expect(pwGroup!.shots).toHaveLength(1);
+    });
+
+    it("extracts UUID from RangeFindMyDistanceActivity base64 ID", () => {
+      const uuid = "abc-fmd-uuid-123";
+      const encoded = btoa(`RangeFindMyDistanceActivity\n${uuid}`);
+      const result = extractActivityUuid(encoded);
+      expect(result).toBe(uuid);
+    });
+  });
+
   describe("defensive handling", () => {
     it("returns null for empty strokeGroups", () => {
       const session = parsePortalActivity(FIXTURE_EMPTY);
@@ -331,13 +492,13 @@ describe("parsePortalActivity", () => {
     });
 
     it("returns null for completely malformed input", () => {
-      expect(parsePortalActivity(null as unknown as GraphQLActivity)).toBeNull();
       expect(
-        parsePortalActivity(undefined as unknown as GraphQLActivity)
+        parsePortalActivity(null as unknown as GraphQLActivity),
       ).toBeNull();
       expect(
-        parsePortalActivity({} as unknown as GraphQLActivity)
+        parsePortalActivity(undefined as unknown as GraphQLActivity),
       ).toBeNull();
+      expect(parsePortalActivity({} as unknown as GraphQLActivity)).toBeNull();
     });
   });
 });

@@ -4,6 +4,7 @@ import {
   getTimePeriod,
   filterActivities,
   getUniqueTypes,
+  formatActivityType,
 } from "../src/shared/activity_helpers";
 import type { ActivitySummary } from "../src/shared/import_types";
 
@@ -125,5 +126,31 @@ describe("getUniqueTypes", () => {
       { id: "3", date: "2026-03-24", strokeCount: 3, type: "Session" },
     ];
     expect(getUniqueTypes(activities)).toEqual(["Session"]);
+  });
+});
+
+describe("formatActivityType", () => {
+  it("returns 'Find My Distance' for RangeFindMyDistance", () => {
+    expect(formatActivityType("RangeFindMyDistance")).toBe("Find My Distance");
+  });
+
+  it("returns 'Session' for Session", () => {
+    expect(formatActivityType("Session")).toBe("Session");
+  });
+
+  it("returns 'Virtual Range' for VirtualRangeSession", () => {
+    expect(formatActivityType("VirtualRangeSession")).toBe("Virtual Range");
+  });
+
+  it("returns 'Shot Analysis' for ShotAnalysisSession", () => {
+    expect(formatActivityType("ShotAnalysisSession")).toBe("Shot Analysis");
+  });
+
+  it("returns 'Combine Test' for CombineTest", () => {
+    expect(formatActivityType("CombineTest")).toBe("Combine Test");
+  });
+
+  it("falls back to raw value for unknown types", () => {
+    expect(formatActivityType("SomeNewActivity")).toBe("SomeNewActivity");
   });
 });
