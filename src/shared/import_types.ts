@@ -49,6 +49,8 @@ const STROKE_FIELDS = `
   club
   time
   targetDistance
+  isDeleted
+  isSimulated
   measurement {
     clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
     faceToPath swingDirection swingPlane dynamicLoft spinRate spinAxis spinLoft
@@ -71,6 +73,18 @@ export const IMPORT_SESSION_QUERY = `
       }
       ... on CombineTestActivity {
         id time strokes { ${STROKE_FIELDS} }
+      }
+      ... on RangeFindMyDistanceActivity {
+        id time strokes {
+          club
+          isDeleted
+          isSimulated
+          measurement(measurementType: PRO_BALL_MEASUREMENT) {
+            ballSpeed ballSpin spinAxis
+            carry carrySide total totalSide
+            landingAngle launchAngle launchDirection maxHeight
+          }
+        }
       }
     }
   }
