@@ -44,13 +44,13 @@ export const FETCH_ACTIVITIES_QUERY = `
  */
 /**
  * Fragment for stroke measurement fields shared across all activity types.
+ * Note: isDeleted/isSimulated only exist on RangeFindMyDistanceActivity strokes,
+ * not on the Stroke type used by SessionActivity and friends.
  */
 const STROKE_FIELDS = `
   club
   time
   targetDistance
-  isDeleted
-  isSimulated
   measurement {
     clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
     faceToPath swingDirection swingPlane dynamicLoft spinRate spinAxis spinLoft
