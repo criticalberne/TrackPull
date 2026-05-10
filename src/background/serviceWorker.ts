@@ -56,6 +56,13 @@ interface PortalAuthCheckRequest {
   type: "PORTAL_AUTH_CHECK";
 }
 
+interface SaveImportedSessionRequest {
+  type: "SAVE_IMPORTED_SESSION";
+  graphqlData?: ImportedSessionGraphQLData;
+  graphqlPayloads?: ImportedSessionGraphQLData[];
+  activityId: string;
+}
+
 function isAuthError(errors: Array<{ message: string; extensions?: { code?: string } }>): boolean {
   if (errors.length === 0) return false;
   const code = errors[0].extensions?.code ?? "";
@@ -76,7 +83,14 @@ function getDownloadErrorMessage(originalError: string): string {
   return originalError;
 }
 
-type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest | FetchActivitiesRequest | ImportSessionRequest | PortalAuthCheckRequest;
+type RequestMessage =
+  | SaveDataRequest
+  | ExportCsvRequest
+  | GetDataRequest
+  | FetchActivitiesRequest
+  | ImportSessionRequest
+  | PortalAuthCheckRequest
+  | SaveImportedSessionRequest;
 
 function parseImportedSession(
   payloads: ImportedSessionGraphQLData[]
@@ -342,12 +356,9 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
 
   // Receives pre-fetched GraphQL data from popup (fetched via content script on portal page)
   if (message.type === "SAVE_IMPORTED_SESSION") {
-    const { graphqlData, graphqlPayloads } = message as {
-      type: string;
-      graphqlData?: ImportedSessionGraphQLData;
-      graphqlPayloads?: ImportedSessionGraphQLData[];
-      activityId: string;
-    };
+    const { graphqlData, graphqlPayloads } = message;
+    sendResponse({ success: true });
+
     (async () => {
       await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "importing" } as ImportStatus });
 
@@ -375,7 +386,7 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Import failed — try again" } as ImportStatus });
       }
     })();
-    return true;
+    return false;
   }
 });
 

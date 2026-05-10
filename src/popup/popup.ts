@@ -267,10 +267,14 @@ async function importPortalActivityFromTab(
   try {
     const graphqlPayloads = await fetchPortalActivityCandidates(tabId, activityId);
     installImportStatusButtonReset(button);
-    chrome.runtime.sendMessage({
+    void chrome.runtime.sendMessage({
       type: "SAVE_IMPORTED_SESSION",
       graphqlPayloads,
       activityId,
+    }).catch(() => {
+      showToast("Import failed — try again", "error");
+      button.disabled = false;
+      button.textContent = "Import";
     });
   } catch (err) {
     const message = err instanceof Error && err.message
@@ -658,7 +662,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (message.type === 'HISTORY_ERROR') {
         showToast((message as { type: string; error: string }).error, "error");
       }
-      return true;
     });
 
     // Listen for import status changes while popup is open (RESIL-02 real-time updates)

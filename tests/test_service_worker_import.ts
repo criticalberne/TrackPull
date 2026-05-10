@@ -615,3 +615,48 @@ describe("IMPORT_SESSION handler", () => {
     });
   });
 });
+
+describe("SAVE_IMPORTED_SESSION handler", () => {
+  let sendResponse: ReturnType<typeof vi.fn>;
+
+  const mockSession = {
+    report_id: "session-abc",
+    date: "2026-01-15",
+    club_groups: [{ club: "Driver", shots: [{ ClubSpeed: "105" }] }],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStorageSet.mockResolvedValue(undefined);
+    vi.mocked(saveSessionToHistory).mockResolvedValue(undefined);
+    sendResponse = vi.fn();
+  });
+
+  it("acknowledges the popup message synchronously without holding the response channel open", async () => {
+    vi.mocked(parsePortalActivity).mockReturnValue(mockSession as any);
+
+    const returnValue = callHandler({
+      type: "SAVE_IMPORTED_SESSION",
+      activityId: "act-001",
+      graphqlPayloads: [
+        { data: { node: { id: "act-001", date: "2026-01-15", strokeGroups: [] } } },
+      ],
+    }, sendResponse);
+
+    expect(returnValue).toBe(false);
+    expect(sendResponse).toHaveBeenCalledWith({ success: true });
+
+    await vi.waitUntil(() =>
+      mockStorageSet.mock.calls.some((call: unknown[]) => {
+        const status = (call[0] as Record<string, unknown>)[STORAGE_KEYS.IMPORT_STATUS] as ImportStatus | undefined;
+        return status?.state === "success";
+      })
+    );
+
+    expect(parsePortalActivity).toHaveBeenCalledWith({ id: "act-001", date: "2026-01-15", strokeGroups: [] });
+    expect(mockStorageSet).toHaveBeenCalledWith(
+      expect.objectContaining({ [STORAGE_KEYS.TRACKMAN_DATA]: mockSession })
+    );
+    expect(saveSessionToHistory).toHaveBeenCalledWith(mockSession);
+  });
+});

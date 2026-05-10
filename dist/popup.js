@@ -1247,10 +1247,14 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     try {
       const graphqlPayloads = await fetchPortalActivityCandidates(tabId, activityId);
       installImportStatusButtonReset(button);
-      chrome.runtime.sendMessage({
+      void chrome.runtime.sendMessage({
         type: "SAVE_IMPORTED_SESSION",
         graphqlPayloads,
         activityId
+      }).catch(() => {
+        showToast("Import failed \u2014 try again", "error");
+        button.disabled = false;
+        button.textContent = "Import";
       });
     } catch (err) {
       const message = err instanceof Error && err.message ? err.message : "Unable to fetch activity";
@@ -1549,7 +1553,6 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
         if (message.type === "HISTORY_ERROR") {
           showToast(message.error, "error");
         }
-        return true;
       });
       chrome.storage.onChanged.addListener((changes, namespace) => {
         if (namespace === "local" && changes[STORAGE_KEYS.IMPORT_STATUS]) {
