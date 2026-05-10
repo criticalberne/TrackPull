@@ -6,14 +6,22 @@ import { STORAGE_KEYS } from "../shared/constants";
 import { migrateLegacyPref, getApiSourceUnitSystem, normalizeMetricValue, DISTANCE_LABELS, SPEED_LABELS, DEFAULT_UNIT_CHOICE } from "../shared/unit_normalization";
 import type { SessionData, Shot } from "../models/types";
 import type { UnitChoice } from "../shared/unit_normalization";
-import type { ImportStatus } from "../shared/import_types";
-import { IMPORT_SESSION_QUERY } from "../shared/import_types";
+import type { ActivitySummary, FetchActivitiesQueryCandidate, ImportStatus } from "../shared/import_types";
+import {
+  FETCH_ACTIVITIES_MAX_PAGES,
+  FETCH_ACTIVITIES_PAGE_SIZE,
+  FETCH_ACTIVITIES_QUERY_CANDIDATES,
+  IMPORT_SESSION_QUERY_CANDIDATES,
+  normalizeActivitySummaries,
+  normalizeActivitySummaryPage,
+} from "../shared/import_types";
 import { writeTsv } from "../shared/tsv_writer";
 import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
 import { assemblePrompt, buildUnitLabel, countSessionShots } from "../shared/prompt_builder";
 import { loadCustomPrompts } from "../shared/custom_prompts";
 import { hasPortalPermission, requestPortalPermission, PORTAL_ORIGINS } from "../shared/portalPermissions";
+import { formatActivityDate, getPortalActivityDisplayLabel } from "../shared/activity_helpers";
 
 export function computeClubAverage(
   shots: Shot[],
@@ -52,6 +60,281 @@ const AI_URLS: Record<string, string> = {
 
 /** URL pattern for portal activity pages. Captures the base64 activity ID. */
 const PORTAL_ACTIVITY_PATTERN = /^https:\/\/portal\.trackmangolf\.com\/player\/activities\/([A-Za-z0-9+/=]+)$/;
+const PORTAL_ACTIVITIES_LIST_PATTERN = /^https:\/\/portal\.trackmangolf\.com\/player\/activities\/?$/;
+
+interface PortalGraphQLFetchResponse {
+  success: boolean;
+  data?: {
+    data?: Record<string, unknown> & { node?: unknown };
+    errors?: Array<{ message: string }>;
+  };
+  error?: string;
+}
+
+function isPortalAuthMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("unauthorized") ||
+    normalized.includes("not authorized") ||
+    normalized.includes("unauthenticated") ||
+    normalized.includes("not logged in");
+}
+
+function formatPortalFetchError(message: string): string {
+  return isPortalAuthMessage(message)
+    ? "Session expired — log into portal.trackmangolf.com"
+    : message;
+}
+
+async function fetchPortalGraphQL(
+  tabId: number,
+  candidate: FetchActivitiesQueryCandidate,
+  variables?: Record<string, unknown>
+): Promise<PortalGraphQLFetchResponse> {
+  return chrome.tabs.sendMessage(tabId, {
+    type: "PORTAL_GRAPHQL_FETCH",
+    query: candidate.query,
+    variables,
+  }) as Promise<PortalGraphQLFetchResponse>;
+}
+
+function appendUniqueActivities(
+  target: ActivitySummary[],
+  seenIds: Set<string>,
+  activities: ActivitySummary[]
+): void {
+  for (const activity of activities) {
+    if (seenIds.has(activity.id)) continue;
+    seenIds.add(activity.id);
+    target.push(activity);
+  }
+}
+
+async function fetchPortalActivitiesForCandidate(
+  tabId: number,
+  candidate: FetchActivitiesQueryCandidate
+): Promise<{ activities?: ActivitySummary[]; error?: string }> {
+  if (!candidate.paginated) {
+    const fetchResponse = await fetchPortalGraphQL(tabId, candidate);
+    if (!fetchResponse?.success) {
+      return { error: fetchResponse?.error ?? "Failed to fetch activities" };
+    }
+
+    const graphQLErrors = fetchResponse.data?.errors ?? [];
+    if (graphQLErrors.length > 0) {
+      return { error: graphQLErrors[0].message };
+    }
+
+    return { activities: normalizeActivitySummaries(fetchResponse.data?.data) };
+  }
+
+  const activities: ActivitySummary[] = [];
+  const seenIds = new Set<string>();
+  let skip = 0;
+
+  for (let page = 0; page < FETCH_ACTIVITIES_MAX_PAGES; page += 1) {
+    const fetchResponse = await fetchPortalGraphQL(tabId, candidate, {
+      skip,
+      take: FETCH_ACTIVITIES_PAGE_SIZE,
+    });
+    if (!fetchResponse?.success) {
+      return { error: fetchResponse?.error ?? "Failed to fetch activities" };
+    }
+
+    const graphQLErrors = fetchResponse.data?.errors ?? [];
+    if (graphQLErrors.length > 0) {
+      return { error: graphQLErrors[0].message };
+    }
+
+    const summaryPage = normalizeActivitySummaryPage(fetchResponse.data?.data);
+    appendUniqueActivities(activities, seenIds, summaryPage.activities);
+
+    const consumedCount = skip + summaryPage.itemCount;
+    if (
+      summaryPage.hasNextPage === false ||
+      summaryPage.itemCount === 0 ||
+      (summaryPage.hasNextPage === null && summaryPage.itemCount < FETCH_ACTIVITIES_PAGE_SIZE) ||
+      (summaryPage.totalCount !== null && consumedCount >= summaryPage.totalCount)
+    ) {
+      return { activities };
+    }
+    skip = consumedCount;
+  }
+
+  return { activities };
+}
+
+async function fetchPortalActivities(tabId: number): Promise<ActivitySummary[]> {
+  let firstError: string | undefined;
+
+  for (const candidate of FETCH_ACTIVITIES_QUERY_CANDIDATES) {
+    const result = await fetchPortalActivitiesForCandidate(tabId, candidate);
+    if (result.error) {
+      firstError = firstError ?? result.error;
+      continue;
+    }
+
+    return result.activities ?? [];
+  }
+
+  throw new Error(formatPortalFetchError(firstError ?? "No activities found"));
+}
+
+function responseContainsMeasurement(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(responseContainsMeasurement);
+  }
+  if (!value || typeof value !== "object") return false;
+
+  const record = value as Record<string, unknown>;
+  if (
+    record.measurement ||
+    record.Measurement ||
+    record.NormalizedMeasurement
+  ) {
+    return true;
+  }
+
+  return Object.entries(record).some(([key, nested]) => {
+    if (key === "measurement" || key === "Measurement" || key === "NormalizedMeasurement") {
+      return false;
+    }
+    return responseContainsMeasurement(nested);
+  });
+}
+
+async function fetchPortalActivityCandidates(
+  tabId: number,
+  activityId: string
+): Promise<Array<NonNullable<PortalGraphQLFetchResponse["data"]>>> {
+  const payloads: Array<NonNullable<PortalGraphQLFetchResponse["data"]>> = [];
+  let firstError: string | undefined;
+
+  for (const candidate of IMPORT_SESSION_QUERY_CANDIDATES) {
+    const fetchResponse = await chrome.tabs.sendMessage(tabId, {
+      type: "PORTAL_GRAPHQL_FETCH",
+      query: candidate.query,
+      variables: { id: activityId },
+    }) as PortalGraphQLFetchResponse;
+
+    if (!fetchResponse?.success) {
+      firstError = firstError ?? fetchResponse?.error ?? "Failed to fetch activity";
+      continue;
+    }
+
+    const graphQLErrors = fetchResponse.data?.errors ?? [];
+    if (graphQLErrors.length > 0) {
+      firstError = firstError ?? graphQLErrors[0].message;
+      continue;
+    }
+
+    if (fetchResponse.data) {
+      payloads.push(fetchResponse.data);
+      if (responseContainsMeasurement(fetchResponse.data.data?.node)) {
+        break;
+      }
+    }
+  }
+
+  if (payloads.length === 0) {
+    throw new Error(formatPortalFetchError(firstError ?? "Failed to fetch activity"));
+  }
+
+  return payloads;
+}
+
+function installImportStatusButtonReset(button: HTMLButtonElement): void {
+  const statusListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+    if (changes[STORAGE_KEYS.IMPORT_STATUS]) {
+      const status = changes[STORAGE_KEYS.IMPORT_STATUS].newValue as ImportStatus | undefined;
+      if (status && (status.state === "success" || status.state === "error")) {
+        chrome.storage.onChanged.removeListener(statusListener);
+        button.disabled = false;
+        button.textContent = status.state === "success" ? "Imported!" : "Import";
+      }
+    }
+  };
+  chrome.storage.onChanged.addListener(statusListener);
+}
+
+async function importPortalActivityFromTab(
+  tabId: number,
+  activityId: string,
+  button: HTMLButtonElement
+): Promise<void> {
+  button.disabled = true;
+  button.textContent = "Importing...";
+
+  try {
+    const graphqlPayloads = await fetchPortalActivityCandidates(tabId, activityId);
+    installImportStatusButtonReset(button);
+    chrome.runtime.sendMessage({
+      type: "SAVE_IMPORTED_SESSION",
+      graphqlPayloads,
+      activityId,
+    });
+  } catch (err) {
+    const message = err instanceof Error && err.message
+      ? err.message
+      : "Unable to fetch activity";
+    showToast(message, "error");
+    button.disabled = false;
+    button.textContent = "Import";
+  }
+}
+
+function renderPortalActivityBrowser(
+  activities: ActivitySummary[],
+  tabId: number
+): void {
+  const browser = document.getElementById("portal-activity-browser");
+  const list = document.getElementById("portal-activity-list");
+  if (!browser || !list) return;
+
+  browser.style.display = "block";
+  if (activities.length === 0) {
+    list.innerHTML = `<div class="activity-list-empty">No Course Play or Map My Bag sessions found</div>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+  for (const activity of activities) {
+    const row = document.createElement("div");
+    row.className = "activity-row";
+
+    const dateEl = document.createElement("span");
+    dateEl.className = "activity-date";
+    dateEl.textContent = formatActivityDate(activity.date);
+
+    const mainEl = document.createElement("span");
+    mainEl.className = "activity-main";
+
+    const typeEl = document.createElement("span");
+    typeEl.className = "activity-type";
+    typeEl.textContent = getPortalActivityDisplayLabel(activity.type);
+
+    const detailEl = document.createElement("span");
+    detailEl.className = "activity-detail";
+    detailEl.textContent = activity.courseName ??
+      (activity.strokeCount === null ? "" : `${activity.strokeCount} shots`);
+    if (detailEl.textContent) {
+      detailEl.title = detailEl.textContent;
+    }
+    mainEl.append(typeEl, detailEl);
+
+    const importBtn = document.createElement("button");
+    importBtn.className = "activity-import-btn";
+    importBtn.textContent = "Import";
+    importBtn.addEventListener("click", () => {
+      importPortalActivityFromTab(tabId, activity.id, importBtn);
+    });
+
+    row.append(dateEl, mainEl, importBtn);
+    fragment.appendChild(row);
+  }
+
+  list.appendChild(fragment);
+}
 
 /**
  * Check if the active tab is on a portal activity page.
@@ -60,6 +343,7 @@ const PORTAL_ACTIVITY_PATTERN = /^https:\/\/portal\.trackmangolf\.com\/player\/a
 async function checkActiveTabForActivity(): Promise<void> {
   const detected = document.getElementById("portal-activity-detected");
   const noActivity = document.getElementById("portal-no-activity");
+  const browser = document.getElementById("portal-activity-browser");
   if (!detected || !noActivity) return;
 
   try {
@@ -71,61 +355,41 @@ async function checkActiveTabForActivity(): Promise<void> {
       const tabId = tab.id;
       detected.style.display = "";
       noActivity.style.display = "none";
+      if (browser) browser.style.display = "none";
 
       const importBtn = document.getElementById("portal-import-btn");
       if (importBtn) {
         importBtn.addEventListener("click", async () => {
-          (importBtn as HTMLButtonElement).disabled = true;
-          importBtn.textContent = "Importing...";
-
-          try {
-            // Fetch via content script on portal tab (same-origin cookies work)
-            const fetchResponse = await chrome.tabs.sendMessage(tabId, {
-              type: "PORTAL_GRAPHQL_FETCH",
-              query: IMPORT_SESSION_QUERY,
-              variables: { id: activityId },
-            });
-
-            if (!fetchResponse?.success) {
-              showToast(fetchResponse?.error ?? "Failed to fetch activity", "error");
-              (importBtn as HTMLButtonElement).disabled = false;
-              importBtn.textContent = "Import this session";
-              return;
-            }
-
-            // Send raw GraphQL data to service worker for parsing + saving
-            // Listen for import status change to reset button
-            const statusListener = (changes: { [key: string]: chrome.storage.StorageChange }) => {
-              if (changes[STORAGE_KEYS.IMPORT_STATUS]) {
-                const status = changes[STORAGE_KEYS.IMPORT_STATUS].newValue as ImportStatus | undefined;
-                if (status && (status.state === "success" || status.state === "error")) {
-                  chrome.storage.onChanged.removeListener(statusListener);
-                  (importBtn as HTMLButtonElement).disabled = false;
-                  importBtn.textContent = status.state === "success" ? "Imported!" : "Import this session";
-                }
-              }
-            };
-            chrome.storage.onChanged.addListener(statusListener);
-
-            chrome.runtime.sendMessage({
-              type: "SAVE_IMPORTED_SESSION",
-              graphqlData: fetchResponse.data,
-              activityId,
-            });
-          } catch {
-            showToast("Unable to reach portal tab \u2014 refresh the page and try again", "error");
-            (importBtn as HTMLButtonElement).disabled = false;
-            importBtn.textContent = "Import this session";
-          }
+          await importPortalActivityFromTab(tabId, activityId, importBtn as HTMLButtonElement);
         });
       }
+    } else if (tab?.url?.match(PORTAL_ACTIVITIES_LIST_PATTERN) && tab.id) {
+      detected.style.display = "none";
+      noActivity.style.display = "none";
+      if (browser) {
+        browser.style.display = "block";
+        const list = document.getElementById("portal-activity-list");
+        if (list) list.innerHTML = `<div class="activity-loading">Loading activities...</div>`;
+      }
+      const activities = await fetchPortalActivities(tab.id);
+      renderPortalActivityBrowser(activities, tab.id);
     } else {
       detected.style.display = "none";
       noActivity.style.display = "";
+      if (browser) browser.style.display = "none";
     }
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error && err.message
+      ? err.message
+      : "Unable to fetch activities";
     detected.style.display = "none";
-    noActivity.style.display = "";
+    noActivity.style.display = "none";
+    if (browser) {
+      browser.style.display = "block";
+      const list = document.getElementById("portal-activity-list");
+      if (list) list.innerHTML = `<div class="activity-list-empty">${escapeHtml(message)}</div>`;
+    }
+    showToast(message, "error");
   }
 }
 

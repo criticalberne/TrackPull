@@ -22,23 +22,42 @@ import type { SessionData, Shot, ClubGroup } from "../models/types";
 // ---------------------------------------------------------------------------
 
 export interface StrokeMeasurement {
-  [key: string]: number | null | undefined;
+  [key: string]: unknown;
 }
 
 export interface GraphQLStroke {
   club?: string | null;
+  Club?: string | null;
   time?: string | null;
   targetDistance?: number | null;
   isDeleted?: boolean | null;
   isSimulated?: boolean | null;
   measurement?: StrokeMeasurement | null;
+  Measurement?: StrokeMeasurement | null;
+  NormalizedMeasurement?: StrokeMeasurement | null;
+  [key: string]: unknown;
+}
+
+export interface GraphQLStrokeGroup {
+  club?: string | null;
+  Club?: string | null;
+  name?: string | null;
+  strokes?: GraphQLStroke[] | null;
+  Strokes?: GraphQLStroke[] | null;
+  [key: string]: unknown;
 }
 
 export interface GraphQLActivity {
   id: string;
+  __typename?: string | null;
+  kind?: string | null;
   time?: string | null;
+  date?: string | null;
   strokeCount?: number | null;
   strokes?: GraphQLStroke[] | null;
+  strokeGroups?: GraphQLStrokeGroup[] | null;
+  StrokeGroups?: GraphQLStrokeGroup[] | null;
+  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +112,116 @@ function normalizeMetricKey(graphqlKey: string): string {
   return GRAPHQL_METRIC_ALIAS[graphqlKey] ?? toPascalCase(graphqlKey);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function pickClubName(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (!isRecord(value)) return null;
+  const candidate =
+    value.name ??
+    value.Name ??
+    value.displayName ??
+    value.shortName ??
+    value.id;
+  return typeof candidate === "string" && candidate.trim()
+    ? candidate.trim()
+    : null;
+}
+
+function getContainerClubName(container: Record<string, unknown>): string | null {
+  return (
+    pickClubName(container.club) ??
+    pickClubName(container.Club) ??
+    pickClubName(container.clubName) ??
+    pickClubName(container.name)
+  );
+}
+
+function getStrokeMeasurement(stroke: Record<string, unknown>): StrokeMeasurement | null {
+  const normalized = isRecord(stroke.NormalizedMeasurement)
+    ? stroke.NormalizedMeasurement
+    : null;
+  const measurement = isRecord(stroke.measurement)
+    ? stroke.measurement
+    : isRecord(stroke.Measurement)
+      ? stroke.Measurement
+      : null;
+
+  if (measurement && normalized) {
+    return { ...measurement, ...normalized };
+  }
+  return (normalized ?? measurement) as StrokeMeasurement | null;
+}
+
+function appendStroke(
+  stroke: Record<string, unknown>,
+  fallbackClub: string | null,
+  clubMap: Map<string, Shot[]>,
+  allMetricNames: Set<string>
+): void {
+  if (stroke.isDeleted === true || stroke.isSimulated === true) return;
+
+  const measurement = getStrokeMeasurement(stroke);
+  if (!measurement) return;
+
+  const clubName = getContainerClubName(stroke) ?? fallbackClub ?? "Unknown";
+  const shotMetrics: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(measurement)) {
+    if (value === null || value === undefined) continue;
+
+    const numValue =
+      typeof value === "number" ? value : parseFloat(String(value));
+    if (isNaN(numValue)) continue;
+
+    const normalizedKey = normalizeMetricKey(key);
+    shotMetrics[normalizedKey] = `${numValue}`;
+    allMetricNames.add(normalizedKey);
+  }
+
+  if (Object.keys(shotMetrics).length === 0) return;
+
+  const shots = clubMap.get(clubName) ?? [];
+  shots.push({
+    shot_number: shots.length,
+    metrics: shotMetrics,
+  });
+  clubMap.set(clubName, shots);
+}
+
+function collectStrokes(
+  value: unknown,
+  fallbackClub: string | null,
+  clubMap: Map<string, Shot[]>,
+  allMetricNames: Set<string>
+): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStrokes(item, fallbackClub, clubMap, allMetricNames);
+    }
+    return;
+  }
+
+  if (!isRecord(value)) return;
+
+  const containerClub = getContainerClubName(value) ?? fallbackClub;
+  if (getStrokeMeasurement(value)) {
+    appendStroke(value, containerClub, clubMap, allMetricNames);
+    return;
+  }
+
+  for (const [key, nested] of Object.entries(value)) {
+    if (key === "measurement" || key === "Measurement" || key === "NormalizedMeasurement") {
+      continue;
+    }
+    if (Array.isArray(nested) || isRecord(nested)) {
+      collectStrokes(nested, containerClub, clubMap, allMetricNames);
+    }
+  }
+}
+
 /**
  * Decode a Trackman base64 activity ID to extract the UUID portion.
  *
@@ -128,40 +257,11 @@ export function parsePortalActivity(
     if (!activity?.id) return null;
 
     const reportId = extractActivityUuid(activity.id);
-    const date = activity.time ?? "Unknown";
+    const date = activity.time ?? activity.date ?? "Unknown";
     const allMetricNames = new Set<string>();
 
-    // Group flat strokes by club name
     const clubMap = new Map<string, Shot[]>();
-
-    for (const stroke of activity.strokes ?? []) {
-      if (!stroke?.measurement) continue;
-      if (stroke.isDeleted === true || stroke.isSimulated === true) continue;
-
-      const clubName = stroke.club || "Unknown";
-      const shotMetrics: Record<string, string> = {};
-
-      for (const [key, value] of Object.entries(stroke.measurement)) {
-        if (value === null || value === undefined) continue;
-
-        const numValue =
-          typeof value === "number" ? value : parseFloat(String(value));
-        if (isNaN(numValue)) continue;
-
-        const normalizedKey = normalizeMetricKey(key);
-        shotMetrics[normalizedKey] = `${numValue}`;
-        allMetricNames.add(normalizedKey);
-      }
-
-      if (Object.keys(shotMetrics).length > 0) {
-        const shots = clubMap.get(clubName) ?? [];
-        shots.push({
-          shot_number: shots.length + 1,
-          metrics: shotMetrics,
-        });
-        clubMap.set(clubName, shots);
-      }
-    }
+    collectStrokes(activity, null, clubMap, allMetricNames);
 
     if (clubMap.size === 0) return null;
 
@@ -181,7 +281,11 @@ export function parsePortalActivity(
       url_type: "activity",
       club_groups,
       metric_names: Array.from(allMetricNames).sort(),
-      metadata_params: { activity_id: activity.id },
+      metadata_params: {
+        activity_id: activity.id,
+        ...(activity.__typename ? { activity_type: activity.__typename } : {}),
+        ...(activity.kind ? { activity_kind: activity.kind } : {}),
+      },
     };
 
     return session;

@@ -46,6 +46,10 @@ npx --yes esbuild src/content/bridge.ts --bundle --outfile="$DIST_DIR/bridge.js"
 
 echo "Bridge content script bundled to $DIST_DIR/bridge.js"
 
+npx --yes esbuild src/content/portal_page_fetch.ts --bundle --outfile="$DIST_DIR/portal_page_fetch.js" --format=iife --platform=browser || { echo 'Error: Failed to build portal_page_fetch.js' >&2; exit 1; }
+
+echo "Portal page fetch bridge bundled to $DIST_DIR/portal_page_fetch.js"
+
 npx --yes esbuild src/content/portal_fetch.ts --bundle --outfile="$DIST_DIR/portal_fetch.js" --format=iife --platform=browser || { echo 'Error: Failed to build portal_fetch.js' >&2; exit 1; }
 
 echo "Portal fetch content script bundled to $DIST_DIR/portal_fetch.js"

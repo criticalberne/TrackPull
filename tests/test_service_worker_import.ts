@@ -82,7 +82,12 @@ import { parsePortalActivity } from "../src/shared/portal_parser";
 import { saveSessionToHistory } from "../src/shared/history";
 import { STORAGE_KEYS } from "../src/shared/constants";
 import type { ImportStatus } from "../src/shared/import_types";
-import { FETCH_ACTIVITIES_QUERY, IMPORT_SESSION_QUERY } from "../src/shared/import_types";
+import {
+  FETCH_ACTIVITIES_PAGE_SIZE,
+  FETCH_ACTIVITIES_QUERY,
+  IMPORT_SESSION_QUERY,
+  IMPORT_SESSION_QUERY_CANDIDATES,
+} from "../src/shared/import_types";
 
 // This import triggers serviceWorker.ts evaluation — chrome must already exist (set in vi.hoisted above)
 import "../src/background/serviceWorker";
@@ -124,9 +129,33 @@ describe("import_types module", () => {
     expect(FETCH_ACTIVITIES_QUERY).toContain("activities");
   });
 
+  it("FETCH_ACTIVITIES_QUERY requests Course Play course display names", () => {
+    expect(FETCH_ACTIVITIES_QUERY).toContain("... on CoursePlayActivity");
+    expect(FETCH_ACTIVITIES_QUERY).toContain("course");
+    expect(FETCH_ACTIVITIES_QUERY).toContain("displayName");
+  });
+
+  it("FETCH_ACTIVITIES_QUERY filters and paginates Course Play and Map My Bag activity kinds", () => {
+    expect(FETCH_ACTIVITIES_QUERY).toContain("kinds: [COURSE_PLAY, MAP_MY_BAG]");
+    expect(FETCH_ACTIVITIES_QUERY).toContain("skip: $skip");
+    expect(FETCH_ACTIVITIES_QUERY).toContain("take: $take");
+    expect(FETCH_ACTIVITIES_QUERY).toContain("totalCount");
+    expect(FETCH_ACTIVITIES_QUERY).toContain("hasNextPage");
+  });
+
   it("IMPORT_SESSION_QUERY contains 'node(id: $id)' and 'strokes'", () => {
     expect(IMPORT_SESSION_QUERY).toContain("node(id: $id)");
     expect(IMPORT_SESSION_QUERY).toContain("strokes");
+  });
+
+  it("CoursePlayActivity fallback queries include scorecard hole shots", () => {
+    const scorecardQuery = IMPORT_SESSION_QUERY_CANDIDATES.find(
+      (candidate) => candidate.label === "CoursePlayActivity:scorecard.shots:NORMALIZED_MEASUREMENT"
+    );
+    expect(scorecardQuery?.query).toContain("scorecard");
+    expect(scorecardQuery?.query).toContain("holes");
+    expect(scorecardQuery?.query).toContain("shots");
+    expect(scorecardQuery?.query).toContain("measurement(shotMeasurementKind: NORMALIZED_MEASUREMENT)");
   });
 });
 
@@ -208,14 +237,42 @@ describe("FETCH_ACTIVITIES handler", () => {
     });
   });
 
-  it("returns {success: true, activities} with id, date, strokeCount, and type on success", async () => {
+  it("returns supported activity summaries with id, date, course name, strokeCount, and type on success", async () => {
     vi.mocked(hasPortalPermission).mockResolvedValue(true);
     vi.mocked(executeQuery).mockResolvedValue({
       data: {
         me: {
           activities: [
-            { id: "act-001", time: "2026-01-15", strokeCount: 18, kind: "Session" },
-            { id: "act-002", time: "2026-01-10" },
+            {
+              id: "act-001",
+              time: "2026-01-15",
+              __typename: "CoursePlayActivity",
+              course: { displayName: "Black Desert Resort" },
+            },
+            {
+              id: "act-002",
+              time: "2026-01-10",
+              __typename: "MapMyBagSessionActivity",
+              strokeCount: 12,
+            },
+            {
+              id: "act-003",
+              time: "2026-01-08",
+              __typename: "ShotAnalysisSessionActivity",
+              strokeCount: 53,
+            },
+            {
+              id: "act-004",
+              time: "2026-01-07",
+              kind: "COURSE_PLAY",
+              __typename: "PlayerActivity",
+            },
+            {
+              id: "act-005",
+              time: "2026-01-06",
+              kind: "MAP_MY_BAG",
+              __typename: "PlayerActivity",
+            },
           ],
         },
       },
@@ -227,8 +284,108 @@ describe("FETCH_ACTIVITIES handler", () => {
     expect(sendResponse).toHaveBeenCalledWith({
       success: true,
       activities: [
-        { id: "act-001", date: "2026-01-15", strokeCount: 18, type: "Session" },
-        { id: "act-002", date: "2026-01-10", strokeCount: null, type: null },
+        {
+          id: "act-001",
+          date: "2026-01-15",
+          strokeCount: null,
+          type: "CoursePlayActivity",
+          courseName: "Black Desert Resort",
+        },
+        {
+          id: "act-002",
+          date: "2026-01-10",
+          strokeCount: 12,
+          type: "MapMyBagSessionActivity",
+          courseName: null,
+        },
+        {
+          id: "act-004",
+          date: "2026-01-07",
+          strokeCount: null,
+          type: "COURSE_PLAY",
+          courseName: null,
+        },
+        {
+          id: "act-005",
+          date: "2026-01-06",
+          strokeCount: null,
+          type: "MAP_MY_BAG",
+          courseName: null,
+        },
+      ],
+    });
+  });
+
+  it("paginates supported portal activities until the live collection reports no next page", async () => {
+    vi.mocked(hasPortalPermission).mockResolvedValue(true);
+    vi.mocked(executeQuery)
+      .mockResolvedValueOnce({
+        data: {
+          me: {
+            activities: {
+              totalCount: 2,
+              pageInfo: { hasNextPage: true },
+              items: [
+                {
+                  id: "act-001",
+                  time: "2026-01-15",
+                  __typename: "CoursePlayActivity",
+                  course: { displayName: "Black Desert Resort" },
+                },
+              ],
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          me: {
+            activities: {
+              totalCount: 2,
+              pageInfo: { hasNextPage: false },
+              items: [
+                {
+                  id: "act-002",
+                  time: "2026-01-10",
+                  __typename: "MapMyBagSessionActivity",
+                  strokeCount: 12,
+                },
+              ],
+            },
+          },
+        },
+      });
+
+    callHandler({ type: "FETCH_ACTIVITIES" }, sendResponse);
+    await vi.waitUntil(() => sendResponse.mock.calls.length > 0);
+
+    expect(executeQuery).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("kinds: [COURSE_PLAY, MAP_MY_BAG]"),
+      { skip: 0, take: FETCH_ACTIVITIES_PAGE_SIZE }
+    );
+    expect(executeQuery).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("kinds: [COURSE_PLAY, MAP_MY_BAG]"),
+      { skip: 1, take: FETCH_ACTIVITIES_PAGE_SIZE }
+    );
+    expect(sendResponse).toHaveBeenCalledWith({
+      success: true,
+      activities: [
+        {
+          id: "act-001",
+          date: "2026-01-15",
+          strokeCount: null,
+          type: "CoursePlayActivity",
+          courseName: "Black Desert Resort",
+        },
+        {
+          id: "act-002",
+          date: "2026-01-10",
+          strokeCount: 12,
+          type: "MapMyBagSessionActivity",
+          courseName: null,
+        },
       ],
     });
   });

@@ -12,7 +12,7 @@ Grab your Trackman data and actually do something with it. Export to CSV, paste 
 ## What it does
 
 - Opens a Trackman report? Data's already captured
-- **Import from Portal**: recover sessions from portal.trackmangolf.com that don't have report links
+- **Import from Portal**: browse Course Play and Map My Bag sessions from portal.trackmangolf.com, including older activity history without report links
 - Export as CSV or copy tab-separated values straight into Google Sheets
 - One click to launch AI analysis with your data and a golf prompt (ChatGPT, Claude, or Gemini)
 - Preview the full prompt and data before sending to AI
@@ -71,16 +71,19 @@ https://web-dynamic-reports.trackmangolf.com/reports?ReportId=11223
 ```
 </details>
 
-### From the Trackman portal (manual import)
+### From the Trackman portal (Course Play and Map My Bag)
 
 Got old sessions on portal.trackmangolf.com that never got a report link? You can still pull them.
 
 1. Log into [portal.trackmangolf.com](https://portal.trackmangolf.com)
 2. Click **Grant Access** in the TrackPull popup (one-time)
-3. Navigate to the activity you want, click into it so the URL looks like `portal.trackmangolf.com/player/activities/...`
-4. Open TrackPull and click **Import this session**
+3. Go to `portal.trackmangolf.com/player/activities`
+4. Open TrackPull and use the **Course Play and Map My Bag sessions** list
+5. Click **Import** next to the session you want, then export CSV, copy TSV, or send it to AI
 
-The shot data loads into TrackPull just like a report. Export, copy, or send to AI from there. This works for any session in your portal history, no matter how old. Your data was never lost, just hard to get to.
+TrackPull filters the portal list to Course Play and Map My Bag sessions, shows the activity date, and shows the course name when Trackman provides it. The importer paginates through your supported portal history instead of only showing recent activity cards.
+
+You can still import from an individual portal activity URL when one is available. The shot data loads into TrackPull just like a report. Export, copy, or send to AI from there. Your data was never lost, just hard to get to.
 
 ## CSV columns
 

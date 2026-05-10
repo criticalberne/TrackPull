@@ -263,15 +263,287 @@
   }
 
   // src/shared/import_types.ts
+  var FETCH_ACTIVITIES_PAGE_SIZE = 100;
+  var FETCH_ACTIVITIES_MAX_PAGES = 100;
+  var ACTIVITY_SUMMARY_FIELDS = `
+  id
+  time
+  kind
+  __typename
+  ... on CoursePlayActivity {
+    course {
+      displayName
+    }
+  }
+  ... on MapMyBagSessionActivity {
+    strokeCount
+  }
+`;
+  var ACTIVITY_COURSE_SUMMARY_FIELDS = `
+  id
+  time
+  __typename
+  ... on CoursePlayActivity {
+    course {
+      displayName
+    }
+  }
+`;
+  var ACTIVITY_MINIMAL_TIME_FIELDS = `
+  id
+  time
+  __typename
+`;
+  var ACTIVITY_MINIMAL_DATE_FIELDS = `
+  id
+  date
+  __typename
+`;
+  var FETCH_ACTIVITIES_QUERY = `
+  query GetPlayerActivities($skip: Int!, $take: Int!) {
+    me {
+      activities(kinds: [COURSE_PLAY, MAP_MY_BAG], skip: $skip, take: $take) {
+        totalCount
+        pageInfo {
+          hasNextPage
+        }
+        items {
+          ${ACTIVITY_SUMMARY_FIELDS}
+        }
+      }
+    }
+  }
+`;
+  var FETCH_ACTIVITIES_QUERY_CANDIDATES = [
+    { label: "me.activities.items:kinds-page", query: FETCH_ACTIVITIES_QUERY, paginated: true },
+    {
+      label: "me.activities.items:all-page",
+      paginated: true,
+      query: `
+      query GetPlayerActivities($skip: Int!, $take: Int!) {
+        me {
+          activities(skip: $skip, take: $take) {
+            totalCount
+            pageInfo {
+              hasNextPage
+            }
+            items {
+              ${ACTIVITY_SUMMARY_FIELDS}
+            }
+          }
+        }
+      }
+    `
+    },
+    {
+      label: "me.activities.items:course-time",
+      query: `
+      query GetPlayerActivities {
+        me {
+          activities {
+            items {
+              ${ACTIVITY_COURSE_SUMMARY_FIELDS}
+            }
+          }
+        }
+      }
+    `
+    },
+    {
+      label: "me.activities.items:date",
+      query: `
+      query GetPlayerActivities {
+        me {
+          activities {
+            items {
+              ${ACTIVITY_MINIMAL_DATE_FIELDS}
+            }
+          }
+        }
+      }
+    `
+    },
+    {
+      label: "me.activities.nodes:time",
+      query: `
+      query GetPlayerActivities {
+        me {
+          activities {
+            nodes {
+              ${ACTIVITY_MINIMAL_TIME_FIELDS}
+            }
+          }
+        }
+      }
+    `
+    },
+    {
+      label: "me.activities.nodes:date",
+      query: `
+      query GetPlayerActivities {
+        me {
+          activities {
+            nodes {
+              ${ACTIVITY_MINIMAL_DATE_FIELDS}
+            }
+          }
+        }
+      }
+    `
+    },
+    {
+      label: "me.activities.connection:time",
+      query: `
+      query GetPlayerActivities {
+        me {
+          activities(first: 20) {
+            edges {
+              node {
+                id
+                time
+                __typename
+              }
+            }
+          }
+        }
+      }
+    `
+    },
+    {
+      label: "me.activities.connection:date",
+      query: `
+      query GetPlayerActivities {
+        me {
+          activities(first: 20) {
+            edges {
+              node {
+                id
+                date
+                __typename
+              }
+            }
+          }
+        }
+      }
+    `
+    }
+  ];
+  var SUPPORTED_ACTIVITY_TYPES = /* @__PURE__ */ new Set([
+    "CoursePlayActivity",
+    "CourseSessionActivity",
+    "COURSE_PLAY",
+    "MapMyBagActivity",
+    "MapMyBagSessionActivity",
+    "BagMappingActivity",
+    "MAP_MY_BAG"
+  ]);
+  function isSupportedPortalActivityType(type) {
+    return type !== null && SUPPORTED_ACTIVITY_TYPES.has(type);
+  }
+  function getActivityType(record) {
+    if (typeof record.__typename === "string") return record.__typename;
+    if (typeof record.type === "string") return record.type;
+    if (typeof record.kind === "string") return record.kind;
+    return null;
+  }
+  function getCourseName(record) {
+    const course = record.course;
+    if (!course || typeof course !== "object") return null;
+    const courseRecord = course;
+    if (typeof courseRecord.displayName === "string" && courseRecord.displayName.trim()) {
+      return courseRecord.displayName;
+    }
+    if (typeof courseRecord.name === "string" && courseRecord.name.trim()) {
+      return courseRecord.name;
+    }
+    return null;
+  }
+  function normalizeActivityRecord(value) {
+    if (!value || typeof value !== "object") return null;
+    const record = value;
+    if (typeof record.id !== "string") return null;
+    const rawDate = record.time ?? record.date;
+    const rawType = getActivityType(record);
+    const rawKind = typeof record.kind === "string" ? record.kind : null;
+    const type = isSupportedPortalActivityType(rawType) ? rawType : isSupportedPortalActivityType(rawKind) ? rawKind : null;
+    if (!type) return null;
+    return {
+      id: record.id,
+      date: typeof rawDate === "string" ? rawDate : "",
+      strokeCount: typeof record.strokeCount === "number" ? record.strokeCount : null,
+      type,
+      courseName: getCourseName(record)
+    };
+  }
+  function normalizeActivitySummaryPage(data) {
+    const emptyPage = {
+      activities: [],
+      itemCount: 0,
+      totalCount: null,
+      hasNextPage: null
+    };
+    if (!data || typeof data !== "object") return emptyPage;
+    const record = data;
+    const me = record.me && typeof record.me === "object" ? record.me : void 0;
+    const roots = [me?.activities, record.activities];
+    for (const root of roots) {
+      let candidates = [];
+      let totalCount = null;
+      let hasNextPage = null;
+      if (Array.isArray(root)) {
+        candidates = root;
+      } else if (root && typeof root === "object") {
+        const rootRecord = root;
+        totalCount = typeof rootRecord.totalCount === "number" ? rootRecord.totalCount : null;
+        const pageInfo = rootRecord.pageInfo;
+        if (pageInfo && typeof pageInfo === "object") {
+          const pageInfoRecord = pageInfo;
+          hasNextPage = typeof pageInfoRecord.hasNextPage === "boolean" ? pageInfoRecord.hasNextPage : null;
+        }
+        if (Array.isArray(rootRecord.items)) {
+          candidates = rootRecord.items;
+        } else if (Array.isArray(rootRecord.nodes)) {
+          candidates = rootRecord.nodes;
+        } else if (Array.isArray(rootRecord.edges)) {
+          candidates = rootRecord.edges.map((edge) => edge && typeof edge === "object" ? edge.node : null);
+        }
+      }
+      const activities = candidates.map(normalizeActivityRecord).filter((activity) => Boolean(activity));
+      if (candidates.length > 0 || totalCount !== null || hasNextPage !== null) {
+        return {
+          activities,
+          itemCount: candidates.length,
+          totalCount,
+          hasNextPage
+        };
+      }
+    }
+    return emptyPage;
+  }
+  function normalizeActivitySummaries(data) {
+    return normalizeActivitySummaryPage(data).activities;
+  }
+  var STROKE_MEASUREMENT_FIELDS = `
+  clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
+  faceToPath swingDirection swingPlane dynamicLoft spinRate spinAxis spinLoft
+  launchAngle launchDirection carry total carrySide totalSide
+  maxHeight landingAngle hangTime
+`;
+  var SCORECARD_SHOT_MEASUREMENT_FIELDS = `
+  ballSpeed carrySideActual carryActual launchDirection maxHeight carry total
+  carrySide launchAngle spinRate spinAxis backswingTime forwardswingTime tempo
+  strokeLength dynamicLie impactOffset impactHeight skidDistance rollPercentage
+  rollSpeed speedDrop rollDeceleration effectiveStimp flatStimp break bounces
+  entrySpeedDistance elevation slopePercentageSide slopePercentageRise
+  totalBreak attackAngle clubPath clubSpeed dynamicLoft faceAngle faceToPath
+  smashFactor gyroSpinAngle spinLoft swingDirection swingPlane swingRadius
+`;
   var STROKE_FIELDS = `
   club
   time
   targetDistance
   measurement {
-    clubSpeed ballSpeed smashFactor attackAngle clubPath faceAngle
-    faceToPath swingDirection swingPlane dynamicLoft spinRate spinAxis spinLoft
-    launchAngle launchDirection carry total carrySide totalSide
-    maxHeight landingAngle hangTime
+    ${STROKE_MEASUREMENT_FIELDS}
   }
 `;
   var IMPORT_SESSION_QUERY = `
@@ -304,6 +576,156 @@
     }
   }
 `;
+  function flatStrokeActivityQuery(typeName) {
+    return {
+      label: `${typeName}:strokes`,
+      query: `
+      query FetchActivityById($id: ID!) {
+        node(id: $id) {
+          __typename
+          ... on ${typeName} {
+            id time
+            strokes { ${STROKE_FIELDS} }
+          }
+        }
+      }
+    `
+    };
+  }
+  function groupedStrokeActivityQuery(typeName) {
+    return {
+      label: `${typeName}:strokeGroups`,
+      query: `
+      query FetchActivityById($id: ID!) {
+        node(id: $id) {
+          __typename
+          ... on ${typeName} {
+            id time
+            strokeGroups {
+              club
+              name
+              strokes { ${STROKE_FIELDS} }
+            }
+          }
+        }
+      }
+    `
+    };
+  }
+  function proBallActivityQuery(typeName) {
+    return {
+      label: `${typeName}:PRO_BALL_MEASUREMENT`,
+      query: `
+      query FetchActivityById($id: ID!) {
+        node(id: $id) {
+          __typename
+          ... on ${typeName} {
+            id time
+            strokes {
+              club
+              time
+              targetDistance
+              measurement(measurementType: PRO_BALL_MEASUREMENT) {
+                ballSpeed ballSpin spinAxis
+                carry carrySide total totalSide
+                landingAngle launchAngle launchDirection maxHeight
+              }
+            }
+          }
+        }
+      }
+    `
+    };
+  }
+  function groupedProBallActivityQuery(typeName) {
+    return {
+      label: `${typeName}:strokeGroups:PRO_BALL_MEASUREMENT`,
+      query: `
+      query FetchActivityById($id: ID!) {
+        node(id: $id) {
+          __typename
+          ... on ${typeName} {
+            id time
+            strokeGroups {
+              club
+              name
+              strokes {
+                club
+                time
+                targetDistance
+                measurement(measurementType: PRO_BALL_MEASUREMENT) {
+                  ballSpeed ballSpin spinAxis
+                  carry carrySide total totalSide
+                  landingAngle launchAngle launchDirection maxHeight
+                }
+              }
+            }
+          }
+        }
+      }
+    `
+    };
+  }
+  function scorecardShotActivityQuery(typeName, measurementKind) {
+    return {
+      label: `${typeName}:scorecard.shots:${measurementKind}`,
+      query: `
+      query FetchActivityById($id: ID!) {
+        node(id: $id) {
+          __typename
+          ... on ${typeName} {
+            id time kind
+            scorecard {
+              holes {
+                holeNumber
+                shots {
+                  id
+                  shotNumber
+                  club
+                  launchTime
+                  total
+                  measurement(shotMeasurementKind: ${measurementKind}) {
+                    ${SCORECARD_SHOT_MEASUREMENT_FIELDS}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `
+    };
+  }
+  var IMPORT_SESSION_FALLBACK_QUERIES = [
+    scorecardShotActivityQuery("CoursePlayActivity", "NORMALIZED_MEASUREMENT"),
+    scorecardShotActivityQuery("CoursePlayActivity", "MEASUREMENT"),
+    scorecardShotActivityQuery("CoursePlayActivity", "PRO_BALL_MEASUREMENT"),
+    flatStrokeActivityQuery("CoursePlayActivity"),
+    groupedStrokeActivityQuery("CoursePlayActivity"),
+    scorecardShotActivityQuery("CourseSessionActivity", "NORMALIZED_MEASUREMENT"),
+    scorecardShotActivityQuery("CourseSessionActivity", "MEASUREMENT"),
+    scorecardShotActivityQuery("CourseSessionActivity", "PRO_BALL_MEASUREMENT"),
+    flatStrokeActivityQuery("CourseSessionActivity"),
+    groupedStrokeActivityQuery("CourseSessionActivity"),
+    flatStrokeActivityQuery("VirtualGolfActivity"),
+    groupedStrokeActivityQuery("VirtualGolfActivity"),
+    flatStrokeActivityQuery("VirtualGolfSessionActivity"),
+    groupedStrokeActivityQuery("VirtualGolfSessionActivity"),
+    flatStrokeActivityQuery("MapMyBagActivity"),
+    groupedStrokeActivityQuery("MapMyBagActivity"),
+    flatStrokeActivityQuery("MapMyBagSessionActivity"),
+    groupedStrokeActivityQuery("MapMyBagSessionActivity"),
+    flatStrokeActivityQuery("BagMappingActivity"),
+    groupedStrokeActivityQuery("BagMappingActivity"),
+    proBallActivityQuery("MapMyBagActivity"),
+    groupedProBallActivityQuery("MapMyBagActivity"),
+    proBallActivityQuery("MapMyBagSessionActivity"),
+    groupedProBallActivityQuery("MapMyBagSessionActivity")
+  ];
+  var IMPORT_SESSION_QUERY_CANDIDATES = [
+    { label: "default", query: IMPORT_SESSION_QUERY },
+    ...IMPORT_SESSION_FALLBACK_QUERIES
+  ];
 
   // src/shared/tsv_writer.ts
   var METRIC_COLUMN_ORDER = [
@@ -636,6 +1058,38 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     return chrome.permissions.request({ origins: [...PORTAL_ORIGINS] });
   }
 
+  // src/shared/activity_helpers.ts
+  function parseActivityLocalDate(isoDate) {
+    const dateOnly = isoDate.includes("T") ? isoDate.slice(0, 10) : isoDate;
+    return /* @__PURE__ */ new Date(dateOnly + "T00:00:00");
+  }
+  function formatActivityDate(isoDate, now) {
+    const d = parseActivityLocalDate(isoDate);
+    if (isNaN(d.getTime())) return isoDate || "Unknown";
+    const ref = now ?? /* @__PURE__ */ new Date();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const formatted = `${monthNames[d.getMonth()]} ${d.getDate()}`;
+    if (d.getFullYear() !== ref.getFullYear()) {
+      return `${formatted}, ${d.getFullYear()}`;
+    }
+    return formatted;
+  }
+  function getPortalActivityDisplayLabel(type) {
+    switch (type) {
+      case "CoursePlayActivity":
+      case "CourseSessionActivity":
+      case "COURSE_PLAY":
+        return "Course play";
+      case "MapMyBagActivity":
+      case "MapMyBagSessionActivity":
+      case "BagMappingActivity":
+      case "MAP_MY_BAG":
+        return "Map My Bag";
+      default:
+        return type ?? "Activity";
+    }
+  }
+
   // src/popup/popup.ts
   function computeClubAverage(shots, metricName) {
     const values = shots.map((s) => s.metrics[metricName]).filter((v) => v !== void 0 && v !== "").map((v) => parseFloat(String(v)));
@@ -657,9 +1111,198 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     "Gemini": "https://gemini.google.com"
   };
   var PORTAL_ACTIVITY_PATTERN = /^https:\/\/portal\.trackmangolf\.com\/player\/activities\/([A-Za-z0-9+/=]+)$/;
+  var PORTAL_ACTIVITIES_LIST_PATTERN = /^https:\/\/portal\.trackmangolf\.com\/player\/activities\/?$/;
+  function isPortalAuthMessage(message) {
+    const normalized = message.toLowerCase();
+    return normalized.includes("unauthorized") || normalized.includes("not authorized") || normalized.includes("unauthenticated") || normalized.includes("not logged in");
+  }
+  function formatPortalFetchError(message) {
+    return isPortalAuthMessage(message) ? "Session expired \u2014 log into portal.trackmangolf.com" : message;
+  }
+  async function fetchPortalGraphQL(tabId, candidate, variables) {
+    return chrome.tabs.sendMessage(tabId, {
+      type: "PORTAL_GRAPHQL_FETCH",
+      query: candidate.query,
+      variables
+    });
+  }
+  function appendUniqueActivities(target, seenIds, activities) {
+    for (const activity of activities) {
+      if (seenIds.has(activity.id)) continue;
+      seenIds.add(activity.id);
+      target.push(activity);
+    }
+  }
+  async function fetchPortalActivitiesForCandidate(tabId, candidate) {
+    if (!candidate.paginated) {
+      const fetchResponse = await fetchPortalGraphQL(tabId, candidate);
+      if (!fetchResponse?.success) {
+        return { error: fetchResponse?.error ?? "Failed to fetch activities" };
+      }
+      const graphQLErrors = fetchResponse.data?.errors ?? [];
+      if (graphQLErrors.length > 0) {
+        return { error: graphQLErrors[0].message };
+      }
+      return { activities: normalizeActivitySummaries(fetchResponse.data?.data) };
+    }
+    const activities = [];
+    const seenIds = /* @__PURE__ */ new Set();
+    let skip = 0;
+    for (let page = 0; page < FETCH_ACTIVITIES_MAX_PAGES; page += 1) {
+      const fetchResponse = await fetchPortalGraphQL(tabId, candidate, {
+        skip,
+        take: FETCH_ACTIVITIES_PAGE_SIZE
+      });
+      if (!fetchResponse?.success) {
+        return { error: fetchResponse?.error ?? "Failed to fetch activities" };
+      }
+      const graphQLErrors = fetchResponse.data?.errors ?? [];
+      if (graphQLErrors.length > 0) {
+        return { error: graphQLErrors[0].message };
+      }
+      const summaryPage = normalizeActivitySummaryPage(fetchResponse.data?.data);
+      appendUniqueActivities(activities, seenIds, summaryPage.activities);
+      const consumedCount = skip + summaryPage.itemCount;
+      if (summaryPage.hasNextPage === false || summaryPage.itemCount === 0 || summaryPage.hasNextPage === null && summaryPage.itemCount < FETCH_ACTIVITIES_PAGE_SIZE || summaryPage.totalCount !== null && consumedCount >= summaryPage.totalCount) {
+        return { activities };
+      }
+      skip = consumedCount;
+    }
+    return { activities };
+  }
+  async function fetchPortalActivities(tabId) {
+    let firstError;
+    for (const candidate of FETCH_ACTIVITIES_QUERY_CANDIDATES) {
+      const result = await fetchPortalActivitiesForCandidate(tabId, candidate);
+      if (result.error) {
+        firstError = firstError ?? result.error;
+        continue;
+      }
+      return result.activities ?? [];
+    }
+    throw new Error(formatPortalFetchError(firstError ?? "No activities found"));
+  }
+  function responseContainsMeasurement(value) {
+    if (Array.isArray(value)) {
+      return value.some(responseContainsMeasurement);
+    }
+    if (!value || typeof value !== "object") return false;
+    const record = value;
+    if (record.measurement || record.Measurement || record.NormalizedMeasurement) {
+      return true;
+    }
+    return Object.entries(record).some(([key, nested]) => {
+      if (key === "measurement" || key === "Measurement" || key === "NormalizedMeasurement") {
+        return false;
+      }
+      return responseContainsMeasurement(nested);
+    });
+  }
+  async function fetchPortalActivityCandidates(tabId, activityId) {
+    const payloads = [];
+    let firstError;
+    for (const candidate of IMPORT_SESSION_QUERY_CANDIDATES) {
+      const fetchResponse = await chrome.tabs.sendMessage(tabId, {
+        type: "PORTAL_GRAPHQL_FETCH",
+        query: candidate.query,
+        variables: { id: activityId }
+      });
+      if (!fetchResponse?.success) {
+        firstError = firstError ?? fetchResponse?.error ?? "Failed to fetch activity";
+        continue;
+      }
+      const graphQLErrors = fetchResponse.data?.errors ?? [];
+      if (graphQLErrors.length > 0) {
+        firstError = firstError ?? graphQLErrors[0].message;
+        continue;
+      }
+      if (fetchResponse.data) {
+        payloads.push(fetchResponse.data);
+        if (responseContainsMeasurement(fetchResponse.data.data?.node)) {
+          break;
+        }
+      }
+    }
+    if (payloads.length === 0) {
+      throw new Error(formatPortalFetchError(firstError ?? "Failed to fetch activity"));
+    }
+    return payloads;
+  }
+  function installImportStatusButtonReset(button) {
+    const statusListener = (changes) => {
+      if (changes[STORAGE_KEYS.IMPORT_STATUS]) {
+        const status = changes[STORAGE_KEYS.IMPORT_STATUS].newValue;
+        if (status && (status.state === "success" || status.state === "error")) {
+          chrome.storage.onChanged.removeListener(statusListener);
+          button.disabled = false;
+          button.textContent = status.state === "success" ? "Imported!" : "Import";
+        }
+      }
+    };
+    chrome.storage.onChanged.addListener(statusListener);
+  }
+  async function importPortalActivityFromTab(tabId, activityId, button) {
+    button.disabled = true;
+    button.textContent = "Importing...";
+    try {
+      const graphqlPayloads = await fetchPortalActivityCandidates(tabId, activityId);
+      installImportStatusButtonReset(button);
+      chrome.runtime.sendMessage({
+        type: "SAVE_IMPORTED_SESSION",
+        graphqlPayloads,
+        activityId
+      });
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : "Unable to fetch activity";
+      showToast(message, "error");
+      button.disabled = false;
+      button.textContent = "Import";
+    }
+  }
+  function renderPortalActivityBrowser(activities, tabId) {
+    const browser = document.getElementById("portal-activity-browser");
+    const list = document.getElementById("portal-activity-list");
+    if (!browser || !list) return;
+    browser.style.display = "block";
+    if (activities.length === 0) {
+      list.innerHTML = `<div class="activity-list-empty">No Course Play or Map My Bag sessions found</div>`;
+      return;
+    }
+    list.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+    for (const activity of activities) {
+      const row = document.createElement("div");
+      row.className = "activity-row";
+      const dateEl = document.createElement("span");
+      dateEl.className = "activity-date";
+      dateEl.textContent = formatActivityDate(activity.date);
+      const mainEl = document.createElement("span");
+      mainEl.className = "activity-main";
+      const typeEl = document.createElement("span");
+      typeEl.className = "activity-type";
+      typeEl.textContent = getPortalActivityDisplayLabel(activity.type);
+      const detailEl = document.createElement("span");
+      detailEl.className = "activity-detail";
+      detailEl.textContent = activity.courseName ?? (activity.strokeCount === null ? "" : `${activity.strokeCount} shots`);
+      if (detailEl.textContent) {
+        detailEl.title = detailEl.textContent;
+      }
+      mainEl.append(typeEl, detailEl);
+      const importBtn = document.createElement("button");
+      importBtn.className = "activity-import-btn";
+      importBtn.textContent = "Import";
+      importBtn.addEventListener("click", () => {
+        importPortalActivityFromTab(tabId, activity.id, importBtn);
+      });
+      row.append(dateEl, mainEl, importBtn);
+      fragment.appendChild(row);
+    }
+    list.appendChild(fragment);
+  }
   async function checkActiveTabForActivity() {
     const detected = document.getElementById("portal-activity-detected");
     const noActivity = document.getElementById("portal-no-activity");
+    const browser = document.getElementById("portal-activity-browser");
     if (!detected || !noActivity) return;
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -669,53 +1312,38 @@ Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
         const tabId = tab.id;
         detected.style.display = "";
         noActivity.style.display = "none";
+        if (browser) browser.style.display = "none";
         const importBtn = document.getElementById("portal-import-btn");
         if (importBtn) {
           importBtn.addEventListener("click", async () => {
-            importBtn.disabled = true;
-            importBtn.textContent = "Importing...";
-            try {
-              const fetchResponse = await chrome.tabs.sendMessage(tabId, {
-                type: "PORTAL_GRAPHQL_FETCH",
-                query: IMPORT_SESSION_QUERY,
-                variables: { id: activityId }
-              });
-              if (!fetchResponse?.success) {
-                showToast(fetchResponse?.error ?? "Failed to fetch activity", "error");
-                importBtn.disabled = false;
-                importBtn.textContent = "Import this session";
-                return;
-              }
-              const statusListener = (changes) => {
-                if (changes[STORAGE_KEYS.IMPORT_STATUS]) {
-                  const status = changes[STORAGE_KEYS.IMPORT_STATUS].newValue;
-                  if (status && (status.state === "success" || status.state === "error")) {
-                    chrome.storage.onChanged.removeListener(statusListener);
-                    importBtn.disabled = false;
-                    importBtn.textContent = status.state === "success" ? "Imported!" : "Import this session";
-                  }
-                }
-              };
-              chrome.storage.onChanged.addListener(statusListener);
-              chrome.runtime.sendMessage({
-                type: "SAVE_IMPORTED_SESSION",
-                graphqlData: fetchResponse.data,
-                activityId
-              });
-            } catch {
-              showToast("Unable to reach portal tab \u2014 refresh the page and try again", "error");
-              importBtn.disabled = false;
-              importBtn.textContent = "Import this session";
-            }
+            await importPortalActivityFromTab(tabId, activityId, importBtn);
           });
         }
+      } else if (tab?.url?.match(PORTAL_ACTIVITIES_LIST_PATTERN) && tab.id) {
+        detected.style.display = "none";
+        noActivity.style.display = "none";
+        if (browser) {
+          browser.style.display = "block";
+          const list = document.getElementById("portal-activity-list");
+          if (list) list.innerHTML = `<div class="activity-loading">Loading activities...</div>`;
+        }
+        const activities = await fetchPortalActivities(tab.id);
+        renderPortalActivityBrowser(activities, tab.id);
       } else {
         detected.style.display = "none";
         noActivity.style.display = "";
+        if (browser) browser.style.display = "none";
       }
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : "Unable to fetch activities";
       detected.style.display = "none";
-      noActivity.style.display = "";
+      noActivity.style.display = "none";
+      if (browser) {
+        browser.style.display = "block";
+        const list = document.getElementById("portal-activity-list");
+        if (list) list.innerHTML = `<div class="activity-list-empty">${escapeHtml(message)}</div>`;
+      }
+      showToast(message, "error");
     }
   }
   function renderStatCard() {

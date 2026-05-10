@@ -221,6 +221,15 @@ describe("parsePortalActivity", () => {
       expect(typeof firstShot.metrics["SpinRate"]).toBe("string");
     });
 
+    it("stores zero-based shot numbers for CSV/TSV display", () => {
+      const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
+      expect(session).not.toBeNull();
+      const ironGroup = session!.club_groups.find(
+        (g) => g.club_name === "7-Iron"
+      );
+      expect(ironGroup!.shots.map((shot) => shot.shot_number)).toEqual([0, 1]);
+    });
+
     it("sets url_type to activity", () => {
       const session = parsePortalActivity(FIXTURE_FULL_ACTIVITY);
       expect(session).not.toBeNull();
@@ -283,6 +292,125 @@ describe("parsePortalActivity", () => {
       expect(session).not.toBeNull();
       expect(session!.club_groups).toHaveLength(1);
       expect(session!.club_groups[0].club_name).toBe("ValidClub");
+    });
+
+    it("parses grouped Course Play strokes into club groups", () => {
+      const coursePlayActivity: GraphQLActivity = {
+        id: btoa("CoursePlayActivity\ncourse-play-uuid"),
+        __typename: "CoursePlayActivity",
+        kind: "Course Play",
+        time: "2026-02-01",
+        strokeGroups: [
+          {
+            club: "Driver",
+            strokes: [
+              { measurement: { ballSpeed: 160.2, carry: 258.4 } },
+              { measurement: { ballSpeed: 158.0, carry: 249.7 } },
+            ],
+          },
+          {
+            club: "9-Iron",
+            strokes: [
+              { measurement: { ballSpeed: 105.2, carry: 136.0 } },
+            ],
+          },
+        ],
+      };
+
+      const session = parsePortalActivity(coursePlayActivity);
+      expect(session).not.toBeNull();
+      expect(session!.club_groups).toHaveLength(2);
+      expect(session!.club_groups[0].club_name).toBe("Driver");
+      expect(session!.club_groups[0].shots).toHaveLength(2);
+      expect(session!.club_groups[1].club_name).toBe("9-Iron");
+      expect(session!.metadata_params["activity_type"]).toBe("CoursePlayActivity");
+      expect(session!.metadata_params["activity_kind"]).toBe("Course Play");
+    });
+
+    it("parses live Course Play scorecard hole shots", () => {
+      const coursePlayActivity = {
+        id: btoa("CoursePlayActivity\ncourse-play-scorecard-uuid"),
+        __typename: "CoursePlayActivity",
+        kind: "Course Play",
+        time: "2025-04-05T15:46:57.519Z",
+        scorecard: {
+          holes: [
+            {
+              holeNumber: 1,
+              shots: [
+                {
+                  shotNumber: 1,
+                  club: "Driver",
+                  measurement: {
+                    clubSpeed: 108.1,
+                    ballSpeed: 158.4,
+                    carry: 252.2,
+                    spinRate: 2450,
+                  },
+                },
+                {
+                  shotNumber: 2,
+                  club: "PW",
+                  measurement: {
+                    ballSpeed: 96.2,
+                    carry: 118.7,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      } as unknown as GraphQLActivity;
+
+      const session = parsePortalActivity(coursePlayActivity);
+      expect(session).not.toBeNull();
+      expect(session!.club_groups.map((g) => g.club_name)).toEqual(["Driver", "PW"]);
+      expect(session!.club_groups[0].shots[0].metrics["ClubSpeed"]).toBe("108.1");
+      expect(session!.club_groups[0].shots[0].metrics["Carry"]).toBe("252.2");
+      expect(session!.club_groups[1].shots[0].metrics["BallSpeed"]).toBe("96.2");
+      expect(session!.metadata_params["activity_type"]).toBe("CoursePlayActivity");
+    });
+
+    it("parses nested Map My Bag shot groups", () => {
+      const mapMyBagActivity = {
+        id: btoa("MapMyBagActivity\nmap-my-bag-uuid"),
+        __typename: "MapMyBagActivity",
+        kind: "Map My Bag",
+        time: "2026-02-05",
+        bag: {
+          clubs: [
+            {
+              name: "PW",
+              shotGroups: [
+                {
+                  strokes: [
+                    { measurement: { carry: 123.4, total: 128.9 } },
+                    { measurement: { carry: 121.2, total: 127.0 } },
+                  ],
+                },
+              ],
+            },
+            {
+              name: "7-Iron",
+              shotGroups: [
+                {
+                  strokes: [
+                    { measurement: { carry: 164.2, total: 171.5 } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      } as unknown as GraphQLActivity;
+
+      const session = parsePortalActivity(mapMyBagActivity);
+      expect(session).not.toBeNull();
+      expect(session!.club_groups.map((g) => g.club_name)).toEqual(["PW", "7-Iron"]);
+      expect(session!.club_groups[0].shots).toHaveLength(2);
+      expect(session!.club_groups[0].shots[0].metrics["Carry"]).toBe("123.4");
+      expect(session!.club_groups[1].shots[0].metrics["Total"]).toBe("171.5");
+      expect(session!.metric_names).toEqual(["Carry", "Total"]);
     });
   });
 

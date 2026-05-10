@@ -521,7 +521,7 @@
 
     .activity-row {
       display: grid;
-      grid-template-columns: 5rem 1fr 3rem auto;
+      grid-template-columns: 5rem minmax(0, 1fr) auto;
       gap: 8px;
       padding: 6px 8px;
       font-size: 13px;
@@ -539,6 +539,12 @@
       white-space: nowrap;
     }
 
+    .activity-main {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
     .activity-type {
       color: var(--color-text-muted);
       overflow: hidden;
@@ -546,10 +552,14 @@
       white-space: nowrap;
     }
 
-    .activity-stroke-count {
-      text-align: right;
+    .activity-detail {
+      text-align: left;
+      font-size: 12px;
       font-variant-numeric: tabular-nums;
       color: var(--color-text-body);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .activity-import-btn {
@@ -706,6 +716,12 @@
         <p style="font-size:13px; color:var(--color-text-muted); margin:0;">
           Open an activity on <a href="#" id="portal-open-link" style="color:var(--color-link);">portal.trackmangolf.com</a> and click Import.
         </p>
+      </div>
+      <div id="portal-activity-browser" style="display:none;">
+        <p style="font-size:13px; color:var(--color-text-body); margin:0 0 8px 0;">
+          Course Play and Map My Bag sessions
+        </p>
+        <div id="portal-activity-list" class="activity-list-container"></div>
       </div>
     </div>
   </div>

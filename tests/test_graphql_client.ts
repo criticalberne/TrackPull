@@ -119,6 +119,14 @@ describe("graphql_client", () => {
     expect(classifyAuthResult(result)).toEqual({ kind: "unauthenticated" });
   });
 
+  it("returns unauthenticated when errors[0].message contains 'not authorized'", () => {
+    const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
+      data: null,
+      errors: [{ message: "The current user is not authorized to access this resource." }],
+    };
+    expect(classifyAuthResult(result)).toEqual({ kind: "unauthenticated" });
+  });
+
   it("Test 9: classifyAuthResult returns unauthenticated when errors[0].message contains 'not logged in' (case-insensitive)", () => {
     const result: GraphQLResponse<{ me: { __typename: string } | null }> = {
       data: null,

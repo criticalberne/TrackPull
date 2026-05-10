@@ -3,6 +3,7 @@ import {
   formatActivityDate,
   getTimePeriod,
   filterActivities,
+  getPortalActivityDisplayLabel,
   getUniqueTypes,
 } from "../src/shared/activity_helpers";
 import type { ActivitySummary } from "../src/shared/import_types";
@@ -27,6 +28,10 @@ describe("formatActivityDate", () => {
     expect(formatActivityDate("2026-02-28", NOW)).toBe("Feb 28");
   });
 
+  it("handles full ISO timestamps from portal activities", () => {
+    expect(formatActivityDate("2025-04-05T15:46:57.519Z", NOW)).toBe("Apr 5, 2025");
+  });
+
   it("appends year when year is older than 1 year", () => {
     expect(formatActivityDate("2024-06-15", NOW)).toBe("Jun 15, 2024");
   });
@@ -39,6 +44,10 @@ describe("getTimePeriod", () => {
 
   it("returns Today for today's date", () => {
     expect(getTimePeriod("2026-03-26", NOW)).toBe("Today");
+  });
+
+  it("classifies full ISO timestamps by local date", () => {
+    expect(getTimePeriod("2026-03-26T23:59:59.000Z", NOW)).toBe("Today");
   });
 
   it("returns This Week for earlier this week (not today)", () => {
@@ -125,5 +134,22 @@ describe("getUniqueTypes", () => {
       { id: "3", date: "2026-03-24", strokeCount: 3, type: "Session" },
     ];
     expect(getUniqueTypes(activities)).toEqual(["Session"]);
+  });
+});
+
+describe("getPortalActivityDisplayLabel", () => {
+  it("renders supported portal activity type names for users", () => {
+    expect(getPortalActivityDisplayLabel("CoursePlayActivity")).toBe("Course play");
+    expect(getPortalActivityDisplayLabel("CourseSessionActivity")).toBe("Course play");
+    expect(getPortalActivityDisplayLabel("COURSE_PLAY")).toBe("Course play");
+    expect(getPortalActivityDisplayLabel("MapMyBagActivity")).toBe("Map My Bag");
+    expect(getPortalActivityDisplayLabel("MapMyBagSessionActivity")).toBe("Map My Bag");
+    expect(getPortalActivityDisplayLabel("BagMappingActivity")).toBe("Map My Bag");
+    expect(getPortalActivityDisplayLabel("MAP_MY_BAG")).toBe("Map My Bag");
+  });
+
+  it("falls back to raw type or generic activity label", () => {
+    expect(getPortalActivityDisplayLabel("CustomActivity")).toBe("CustomActivity");
+    expect(getPortalActivityDisplayLabel(null)).toBe("Activity");
   });
 });

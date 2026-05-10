@@ -67,6 +67,7 @@ export function classifyAuthResult(
     if (
       code === "UNAUTHENTICATED" ||
       msgLower.includes("unauthorized") ||
+      msgLower.includes("not authorized") ||
       msgLower.includes("unauthenticated") ||
       msgLower.includes("not logged in")
     ) {

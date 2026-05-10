@@ -11,8 +11,20 @@ import { hasPortalPermission } from "../shared/portalPermissions";
 import { executeQuery, classifyAuthResult, HEALTH_CHECK_QUERY } from "../shared/graphql_client";
 import { parsePortalActivity } from "../shared/portal_parser";
 import type { GraphQLActivity } from "../shared/portal_parser";
-import type { ImportStatus, ActivitySummary } from "../shared/import_types";
-import { FETCH_ACTIVITIES_QUERY, IMPORT_SESSION_QUERY } from "../shared/import_types";
+import type { FetchActivitiesQueryCandidate, ImportStatus, ActivitySummary } from "../shared/import_types";
+import {
+  FETCH_ACTIVITIES_MAX_PAGES,
+  FETCH_ACTIVITIES_PAGE_SIZE,
+  FETCH_ACTIVITIES_QUERY_CANDIDATES,
+  IMPORT_SESSION_QUERY_CANDIDATES,
+  normalizeActivitySummaries,
+  normalizeActivitySummaryPage,
+} from "../shared/import_types";
+
+interface ImportedSessionGraphQLData {
+  data?: { node?: GraphQLActivity };
+  errors?: Array<{ message: string; extensions?: { code?: string } }>;
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("TrackPull extension installed");
@@ -48,7 +60,7 @@ function isAuthError(errors: Array<{ message: string; extensions?: { code?: stri
   if (errors.length === 0) return false;
   const code = errors[0].extensions?.code ?? "";
   const msg = errors[0].message?.toLowerCase() ?? "";
-  return code === "UNAUTHENTICATED" || msg.includes("unauthorized") || msg.includes("unauthenticated") || msg.includes("not logged in");
+  return code === "UNAUTHENTICATED" || msg.includes("unauthorized") || msg.includes("not authorized") || msg.includes("unauthenticated") || msg.includes("not logged in");
 }
 
 function getDownloadErrorMessage(originalError: string): string {
@@ -65,6 +77,75 @@ function getDownloadErrorMessage(originalError: string): string {
 }
 
 type RequestMessage = SaveDataRequest | ExportCsvRequest | GetDataRequest | FetchActivitiesRequest | ImportSessionRequest | PortalAuthCheckRequest;
+
+function parseImportedSession(
+  payloads: ImportedSessionGraphQLData[]
+): SessionData | null {
+  for (const payload of payloads) {
+    if (payload.errors && payload.errors.length > 0) continue;
+    const activity = payload.data?.node;
+    const session = activity ? parsePortalActivity(activity) : null;
+    if (session) return session;
+  }
+  return null;
+}
+
+function appendUniqueActivities(
+  target: ActivitySummary[],
+  seenIds: Set<string>,
+  activities: ActivitySummary[]
+): void {
+  for (const activity of activities) {
+    if (seenIds.has(activity.id)) continue;
+    seenIds.add(activity.id);
+    target.push(activity);
+  }
+}
+
+async function fetchActivitiesForCandidate(
+  candidate: FetchActivitiesQueryCandidate
+): Promise<{
+  activities?: ActivitySummary[];
+  errors?: Array<{ message: string; extensions?: { code?: string } }>;
+}> {
+  if (!candidate.paginated) {
+    const result = await executeQuery<Record<string, unknown>>(candidate.query);
+    if (result.errors && result.errors.length > 0) {
+      return { errors: result.errors };
+    }
+    return { activities: normalizeActivitySummaries(result.data) };
+  }
+
+  const activities: ActivitySummary[] = [];
+  const seenIds = new Set<string>();
+  let skip = 0;
+
+  for (let page = 0; page < FETCH_ACTIVITIES_MAX_PAGES; page += 1) {
+    const result = await executeQuery<Record<string, unknown>>(
+      candidate.query,
+      { skip, take: FETCH_ACTIVITIES_PAGE_SIZE }
+    );
+    if (result.errors && result.errors.length > 0) {
+      return { errors: result.errors };
+    }
+
+    const summaryPage = normalizeActivitySummaryPage(result.data);
+    appendUniqueActivities(activities, seenIds, summaryPage.activities);
+
+    const consumedCount = skip + summaryPage.itemCount;
+    if (
+      summaryPage.hasNextPage === false ||
+      summaryPage.itemCount === 0 ||
+      (summaryPage.hasNextPage === null && summaryPage.itemCount < FETCH_ACTIVITIES_PAGE_SIZE) ||
+      (summaryPage.totalCount !== null && consumedCount >= summaryPage.totalCount)
+    ) {
+      return { activities };
+    }
+    skip = consumedCount;
+  }
+
+  return { activities };
+}
 
 chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendResponse) => {
   if (message.type === "GET_DATA") {
@@ -184,29 +265,21 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         return;
       }
       try {
-        const result = await executeQuery<{
-          me: {
-            activities: Array<{
-              id: string; time: string; strokeCount?: number; kind?: string;
-            }>;
-          };
-        }>(FETCH_ACTIVITIES_QUERY);
-        if (result.errors && result.errors.length > 0) {
-          if (isAuthError(result.errors)) {
-            sendResponse({ success: false, error: "Session expired — log into portal.trackmangolf.com" });
-          } else {
-            sendResponse({ success: false, error: "Unable to fetch activities — try again later" });
+        let firstError: Array<{ message: string; extensions?: { code?: string } }> | undefined;
+        for (const candidate of FETCH_ACTIVITIES_QUERY_CANDIDATES) {
+          const result = await fetchActivitiesForCandidate(candidate);
+          if (result.errors && result.errors.length > 0) {
+            firstError = firstError ?? result.errors;
+            continue;
           }
+          sendResponse({ success: true, activities: result.activities ?? [] });
           return;
         }
-        const rawActivities = result.data?.me?.activities ?? [];
-        const activities: ActivitySummary[] = rawActivities.slice(0, 20).map((a) => ({
-          id: a.id,
-          date: a.time,
-          strokeCount: a.strokeCount ?? null,
-          type: a.kind ?? null,
-        }));
-        sendResponse({ success: true, activities });
+        if (firstError && isAuthError(firstError)) {
+          sendResponse({ success: false, error: "Session expired — log into portal.trackmangolf.com" });
+        } else {
+          sendResponse({ success: false, error: "Unable to fetch activities — try again later" });
+        }
       } catch (err) {
         console.error("TrackPull: Fetch activities failed:", err);
         sendResponse({ success: false, error: "Unable to fetch activities — try again later" });
@@ -227,20 +300,30 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
       sendResponse({ success: true });
 
       try {
-        const result = await executeQuery<{ node: GraphQLActivity }>(
-          IMPORT_SESSION_QUERY,
-          { id: activityId }
-        );
-        if (result.errors && result.errors.length > 0) {
-          if (isAuthError(result.errors)) {
-            await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Session expired — log into portal.trackmangolf.com" } as ImportStatus });
-          } else {
-            await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Unable to reach Trackman — try again later" } as ImportStatus });
+        let session: SessionData | null = null;
+        for (const candidate of IMPORT_SESSION_QUERY_CANDIDATES) {
+          const result = await executeQuery<{ node: GraphQLActivity }>(
+            candidate.query,
+            { id: activityId }
+          );
+          if (result.errors && result.errors.length > 0) {
+            if (isAuthError(result.errors)) {
+              await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Session expired — log into portal.trackmangolf.com" } as ImportStatus });
+              return;
+            }
+            if (candidate.label === "default") {
+              await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Unable to reach Trackman — try again later" } as ImportStatus });
+              return;
+            }
+            console.warn("TrackPull: Import query candidate failed:", candidate.label, result.errors[0].message);
+            continue;
           }
-          return;
+
+          const activity = result.data?.node;
+          session = activity ? parsePortalActivity(activity) : null;
+          if (session) break;
         }
-        const activity = result.data?.node;
-        const session = activity ? parsePortalActivity(activity) : null;
+
         if (!session) {
           await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "No shot data found for this activity" } as ImportStatus });
           return;
@@ -259,17 +342,26 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
 
   // Receives pre-fetched GraphQL data from popup (fetched via content script on portal page)
   if (message.type === "SAVE_IMPORTED_SESSION") {
-    const { graphqlData } = message as { type: string; graphqlData: { data?: { node?: GraphQLActivity }; errors?: Array<{ message: string }> }; activityId: string };
+    const { graphqlData, graphqlPayloads } = message as {
+      type: string;
+      graphqlData?: ImportedSessionGraphQLData;
+      graphqlPayloads?: ImportedSessionGraphQLData[];
+      activityId: string;
+    };
     (async () => {
       await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "importing" } as ImportStatus });
 
       try {
-        if (graphqlData.errors && graphqlData.errors.length > 0) {
-          await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: graphqlData.errors[0].message } as ImportStatus });
+        const payloads = graphqlPayloads ?? (graphqlData ? [graphqlData] : []);
+        const firstError = payloads.find((payload) => payload.errors && payload.errors.length > 0)?.errors?.[0];
+        const hasPayloadWithoutErrors = payloads.some((payload) => !payload.errors || payload.errors.length === 0);
+
+        if (firstError && !hasPayloadWithoutErrors) {
+          await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: firstError.message } as ImportStatus });
           return;
         }
-        const activity = graphqlData.data?.node;
-        const session = activity ? parsePortalActivity(activity) : null;
+
+        const session = parseImportedSession(payloads);
         if (!session) {
           await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "No shot data found for this activity" } as ImportStatus });
           return;
