@@ -3,7 +3,7 @@
  * Implements core columns: Date, Club, Shot #, Type
  */
 
-import type { SessionData, ClubGroup, Shot } from "../models/types";
+import type { SessionData, Shot } from "../models/types";
 import {
   getApiSourceUnitSystem,
   getMetricUnitLabel,
@@ -40,10 +40,6 @@ function getColumnName(metric: string, unitChoice: UnitChoice): string {
   const displayName = getDisplayName(metric);
   const unitLabel = getMetricUnitLabel(metric, unitChoice);
   return unitLabel ? `${displayName} (${unitLabel})` : displayName;
-}
-
-function generateFilename(session: SessionData): string {
-  return `ShotData_${session.date}.csv`;
 }
 
 function orderMetricsByPriority(

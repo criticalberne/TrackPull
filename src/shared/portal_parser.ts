@@ -1,7 +1,7 @@
 /**
  * Portal GraphQL activity parser.
  *
- * Converts GraphQL activity responses (from Phase 22 graphql_client) into the
+ * Converts portal GraphQL activity responses into the
  * existing SessionData format, enabling portal-fetched data to flow into the
  * CSV export, AI analysis, and session history pipeline.
  *

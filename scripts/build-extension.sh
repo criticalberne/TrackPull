@@ -13,60 +13,32 @@ echo "Building TrackPull Chrome Extension..."
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/icons"
 
-if [ -f "src/manifest.json" ]; then
-    cp src/manifest.json "$DIST_DIR/"
-else
-    cat > "$DIST_DIR/manifest.json" << 'MANIFEST'
-{
-  "manifest_version": 3,
-  "name": "TrackPull",
-  "version": "1.0.0",
-  "description": "Pull shot data from Trackman reports",
-"permissions": ["storage", "downloads"],
-    "host_permissions": ["https://web-dynamic-reports.trackmangolf.com/*"],
-    "background": {"service_worker": "background.js"},
-    "content_scripts": [{"matches": ["https://web-dynamic-reports.trackmangolf.com/*"], "js": ["interceptor.js"]}],
-  "action": {"default_popup": "popup.html", "default_icon": {"16": "icons/icon16.png"}},
-  "icons": {"16": "icons/icon16.png"}
-}
-MANIFEST
+if [ ! -f "src/manifest.json" ]; then
+    echo "Error: src/manifest.json not found" >&2
+    exit 1
 fi
-
+cp src/manifest.json "$DIST_DIR/"
 echo "Manifest copied to $DIST_DIR/manifest.json"
 
-npx --yes esbuild src/background/serviceWorker.ts --bundle --outfile="$DIST_DIR/background.js" --format=iife --platform=browser --sourcemap=inline 2>/dev/null || { echo 'Error: Failed to build background.js' >&2; exit 1; }
+# Entry points: "<source>:<output bundle>"
+ENTRY_POINTS=(
+    "src/background/serviceWorker.ts:background.js"
+    "src/content/interceptor.ts:interceptor.js"
+    "src/content/bridge.ts:bridge.js"
+    "src/content/portal_page_fetch.ts:portal_page_fetch.js"
+    "src/content/portal_fetch.ts:portal_fetch.js"
+    "src/popup/popup.ts:popup.js"
+    "src/options/options.ts:options.js"
+)
 
-echo "Background service worker bundled to $DIST_DIR/background.js"
+for entry in "${ENTRY_POINTS[@]}"; do
+    source_file="${entry%%:*}"
+    bundle_name="${entry##*:}"
+    npx esbuild "$source_file" --bundle --outfile="$DIST_DIR/$bundle_name" --format=iife --platform=browser \
+        || { echo "Error: Failed to build $bundle_name" >&2; exit 1; }
+    echo "Bundled $source_file -> $DIST_DIR/$bundle_name"
+done
 
-npx --yes esbuild src/content/interceptor.ts --bundle --outfile="$DIST_DIR/interceptor.js" --format=iife --platform=browser || { echo 'Error: Failed to build interceptor.js' >&2; exit 1; }
-
-echo "Content script bundled to $DIST_DIR/interceptor.js"
-
-npx --yes esbuild src/content/bridge.ts --bundle --outfile="$DIST_DIR/bridge.js" --format=iife --platform=browser || { echo 'Error: Failed to build bridge.js' >&2; exit 1; }
-
-echo "Bridge content script bundled to $DIST_DIR/bridge.js"
-
-npx --yes esbuild src/content/portal_page_fetch.ts --bundle --outfile="$DIST_DIR/portal_page_fetch.js" --format=iife --platform=browser || { echo 'Error: Failed to build portal_page_fetch.js' >&2; exit 1; }
-
-echo "Portal page fetch bridge bundled to $DIST_DIR/portal_page_fetch.js"
-
-npx --yes esbuild src/content/portal_fetch.ts --bundle --outfile="$DIST_DIR/portal_fetch.js" --format=iife --platform=browser || { echo 'Error: Failed to build portal_fetch.js' >&2; exit 1; }
-
-echo "Portal fetch content script bundled to $DIST_DIR/portal_fetch.js"
-
-npx --yes esbuild src/content/html_scraping.ts --bundle --outfile="$DIST_DIR/html_scraping.js" --format=iife || { echo 'Error: Failed to build html_scraping.js' >&2; exit 1; }
-
-echo "HTML scraping content script bundled to $DIST_DIR/html_scraping.js"
-
-npx --yes esbuild src/popup/popup.ts --bundle --outfile="$DIST_DIR/popup.js" --format=iife || { echo 'Error: Failed to build popup.js' >&2; exit 1; }
-
-echo "Popup script bundled to $DIST_DIR/popup.js"
-
-npx --yes esbuild src/options/options.ts --bundle --outfile="$DIST_DIR/options.js" --format=iife || { echo 'Error: Failed to build options.js' >&2; exit 1; }
-
-echo "Options page script bundled to $DIST_DIR/options.js"
-
-mkdir -p "$DIST_DIR/icons"
 if compgen -G "src/icons/*.png" > /dev/null; then
     cp src/icons/*.png "$DIST_DIR/icons/"
 else

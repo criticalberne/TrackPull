@@ -149,7 +149,7 @@ class TestProductionZip:
             names = zf.namelist()
 
             # Expected: manifest.json, background.js, interceptor.js,
-            #           html_scraping.js, popup.html, popup.js, icons (3 files)
+            #           popup.html, popup.js, icons (3 files)
             expected_minimum = 8
 
             assert len(names) >= expected_minimum, (

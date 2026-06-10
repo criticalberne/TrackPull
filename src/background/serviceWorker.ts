@@ -5,21 +5,11 @@
 import { STORAGE_KEYS } from "../shared/constants";
 import { writeCsv } from "../shared/csv_writer";
 import type { SessionData } from "../models/types";
-import { migrateLegacyPref, DEFAULT_UNIT_CHOICE, type UnitChoice, type SpeedUnit, type DistanceUnit } from "../shared/unit_normalization";
+import { migrateLegacyPref, type UnitChoice, type SpeedUnit, type DistanceUnit } from "../shared/unit_normalization";
 import { saveSessionToHistory, getHistoryErrorMessage } from "../shared/history";
-import { hasPortalPermission } from "../shared/portalPermissions";
-import { executeQuery, classifyAuthResult, HEALTH_CHECK_QUERY } from "../shared/graphql_client";
 import { parsePortalActivity } from "../shared/portal_parser";
 import type { GraphQLActivity } from "../shared/portal_parser";
-import type { FetchActivitiesQueryCandidate, ImportStatus, ActivitySummary } from "../shared/import_types";
-import {
-  FETCH_ACTIVITIES_MAX_PAGES,
-  FETCH_ACTIVITIES_PAGE_SIZE,
-  FETCH_ACTIVITIES_QUERY_CANDIDATES,
-  IMPORT_SESSION_QUERY_CANDIDATES,
-  normalizeActivitySummaries,
-  normalizeActivitySummaryPage,
-} from "../shared/import_types";
+import type { ImportStatus } from "../shared/import_types";
 
 interface ImportedSessionGraphQLData {
   data?: { node?: GraphQLActivity };
@@ -39,35 +29,11 @@ interface ExportCsvRequest {
   type: "EXPORT_CSV_REQUEST";
 }
 
-interface GetDataRequest {
-  type: "GET_DATA";
-}
-
-interface FetchActivitiesRequest {
-  type: "FETCH_ACTIVITIES";
-}
-
-interface ImportSessionRequest {
-  type: "IMPORT_SESSION";
-  activityId: string;
-}
-
-interface PortalAuthCheckRequest {
-  type: "PORTAL_AUTH_CHECK";
-}
-
 interface SaveImportedSessionRequest {
   type: "SAVE_IMPORTED_SESSION";
   graphqlData?: ImportedSessionGraphQLData;
   graphqlPayloads?: ImportedSessionGraphQLData[];
   activityId: string;
-}
-
-function isAuthError(errors: Array<{ message: string; extensions?: { code?: string } }>): boolean {
-  if (errors.length === 0) return false;
-  const code = errors[0].extensions?.code ?? "";
-  const msg = errors[0].message?.toLowerCase() ?? "";
-  return code === "UNAUTHENTICATED" || msg.includes("unauthorized") || msg.includes("not authorized") || msg.includes("unauthenticated") || msg.includes("not logged in");
 }
 
 function getDownloadErrorMessage(originalError: string): string {
@@ -86,10 +52,6 @@ function getDownloadErrorMessage(originalError: string): string {
 type RequestMessage =
   | SaveDataRequest
   | ExportCsvRequest
-  | GetDataRequest
-  | FetchActivitiesRequest
-  | ImportSessionRequest
-  | PortalAuthCheckRequest
   | SaveImportedSessionRequest;
 
 function parseImportedSession(
@@ -104,71 +66,7 @@ function parseImportedSession(
   return null;
 }
 
-function appendUniqueActivities(
-  target: ActivitySummary[],
-  seenIds: Set<string>,
-  activities: ActivitySummary[]
-): void {
-  for (const activity of activities) {
-    if (seenIds.has(activity.id)) continue;
-    seenIds.add(activity.id);
-    target.push(activity);
-  }
-}
-
-async function fetchActivitiesForCandidate(
-  candidate: FetchActivitiesQueryCandidate
-): Promise<{
-  activities?: ActivitySummary[];
-  errors?: Array<{ message: string; extensions?: { code?: string } }>;
-}> {
-  if (!candidate.paginated) {
-    const result = await executeQuery<Record<string, unknown>>(candidate.query);
-    if (result.errors && result.errors.length > 0) {
-      return { errors: result.errors };
-    }
-    return { activities: normalizeActivitySummaries(result.data) };
-  }
-
-  const activities: ActivitySummary[] = [];
-  const seenIds = new Set<string>();
-  let skip = 0;
-
-  for (let page = 0; page < FETCH_ACTIVITIES_MAX_PAGES; page += 1) {
-    const result = await executeQuery<Record<string, unknown>>(
-      candidate.query,
-      { skip, take: FETCH_ACTIVITIES_PAGE_SIZE }
-    );
-    if (result.errors && result.errors.length > 0) {
-      return { errors: result.errors };
-    }
-
-    const summaryPage = normalizeActivitySummaryPage(result.data);
-    appendUniqueActivities(activities, seenIds, summaryPage.activities);
-
-    const consumedCount = skip + summaryPage.itemCount;
-    if (
-      summaryPage.hasNextPage === false ||
-      summaryPage.itemCount === 0 ||
-      (summaryPage.hasNextPage === null && summaryPage.itemCount < FETCH_ACTIVITIES_PAGE_SIZE) ||
-      (summaryPage.totalCount !== null && consumedCount >= summaryPage.totalCount)
-    ) {
-      return { activities };
-    }
-    skip = consumedCount;
-  }
-
-  return { activities };
-}
-
 chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendResponse) => {
-  if (message.type === "GET_DATA") {
-    chrome.storage.local.get([STORAGE_KEYS.TRACKMAN_DATA], (result) => {
-      sendResponse(result[STORAGE_KEYS.TRACKMAN_DATA] || null);
-    });
-    return true;
-  }
-
   if (message.type === "SAVE_DATA") {
     const sessionData = (message as SaveDataRequest).data;
     chrome.storage.local.set({ [STORAGE_KEYS.TRACKMAN_DATA]: sessionData }, () => {
@@ -242,115 +140,6 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
         sendResponse({ success: false, error: error instanceof Error ? error.message : String(error) });
       }
     });
-    return true;
-  }
-
-  if (message.type === "PORTAL_AUTH_CHECK") {
-    (async () => {
-      const granted = await hasPortalPermission();
-      if (!granted) {
-        sendResponse({ success: true, status: "denied" });
-        return;
-      }
-      try {
-        const result = await executeQuery<{ me: { __typename: string } | null }>(HEALTH_CHECK_QUERY);
-        const authStatus = classifyAuthResult(result);
-        if (authStatus.kind === "error") {
-          console.error("TrackPull: GraphQL health check error:", authStatus.message);
-        }
-        sendResponse({
-          success: true,
-          status: authStatus.kind,
-          message: authStatus.kind === "error" ? authStatus.message : undefined,
-        });
-      } catch (err) {
-        console.error("TrackPull: GraphQL health check failed:", err);
-        sendResponse({ success: true, status: "error", message: "Unable to reach Trackman — try again later" });
-      }
-    })();
-    return true;
-  }
-
-  if (message.type === "FETCH_ACTIVITIES") {
-    (async () => {
-      const granted = await hasPortalPermission();
-      if (!granted) {
-        sendResponse({ success: false, error: "Portal permission not granted" });
-        return;
-      }
-      try {
-        let firstError: Array<{ message: string; extensions?: { code?: string } }> | undefined;
-        for (const candidate of FETCH_ACTIVITIES_QUERY_CANDIDATES) {
-          const result = await fetchActivitiesForCandidate(candidate);
-          if (result.errors && result.errors.length > 0) {
-            firstError = firstError ?? result.errors;
-            continue;
-          }
-          sendResponse({ success: true, activities: result.activities ?? [] });
-          return;
-        }
-        if (firstError && isAuthError(firstError)) {
-          sendResponse({ success: false, error: "Session expired — log into portal.trackmangolf.com" });
-        } else {
-          sendResponse({ success: false, error: "Unable to fetch activities — try again later" });
-        }
-      } catch (err) {
-        console.error("TrackPull: Fetch activities failed:", err);
-        sendResponse({ success: false, error: "Unable to fetch activities — try again later" });
-      }
-    })();
-    return true;
-  }
-
-  if (message.type === "IMPORT_SESSION") {
-    const { activityId } = message as ImportSessionRequest;
-    (async () => {
-      const granted = await hasPortalPermission();
-      if (!granted) {
-        sendResponse({ success: false, error: "Portal permission not granted" });
-        return;
-      }
-      await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "importing" } as ImportStatus });
-      sendResponse({ success: true });
-
-      try {
-        let session: SessionData | null = null;
-        for (const candidate of IMPORT_SESSION_QUERY_CANDIDATES) {
-          const result = await executeQuery<{ node: GraphQLActivity }>(
-            candidate.query,
-            { id: activityId }
-          );
-          if (result.errors && result.errors.length > 0) {
-            if (isAuthError(result.errors)) {
-              await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Session expired — log into portal.trackmangolf.com" } as ImportStatus });
-              return;
-            }
-            if (candidate.label === "default") {
-              await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Unable to reach Trackman — try again later" } as ImportStatus });
-              return;
-            }
-            console.warn("TrackPull: Import query candidate failed:", candidate.label, result.errors[0].message);
-            continue;
-          }
-
-          const activity = result.data?.node;
-          session = activity ? parsePortalActivity(activity) : null;
-          if (session) break;
-        }
-
-        if (!session) {
-          await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "No shot data found for this activity" } as ImportStatus });
-          return;
-        }
-        await chrome.storage.local.set({ [STORAGE_KEYS.TRACKMAN_DATA]: session });
-        await saveSessionToHistory(session);
-        await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "success" } as ImportStatus });
-        console.log("TrackPull: Session imported successfully:", session.report_id);
-      } catch (err) {
-        console.error("TrackPull: Import failed:", err);
-        await chrome.storage.local.set({ [STORAGE_KEYS.IMPORT_STATUS]: { state: "error", message: "Import failed — try again" } as ImportStatus });
-      }
-    })();
     return true;
   }
 
