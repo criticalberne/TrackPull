@@ -7,7 +7,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "bash scripts/build-extension.sh"
   },
   "repository": {
     "type": "git",
@@ -22,6 +23,7 @@
   },
   "homepage": "https://github.com/criticalberne/TrackPull#readme",
   "devDependencies": {
+    "esbuild": "^0.28.0",
     "jsdom": "^28.1.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
