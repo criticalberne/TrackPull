@@ -17,3 +17,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx vitest run
+      - name: Verify dist/ is in sync with src/
+        run: |
+          npm run build
+          if [ -n "$(git status --porcelain dist/)" ]; then
+            git status --porcelain dist/
+            git --no-pager diff dist/
+            echo "::error::dist/ is out of sync with src/. Run 'npm run build' and commit the result."
+            exit 1
+          fi
