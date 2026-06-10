@@ -794,12 +794,22 @@
     }
     return result;
   }
+  function hasTags(session) {
+    return session.club_groups.some(
+      (club) => club.shots.some((shot) => shot.tag !== void 0 && shot.tag !== "")
+    );
+  }
   function writeTsv(session, unitChoice = DEFAULT_UNIT_CHOICE, hittingSurface) {
     const orderedMetrics = orderMetricsByPriority(
       session.metric_names,
       METRIC_COLUMN_ORDER
     );
-    const headerFields = ["Date", "Club", "Shot #"];
+    const includeTag = hasTags(session);
+    const headerFields = ["Date", "Club"];
+    if (includeTag) {
+      headerFields.push("Tag");
+    }
+    headerFields.push("Shot #");
     for (const metric of orderedMetrics) {
       headerFields.push(getColumnName(metric, unitChoice));
     }
@@ -808,10 +818,13 @@
     for (const club of session.club_groups) {
       for (const shot of club.shots) {
         const fields = [
-          session.date,
-          club.club_name,
-          String(shot.shot_number + 1)
+          escapeTsvField(session.date),
+          escapeTsvField(club.club_name)
         ];
+        if (includeTag) {
+          fields.push(escapeTsvField(shot.tag ?? ""));
+        }
+        fields.push(escapeTsvField(String(shot.shot_number + 1)));
         for (const metric of orderedMetrics) {
           const rawValue = shot.metrics[metric] ?? "";
           let fieldValue;
@@ -822,13 +835,7 @@
           }
           fields.push(escapeTsvField(fieldValue));
         }
-        const escapedRow = [
-          escapeTsvField(fields[0]),
-          escapeTsvField(fields[1]),
-          escapeTsvField(fields[2]),
-          ...fields.slice(3)
-        ];
-        rows.push(escapedRow.join("	"));
+        rows.push(fields.join("	"));
       }
     }
     const headerRow = headerFields.map(escapeTsvField).join("	");
@@ -858,7 +865,7 @@ Please review this data and give the player a warm, encouraging summary. Include
 - 1 to 2 things to focus on for next time (keep it simple and actionable)
 - A short encouraging closing message
 
-Use simple language. Avoid heavy technical jargon. Speak directly to the player like a supportive coach.`
+Set aside any obvious mishits when judging the session. Use simple language. Avoid heavy technical jargon. Speak directly to the player like a supportive coach.`
     },
     {
       id: "club-breakdown-intermediate",
@@ -871,6 +878,8 @@ Here is the tab-separated Trackman golf session data:
 
 {{DATA}}
 
+Before analyzing, note how many shots each club has. Treat any club with fewer than 5 shots as low-confidence, and exclude obvious mishits from averages (mention any shots you exclude). If a Tag column is present, break results down by tag within each club.
+
 Please provide a club-by-club breakdown of this session. For each club represented in the data:
 - Summarize average carry distance and ball speed
 - Note the player's strengths with that club
@@ -880,6 +889,8 @@ Then provide an overall summary:
 - Which clubs are performing the strongest?
 - Where are the biggest distance gaps between clubs? Are those gaps appropriate?
 - What 1 to 2 adjustments would most improve overall performance?
+
+If any suggested adjustment involves equipment (a different club, shaft, or loft), do not guess my current setup. Ask me short questions about the clubs and shafts I play now, and refine that recommendation after I answer.
 
 Use moderate technical depth. Briefly explain what metrics mean when you reference them.`
     },
@@ -894,12 +905,20 @@ Tab-separated Trackman golf session data:
 
 {{DATA}}
 
+If you have a code execution or data analysis tool available, use it for the statistics below; otherwise present them as estimates and say so.
+
 Perform a consistency analysis across all shots and clubs:
 - Calculate or estimate standard deviation ranges for key metrics (club speed, ball speed, launch angle, spin rate, carry)
 - Identify which clubs show the tightest dispersion and which are most variable
 - Analyze shot-to-shot repeatability patterns: is the player consistent in face angle, club path, and dynamic loft?
 - Identify any outlier shots (significant deviations from the mean) and note which metrics are responsible
 - Provide a consistency rating summary per club and overall
+
+Ground rules:
+- Report the shot count per club and treat clubs with fewer than 5 shots as low-confidence
+- Exclude obvious mishits from averages and standard deviations, but list them as outliers
+- The data header notes the hitting surface; mat strikes can mask fat contact, so factor that into strike-quality judgments
+- If a metric referenced above is not present in the data, say so rather than estimating it
 
 Reference specific metric values and numbers throughout. Prioritize data over general advice.`
     },
@@ -916,15 +935,17 @@ Here is the tab-separated Trackman golf session data:
 
 Analyze the player's launch and spin data:
 - Review launch angle and spin rate combinations per club
-- Compare them to typical optimal windows for each club type (e.g., driver: ~12-15 deg launch, ~2200-2700 rpm spin)
-- Analyze spin axis data to understand curve tendencies (positive = draw/hook, negative = fade/slice)
+- Compare them to typical optimal windows for each club type (e.g., driver: ~12-15 deg launch, ~2200-2700 rpm spin). These windows shift with ball speed: faster ball speeds favor lower spin and launch, slower ball speeds need more of both
+- Use spin axis to describe curve tendencies. For a right-handed player, a positive spin axis means the ball curves right (fade/slice) and a negative spin axis means it curves left (draw/hook); this is reversed for left-handers
 - Identify which clubs are closest to optimal and which are farthest
 
 For clubs that are outside optimal windows:
 - Explain what the current numbers mean in terms of ball flight (too high, too low, too much spin, etc.)
 - Suggest specific adjustments to move toward optimal conditions
 
-Use moderate technical depth and explain what metrics mean for players who are learning.`
+Before recommending any loft or shaft change, interview me briefly: ask whether I am right- or left-handed, what loft and shaft (flex and weight) I currently play in the relevant clubs, and whether this session used range balls or premium balls. Give your preliminary read from the data first, then refine the recommendations after I answer.
+
+If a metric referenced above is not in the data, say so rather than estimating it. Use moderate technical depth and explain what metrics mean for players who are learning.`
     },
     {
       id: "distance-gapping-beginner",
@@ -943,6 +964,11 @@ Please review the carry and total distances for each club in this session. Then:
 - Let the player know if their gapping looks good or if there are clubs that might be missing or overlapping
 - Give 1 to 2 friendly suggestions for the player's bag setup or club selection
 
+Keep a few things in mind:
+- Ignore obvious mishits when working out averages, and mention how many shots each club has
+- If it looks like some clubs are missing from the data, ask me what else is in my bag before judging coverage
+- One session is a starting point, not a final verdict -- say so if the data is thin
+
 Keep it simple and encouraging. Focus on practical take-aways the player can use on the course.`
     },
     {
@@ -956,16 +982,20 @@ Here is the tab-separated Trackman golf session data:
 
 {{DATA}}
 
+First: if I have not said whether I am right- or left-handed, ask me, because every direction below flips for left-handers. You may give a preliminary read assuming right-handed, clearly labeled as such.
+
 Analyze the player's shot shape and miss patterns:
-- Review face angle, club path, face-to-path, and curve values to characterize their typical shot shape per club
+- Review face angle, club path, face-to-path, and curve values to characterize their typical shot shape per club. For a right-handed player, positive club path = in-to-out (draw-biased) and positive face angle = open to the target (starts right)
 - Identify if they play a consistent shot shape (draw, fade, straight) or if the pattern varies
-- Review the Side and CarrySide data to understand lateral dispersion -- how far off-center do shots typically land?
+- Review the Side and CarrySide data to understand lateral dispersion -- how far off-center do shots typically land? State the sign convention you assume for these columns
 - Identify their most common miss direction and the likely technical cause (face angle, path, or both)
 
 Provide:
 - A shot shape profile for each club (e.g., "mild fade", "variable with occasional hook")
 - An overall assessment of dispersion consistency
 - 1 to 2 actionable suggestions to tighten their pattern
+
+Exclude obvious mishits from the pattern read (note them separately), and if a metric referenced above is not in the data, say so rather than estimating it.
 
 Use moderate technical depth. Briefly explain what each metric means.`
     },
@@ -980,17 +1010,21 @@ Tab-separated Trackman golf session data:
 
 {{DATA}}
 
+Assume a right-handed player unless I have said otherwise; state that assumption and ask me to confirm. If you have a code execution or data analysis tool, use it for the statistics below; otherwise keep the analysis qualitative and label any numbers as estimates.
+
 Analyze club delivery metrics across all clubs and shots. Focus on:
 - Attack Angle: positive (ascending) vs negative (descending) and its effect on spin and launch
 - Club Path (in/out vs out/in) and how it correlates to curve and spin axis
 - Face Angle at impact and the face-to-path relationship as the primary driver of curvature
-- Dynamic Loft per club and how it compares to expected values; note any outlier loft conditions
-- Correlation analysis: identify which delivery metrics most strongly predict carry distance, spin rate, and side error for this player
+- Dynamic Loft per club compared to expected values. If your conclusions depend on my actual club lofts, ask me for them rather than assuming stock lofts
+- Which delivery metrics most strongly relate to carry distance, spin rate, and side error for this player
 
 For each major club category (driver, irons, wedges):
-- Report average delivery numbers
+- Report average delivery numbers along with the shot count behind them
 - Identify the most impactful delivery variable affecting performance
 - Flag any delivery patterns that suggest mechanical inefficiency
+
+The data header notes the hitting surface; mat strikes can mask fat contact, so factor that into strike-quality judgments. Exclude obvious mishits from averages and list them separately. If a metric referenced above is not present in the data, say so rather than estimating it.
 
 Prioritize numbers and specific metric values. Provide a ranked list of delivery improvements by expected performance impact.`
     },
@@ -1011,7 +1045,7 @@ Provide a very short, friendly summary in 3 to 4 bullet points only. Cover:
 - Their most consistent club (tightest results)
 - One quick positive takeaway to leave them feeling good
 
-Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
+Skip obvious mishits when picking the highlights. Keep it brief and encouraging. No heavy analysis needed -- just the headlines.`
     }
   ];
 

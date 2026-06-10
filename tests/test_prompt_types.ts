@@ -87,3 +87,35 @@ describe("Prompt Library: template quality", () => {
     }
   });
 });
+
+describe("Prompt Library: golf domain correctness", () => {
+  it("launch & spin prompt uses Trackman spin axis convention (positive = fade/slice for right-handers)", () => {
+    const prompt = BUILTIN_PROMPTS.find((p) => p.topic === "launch-spin")!;
+    expect(prompt.template).toContain("positive spin axis means the ball curves right (fade/slice)");
+    expect(prompt.template).not.toMatch(/positive\s*=\s*draw\/hook/);
+  });
+
+  it("direction-interpreting prompts establish player handedness", () => {
+    const directionTopics = ["launch-spin", "shot-shape", "club-delivery"];
+    for (const topic of directionTopics) {
+      const prompt = BUILTIN_PROMPTS.find((p) => p.topic === topic)!;
+      expect(prompt.template.toLowerCase()).toContain("handed");
+    }
+  });
+
+  it("equipment-recommending prompts instruct the AI to ask about the current setup", () => {
+    const equipmentTopics = ["club-breakdown", "launch-spin"];
+    for (const topic of equipmentTopics) {
+      const prompt = BUILTIN_PROMPTS.find((p) => p.topic === topic)!;
+      expect(prompt.template).toMatch(/ask me|interview me/i);
+    }
+  });
+
+  it("statistics-heavy advanced prompts suggest using a code or analysis tool", () => {
+    const statTopics = ["consistency", "club-delivery"];
+    for (const topic of statTopics) {
+      const prompt = BUILTIN_PROMPTS.find((p) => p.topic === topic)!;
+      expect(prompt.template).toContain("code execution or data analysis tool");
+    }
+  });
+});

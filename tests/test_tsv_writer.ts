@@ -96,7 +96,15 @@ describe("TSV Writer: header row", () => {
     expect(cols).not.toContain("Type");
   });
 
-  it("does not include Tag column", () => {
+  it("omits Tag column when no shots have tags", () => {
+    const session = makeSession({ ClubSpeed: "44.704" }, ["ClubSpeed"]);
+    const tsv = writeTsv(session, imperial);
+    const header = tsv.split("\n")[0];
+    const cols = header.split("\t");
+    expect(cols).not.toContain("Tag");
+  });
+
+  it("includes Tag column after Club when any shot has a tag", () => {
     const session: SessionData = {
       date: "2025-01-15",
       report_id: "test-123",
@@ -106,16 +114,24 @@ describe("TSV Writer: header row", () => {
       club_groups: [
         {
           club_name: "7 Iron",
-          shots: [{ shot_number: 0, metrics: { ClubSpeed: "44.704" }, tag: "Good" }],
+          shots: [
+            { shot_number: 0, metrics: { ClubSpeed: "44.704" }, tag: "Stock" },
+            { shot_number: 1, metrics: { ClubSpeed: "45.0" } },
+          ],
           averages: {},
           consistency: {},
         },
       ],
     };
     const tsv = writeTsv(session, imperial);
-    const header = tsv.split("\n")[0];
+    const [header, firstRow, secondRow] = tsv.split("\n");
     const cols = header.split("\t");
-    expect(cols).not.toContain("Tag");
+    expect(cols[2]).toBe("Tag");
+    expect(cols[3]).toBe("Shot #");
+    expect(firstRow.split("\t")[2]).toBe("Stock");
+    // Untagged shot in the same session gets an empty Tag field
+    expect(secondRow.split("\t")[2]).toBe("");
+    expect(secondRow.split("\t").length).toBe(cols.length);
   });
 });
 

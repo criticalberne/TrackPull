@@ -2,6 +2,8 @@
  * TSV writer for TrackPull session data.
  * Produces tab-separated output with column headers and unit labels.
  * Shots only -- no averages or consistency rows.
+ * A Tag column is included only when at least one shot carries a tag,
+ * mirroring the CSV writer.
  */
 
 import type { SessionData } from "../models/types";
@@ -70,6 +72,12 @@ export function orderMetricsByPriority(
   return result;
 }
 
+function hasTags(session: SessionData): boolean {
+  return session.club_groups.some((club) =>
+    club.shots.some((shot) => shot.tag !== undefined && shot.tag !== "")
+  );
+}
+
 export function writeTsv(
   session: SessionData,
   unitChoice: UnitChoice = DEFAULT_UNIT_CHOICE,
@@ -80,8 +88,14 @@ export function writeTsv(
     METRIC_COLUMN_ORDER
   );
 
-  // Build header row: Date, Club, Shot # then metric columns with unit labels
-  const headerFields: string[] = ["Date", "Club", "Shot #"];
+  const includeTag = hasTags(session);
+
+  // Build header row: Date, Club, [Tag,] Shot # then metric columns with unit labels
+  const headerFields: string[] = ["Date", "Club"];
+  if (includeTag) {
+    headerFields.push("Tag");
+  }
+  headerFields.push("Shot #");
   for (const metric of orderedMetrics) {
     headerFields.push(getColumnName(metric, unitChoice));
   }
@@ -94,10 +108,13 @@ export function writeTsv(
   for (const club of session.club_groups) {
     for (const shot of club.shots) {
       const fields: string[] = [
-        session.date,
-        club.club_name,
-        String(shot.shot_number + 1),
+        escapeTsvField(session.date),
+        escapeTsvField(club.club_name),
       ];
+      if (includeTag) {
+        fields.push(escapeTsvField(shot.tag ?? ""));
+      }
+      fields.push(escapeTsvField(String(shot.shot_number + 1)));
 
       for (const metric of orderedMetrics) {
         const rawValue = shot.metrics[metric] ?? "";
@@ -112,15 +129,7 @@ export function writeTsv(
         fields.push(escapeTsvField(fieldValue));
       }
 
-      // Apply escapeTsvField to non-metric fields as well
-      const escapedRow = [
-        escapeTsvField(fields[0]),
-        escapeTsvField(fields[1]),
-        escapeTsvField(fields[2]),
-        ...fields.slice(3),
-      ];
-
-      rows.push(escapedRow.join("\t"));
+      rows.push(fields.join("\t"));
     }
   }
 
