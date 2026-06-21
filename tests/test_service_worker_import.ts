@@ -13,12 +13,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // vi.hoisted runs BEFORE vi.mock and BEFORE static imports are evaluated.
 // This is the only place we can set globalThis.chrome before serviceWorker.ts loads.
-const { mockStorageSet, getHandler } = vi.hoisted(() => {
+const { mockStorageSet, mockPutBulkImportedSession, getHandler } = vi.hoisted(() => {
   const mockStorageSet = vi.fn();
   const mockStorageGet = vi.fn();
   const mockStorageRemove = vi.fn();
   const mockRuntimeSendMessage = vi.fn();
   const mockDownload = vi.fn();
+  const mockPutBulkImportedSession = vi.fn();
 
   type MsgHandler = (message: unknown, sender: unknown, sendResponse: (r: unknown) => void) => boolean | undefined;
   let _handler: MsgHandler | null = null;
@@ -47,6 +48,7 @@ const { mockStorageSet, getHandler } = vi.hoisted(() => {
   return {
     mockStorageSet,
     mockStorageGet,
+    mockPutBulkImportedSession,
     getHandler: () => {
       if (!_handler) throw new Error("onMessage handler not registered");
       return _handler;
@@ -65,9 +67,14 @@ vi.mock("../src/shared/history", () => ({
   getHistoryErrorMessage: vi.fn((msg: string) => msg),
 }));
 
+vi.mock("../src/shared/bulk_import_store", () => ({
+  putBulkImportedSession: mockPutBulkImportedSession,
+}));
+
 // Static imports — these run after vi.hoisted and vi.mock (vitest hoisting order)
 import { parsePortalActivity } from "../src/shared/portal_parser";
 import { saveSessionToHistory } from "../src/shared/history";
+import { putBulkImportedSession } from "../src/shared/bulk_import_store";
 import { STORAGE_KEYS } from "../src/shared/constants";
 import type { ImportStatus } from "../src/shared/import_types";
 import {
@@ -167,6 +174,7 @@ describe("SAVE_IMPORTED_SESSION handler", () => {
     vi.clearAllMocks();
     mockStorageSet.mockResolvedValue(undefined);
     vi.mocked(saveSessionToHistory).mockResolvedValue(undefined);
+    vi.mocked(putBulkImportedSession).mockResolvedValue(undefined);
     sendResponse = vi.fn();
   });
 
@@ -196,5 +204,61 @@ describe("SAVE_IMPORTED_SESSION handler", () => {
       expect.objectContaining({ [STORAGE_KEYS.TRACKMAN_DATA]: mockSession })
     );
     expect(saveSessionToHistory).toHaveBeenCalledWith(mockSession);
+  });
+
+  it("saves a bulk imported session, archives it, and responds with item metadata", async () => {
+    const bulkSession = {
+      ...mockSession,
+      report_id: "bulk-report-1",
+      club_groups: [
+        { club_name: "Driver", shots: [{ shot_number: 0, metrics: {} }, { shot_number: 1, metrics: {} }] },
+      ],
+    };
+    vi.mocked(parsePortalActivity).mockReturnValue(bulkSession as any);
+
+    const returnValue = callHandler({
+      type: "SAVE_BULK_IMPORTED_SESSION",
+      jobId: "job-1",
+      activityId: "act-001",
+      graphqlPayloads: [
+        { data: { node: { id: "act-001", date: "2026-01-15", strokeGroups: [] } } },
+      ],
+    }, sendResponse);
+
+    expect(returnValue).toBe(true);
+
+    await vi.waitUntil(() => sendResponse.mock.calls.length > 0);
+
+    expect(mockStorageSet).toHaveBeenCalledWith(
+      expect.objectContaining({ [STORAGE_KEYS.TRACKMAN_DATA]: bulkSession })
+    );
+    expect(saveSessionToHistory).toHaveBeenCalledWith(bulkSession);
+    expect(putBulkImportedSession).toHaveBeenCalledWith("job-1", "act-001", bulkSession);
+    expect(sendResponse).toHaveBeenCalledWith({
+      success: true,
+      reportId: "bulk-report-1",
+      shotCount: 2,
+    });
+  });
+
+  it("returns a bulk import error when all GraphQL payloads have errors", async () => {
+    const returnValue = callHandler({
+      type: "SAVE_BULK_IMPORTED_SESSION",
+      jobId: "job-1",
+      activityId: "act-001",
+      graphqlPayloads: [
+        { errors: [{ message: "Unauthorized" }] },
+      ],
+    }, sendResponse);
+
+    expect(returnValue).toBe(true);
+
+    await vi.waitUntil(() => sendResponse.mock.calls.length > 0);
+
+    expect(putBulkImportedSession).not.toHaveBeenCalled();
+    expect(sendResponse).toHaveBeenCalledWith({
+      success: false,
+      error: "Unauthorized",
+    });
   });
 });

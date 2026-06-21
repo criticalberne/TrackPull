@@ -83,6 +83,8 @@ Got old sessions on portal.trackmangolf.com that never got a report link? You ca
 
 TrackPull filters the portal list to Course Play and Map My Bag sessions, shows the activity date, and shows the course name when Trackman provides it. The importer paginates through your supported portal history instead of only showing recent activity cards.
 
+For historical backfills, select multiple sessions and click **Import selected**, or click **Import all** for every supported session TrackPull found. Bulk import saves each completed session as it finishes, shows imported and failed counts, can pause and resume, and lets you retry only failed sessions. Use **Export CSV** in the bulk import panel to download one combined CSV with session date, report ID, activity type, club, shot number, and metrics.
+
 You can still import from an individual portal activity URL when one is available. The shot data loads into TrackPull just like a report. Export, copy, or send to AI from there. Your data was never lost, just hard to get to.
 
 ## CSV columns

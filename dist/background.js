@@ -51,7 +51,8 @@
         HITTING_SURFACE: "hittingSurface",
         INCLUDE_AVERAGES: "includeAverages",
         SESSION_HISTORY: "sessionHistory",
-        IMPORT_STATUS: "importStatus"
+        IMPORT_STATUS: "importStatus",
+        BULK_IMPORT_STATUS: "bulkImportStatus"
       };
     }
   });
@@ -308,6 +309,25 @@
       (club) => club.shots.some((shot) => shot.tag !== void 0 && shot.tag !== "")
     );
   }
+  function escapeCsvValue(value) {
+    if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  }
+  function createCsvLines(headerRow, rows, hittingSurface) {
+    const lines = [];
+    if (hittingSurface !== void 0) {
+      lines.push(`Hitting Surface: ${hittingSurface}`);
+    }
+    lines.push(headerRow.join(","));
+    for (const row of rows) {
+      lines.push(
+        headerRow.map((col) => escapeCsvValue(row[col] ?? "")).join(",")
+      );
+    }
+    return lines.join("\n");
+  }
   function writeCsv(session, includeAverages = true, metricOrder, unitChoice = DEFAULT_UNIT_CHOICE, hittingSurface) {
     const orderedMetrics = orderMetricsByPriority(
       session.metric_names,
@@ -379,23 +399,7 @@
         }
       }
     }
-    const lines = [];
-    if (hittingSurface !== void 0) {
-      lines.push(`Hitting Surface: ${hittingSurface}`);
-    }
-    lines.push(headerRow.join(","));
-    for (const row of rows) {
-      lines.push(
-        headerRow.map((col) => {
-          const value = row[col] ?? "";
-          if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-            return `"${value.replace(/"/g, '""')}"`;
-          }
-          return value;
-        }).join(",")
-      );
-    }
-    return lines.join("\n");
+    return createCsvLines(headerRow, rows, hittingSurface);
   }
   var METRIC_COLUMN_ORDER;
   var init_csv_writer = __esm({
@@ -652,6 +656,62 @@
     }
   });
 
+  // src/shared/bulk_import_store.ts
+  function createSnapshot2(session) {
+    const { raw_api_data: _, ...snapshot } = session;
+    return snapshot;
+  }
+  function getSessionKey(jobId, reportId) {
+    return `${jobId}:${reportId}`;
+  }
+  function openBulkImportDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(SESSION_STORE)) {
+          const store = db.createObjectStore(SESSION_STORE, { keyPath: "key" });
+          store.createIndex(JOB_INDEX, JOB_INDEX, { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("Could not open bulk import store"));
+      request.onblocked = () => reject(new Error("Bulk import store is blocked by another tab"));
+    });
+  }
+  async function putBulkImportedSession(jobId, activityId, session, now = Date.now()) {
+    const db = await openBulkImportDb();
+    try {
+      const tx = db.transaction(SESSION_STORE, "readwrite");
+      const store = tx.objectStore(SESSION_STORE);
+      const record = {
+        key: getSessionKey(jobId, session.report_id),
+        jobId,
+        activityId,
+        reportId: session.report_id,
+        capturedAt: now,
+        snapshot: createSnapshot2(session)
+      };
+      store.put(record);
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error ?? new Error("Could not save imported session"));
+        tx.onabort = () => reject(tx.error ?? new Error("Could not save imported session"));
+      });
+    } finally {
+      db.close();
+    }
+  }
+  var DB_NAME, DB_VERSION, SESSION_STORE, JOB_INDEX;
+  var init_bulk_import_store = __esm({
+    "src/shared/bulk_import_store.ts"() {
+      DB_NAME = "trackpull-bulk-import";
+      DB_VERSION = 1;
+      SESSION_STORE = "sessions";
+      JOB_INDEX = "jobId";
+    }
+  });
+
   // src/background/serviceWorker.ts
   var require_serviceWorker = __commonJS({
     "src/background/serviceWorker.ts"() {
@@ -660,6 +720,7 @@
       init_unit_normalization();
       init_history();
       init_portal_parser();
+      init_bulk_import_store();
       chrome.runtime.onInstalled.addListener(() => {
         console.log("TrackPull extension installed");
       });
@@ -779,6 +840,40 @@
             }
           })();
           return false;
+        }
+        if (message.type === "SAVE_BULK_IMPORTED_SESSION") {
+          const { jobId, activityId, graphqlPayloads } = message;
+          (async () => {
+            try {
+              const firstError = graphqlPayloads.find((payload) => payload.errors && payload.errors.length > 0)?.errors?.[0];
+              const hasPayloadWithoutErrors = graphqlPayloads.some((payload) => !payload.errors || payload.errors.length === 0);
+              if (firstError && !hasPayloadWithoutErrors) {
+                sendResponse({ success: false, error: firstError.message });
+                return;
+              }
+              const session = parseImportedSession(graphqlPayloads);
+              if (!session) {
+                sendResponse({ success: false, error: "No shot data found for this activity" });
+                return;
+              }
+              await chrome.storage.local.set({ [STORAGE_KEYS.TRACKMAN_DATA]: session });
+              await saveSessionToHistory(session);
+              await putBulkImportedSession(jobId, activityId, session);
+              const shotCount = session.club_groups.reduce(
+                (total, club) => total + club.shots.length,
+                0
+              );
+              sendResponse({
+                success: true,
+                reportId: session.report_id,
+                shotCount
+              });
+            } catch (err) {
+              console.error("TrackPull: Bulk import item failed:", err);
+              sendResponse({ success: false, error: "Import failed \u2014 try again" });
+            }
+          })();
+          return true;
         }
       });
       chrome.storage.onChanged.addListener((changes, namespace) => {

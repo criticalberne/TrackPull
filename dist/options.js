@@ -229,7 +229,8 @@ Skip obvious mishits when picking the highlights. Keep it brief and encouraging.
         HITTING_SURFACE: "hittingSurface",
         INCLUDE_AVERAGES: "includeAverages",
         SESSION_HISTORY: "sessionHistory",
-        IMPORT_STATUS: "importStatus"
+        IMPORT_STATUS: "importStatus",
+        BULK_IMPORT_STATUS: "bulkImportStatus"
       };
     }
   });

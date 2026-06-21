@@ -15,6 +15,22 @@ import {
   normalizeActivitySummaries,
   normalizeActivitySummaryPage,
 } from "../shared/import_types";
+import {
+  createBulkImportJob,
+  completeBulkImportJob,
+  failBulkImportItem,
+  getBulkImportProgressLabel,
+  getNextBulkImportItem,
+  pauseBulkImportJob,
+  recoverInterruptedBulkImportJob,
+  resetFailedBulkImportItems,
+  startBulkImportJob,
+  updateBulkImportItem,
+  type BulkImportJob,
+  type BulkImportSaveResult,
+} from "../shared/bulk_import";
+import { getBulkImportedSessions, clearBulkImportedSessions } from "../shared/bulk_import_store";
+import { writeBulkCsv } from "../shared/csv_writer";
 import { writeTsv } from "../shared/tsv_writer";
 import { BUILTIN_PROMPTS } from "../shared/prompt_types";
 import type { CustomPrompt, PromptItem } from "../shared/prompt_types";
@@ -51,6 +67,10 @@ let cachedData: SessionData | null = null;
 let cachedUnitChoice: UnitChoice = DEFAULT_UNIT_CHOICE;
 let cachedSurface: "Grass" | "Mat" = "Mat";
 let cachedCustomPrompts: CustomPrompt[] = [];
+let cachedPortalActivities: ActivitySummary[] = [];
+let activeBulkImportJob: BulkImportJob | null = null;
+let bulkImportRunning = false;
+let bulkImportPauseRequested = false;
 
 const AI_URLS: Record<string, string> = {
   "ChatGPT": "https://chatgpt.com",
@@ -79,7 +99,16 @@ function isPortalAuthMessage(message: string): boolean {
     normalized.includes("not logged in");
 }
 
+function isPortalBridgeUnavailableMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes("could not establish connection") ||
+    normalized.includes("receiving end does not exist");
+}
+
 function formatPortalFetchError(message: string): string {
+  if (isPortalBridgeUnavailableMessage(message)) {
+    return "Refresh the Trackman portal tab, then reopen TrackPull";
+  }
   return isPortalAuthMessage(message)
     ? "Session expired — log into portal.trackmangolf.com"
     : message;
@@ -280,10 +309,436 @@ async function importPortalActivityFromTab(
     const message = err instanceof Error && err.message
       ? err.message
       : "Unable to fetch activity";
-    showToast(message, "error");
+    showToast(formatPortalFetchError(message), "error");
     button.disabled = false;
     button.textContent = "Import";
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function loadStoredBulkImportJob(): Promise<BulkImportJob | null> {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([STORAGE_KEYS.BULK_IMPORT_STATUS], (result) => {
+      resolve((result[STORAGE_KEYS.BULK_IMPORT_STATUS] as BulkImportJob | undefined) ?? null);
+    });
+  });
+}
+
+async function saveBulkImportJob(job: BulkImportJob): Promise<void> {
+  activeBulkImportJob = job;
+  await chrome.storage.local.set({ [STORAGE_KEYS.BULK_IMPORT_STATUS]: job });
+  renderBulkImportJob(job);
+}
+
+function getBulkImportItem(job: BulkImportJob | null, activityId: string) {
+  return job?.items.find((item) => item.activityId === activityId) ?? null;
+}
+
+function getActivityRow(activityId: string): HTMLElement | null {
+  const rows = Array.from(document.querySelectorAll<HTMLElement>(".activity-row"));
+  return rows.find((row) => row.dataset.activityId === activityId) ?? null;
+}
+
+function getSelectedPortalActivities(): ActivitySummary[] {
+  const selectedIds = new Set(
+    Array.from(document.querySelectorAll<HTMLInputElement>(".activity-select"))
+      .filter((input) => input.checked && !input.disabled)
+      .map((input) => input.value)
+  );
+  return cachedPortalActivities.filter((activity) => selectedIds.has(activity.id));
+}
+
+function getIncludeAveragesChoice(): boolean {
+  const checkbox = document.getElementById("include-averages-checkbox") as HTMLInputElement | null;
+  return checkbox?.checked ?? true;
+}
+
+function getSafeBulkFilename(): string {
+  const date = new Date().toISOString().slice(0, 10);
+  return `TrackPull_BulkImport_${date}.csv`;
+}
+
+function updateBulkSelectedCount(): void {
+  const selectedCountEl = document.getElementById("bulk-selected-count");
+  const importSelectedBtn = document.getElementById("bulk-import-selected-btn") as HTMLButtonElement | null;
+  const selectAll = document.getElementById("bulk-select-all") as HTMLInputElement | null;
+  const selectableBoxes = Array.from(document.querySelectorAll<HTMLInputElement>(".activity-select"))
+    .filter((input) => !input.disabled);
+  const selectedCount = selectableBoxes.filter((input) => input.checked).length;
+
+  if (selectedCountEl) {
+    selectedCountEl.textContent = `${selectedCount} selected`;
+  }
+  if (importSelectedBtn) {
+    importSelectedBtn.disabled = selectedCount === 0 || bulkImportRunning;
+  }
+  if (selectAll) {
+    selectAll.checked = selectableBoxes.length > 0 && selectedCount === selectableBoxes.length;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < selectableBoxes.length;
+  }
+}
+
+function renderBulkImportJob(job: BulkImportJob | null = activeBulkImportJob): void {
+  activeBulkImportJob = job;
+
+  const progressEl = document.getElementById("bulk-import-progress");
+  const pauseBtn = document.getElementById("bulk-import-pause-btn") as HTMLButtonElement | null;
+  const resumeBtn = document.getElementById("bulk-import-resume-btn") as HTMLButtonElement | null;
+  const retryBtn = document.getElementById("bulk-import-retry-btn") as HTMLButtonElement | null;
+  const exportBtn = document.getElementById("bulk-export-csv-btn") as HTMLButtonElement | null;
+  const importAllBtn = document.getElementById("bulk-import-all-btn") as HTMLButtonElement | null;
+
+  if (progressEl) {
+    if (job) {
+      progressEl.textContent = job.lastError
+        ? `${getBulkImportProgressLabel(job)} | ${job.lastError}`
+        : getBulkImportProgressLabel(job);
+      progressEl.style.display = "block";
+    } else {
+      progressEl.textContent = "";
+      progressEl.style.display = "none";
+    }
+  }
+
+  if (pauseBtn) pauseBtn.disabled = !job || job.state !== "running" || !bulkImportRunning;
+  if (resumeBtn) resumeBtn.disabled = !job || job.state !== "paused" || bulkImportRunning;
+  if (retryBtn) retryBtn.disabled = !job || job.failed === 0 || bulkImportRunning;
+  if (exportBtn) exportBtn.disabled = !job || job.imported === 0;
+  if (importAllBtn) importAllBtn.disabled = cachedPortalActivities.length === 0 || bulkImportRunning;
+
+  for (const activity of cachedPortalActivities) {
+    const row = getActivityRow(activity.id);
+    if (!row) continue;
+    const button = row.querySelector<HTMLButtonElement>(".activity-import-btn");
+    const checkbox = row.querySelector<HTMLInputElement>(".activity-select");
+    const item = getBulkImportItem(job, activity.id);
+
+    if (!button || !checkbox) continue;
+
+    if (!item) {
+      button.disabled = bulkImportRunning;
+      button.textContent = "Import";
+      checkbox.disabled = bulkImportRunning;
+      continue;
+    }
+
+    if (item.status === "imported") {
+      button.disabled = true;
+      button.textContent = "Imported";
+      checkbox.checked = false;
+      checkbox.disabled = true;
+    } else if (item.status === "importing") {
+      button.disabled = true;
+      button.textContent = "Importing...";
+      checkbox.disabled = true;
+    } else if (item.status === "failed") {
+      button.disabled = bulkImportRunning;
+      button.textContent = "Failed";
+      checkbox.disabled = bulkImportRunning;
+    } else {
+      button.disabled = bulkImportRunning;
+      button.textContent = "Queued";
+      checkbox.disabled = bulkImportRunning;
+    }
+  }
+
+  updateBulkSelectedCount();
+}
+
+async function hydrateBulkImportJobControls(): Promise<void> {
+  const storedJob = await loadStoredBulkImportJob();
+  if (!storedJob) {
+    renderBulkImportJob(null);
+    return;
+  }
+
+  const recoveredJob = recoverInterruptedBulkImportJob(storedJob);
+  activeBulkImportJob = recoveredJob;
+  renderBulkImportJob(recoveredJob);
+  if (recoveredJob !== storedJob) {
+    await saveBulkImportJob(recoveredJob);
+  }
+}
+
+interface BulkImportResponse extends Partial<BulkImportSaveResult> {
+  success: boolean;
+  error?: string;
+}
+
+function saveBulkImportedSession(
+  jobId: string,
+  activityId: string,
+  graphqlPayloads: Array<NonNullable<PortalGraphQLFetchResponse["data"]>>
+): Promise<BulkImportResponse> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      type: "SAVE_BULK_IMPORTED_SESSION",
+      jobId,
+      activityId,
+      graphqlPayloads,
+    }, (response: BulkImportResponse | undefined) => {
+      if (chrome.runtime.lastError) {
+        resolve({ success: false, error: chrome.runtime.lastError.message });
+        return;
+      }
+      resolve(response ?? { success: false, error: "No response from service worker" });
+    });
+  });
+}
+
+async function runBulkImportJob(tabId: number, startingJob: BulkImportJob): Promise<void> {
+  if (bulkImportRunning) return;
+
+  bulkImportRunning = true;
+  bulkImportPauseRequested = false;
+  let job = startBulkImportJob(startingJob);
+  await saveBulkImportJob(job);
+
+  try {
+    while (true) {
+      if (bulkImportPauseRequested) {
+        job = pauseBulkImportJob(job);
+        await saveBulkImportJob(job);
+        showToast("Bulk import paused", "success");
+        break;
+      }
+
+      const nextItem = getNextBulkImportItem(job);
+      if (!nextItem) {
+        job = completeBulkImportJob(job);
+        await saveBulkImportJob(job);
+        showToast(`Bulk import complete: ${job.imported} imported, ${job.failed} failed`, job.failed ? "error" : "success");
+        break;
+      }
+
+      job = updateBulkImportItem(job, nextItem.activityId, {
+        status: "importing",
+        error: undefined,
+      });
+      await saveBulkImportJob(job);
+
+      try {
+        const graphqlPayloads = await fetchPortalActivityCandidates(tabId, nextItem.activityId);
+        const result = await saveBulkImportedSession(job.id, nextItem.activityId, graphqlPayloads);
+
+        if (result.success && result.reportId) {
+          job = updateBulkImportItem(job, nextItem.activityId, {
+            status: "imported",
+            reportId: result.reportId,
+            shotCount: result.shotCount,
+            error: undefined,
+          });
+        } else {
+          const message = result.error ?? "Import failed";
+          job = failBulkImportItem(job, nextItem.activityId, message);
+          if (isPortalAuthMessage(message)) {
+            job = { ...pauseBulkImportJob(job), lastError: message };
+            await saveBulkImportJob(job);
+            showToast(message, "error");
+            break;
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error && err.message
+          ? err.message
+          : "Unable to fetch activity";
+        job = failBulkImportItem(job, nextItem.activityId, message);
+
+        if (isPortalAuthMessage(message)) {
+          job = { ...pauseBulkImportJob(job), lastError: message };
+          await saveBulkImportJob(job);
+          showToast(message, "error");
+          break;
+        }
+      }
+
+      await saveBulkImportJob(job);
+      await delay(250);
+    }
+  } finally {
+    bulkImportRunning = false;
+    renderBulkImportJob(job);
+  }
+}
+
+async function startNewBulkImport(tabId: number, activities: ActivitySummary[]): Promise<void> {
+  if (activities.length === 0) {
+    showToast("Select at least one session", "error");
+    return;
+  }
+  if (bulkImportRunning) return;
+
+  const previousJob = activeBulkImportJob;
+  const job = createBulkImportJob(activities);
+  if (previousJob) {
+    await clearBulkImportedSessions(previousJob.id).catch((err) => {
+      console.warn("Could not clear previous bulk import archive:", err);
+    });
+  }
+  await clearBulkImportedSessions(job.id).catch(() => undefined);
+  await runBulkImportJob(tabId, job);
+}
+
+async function resumeBulkImport(tabId: number): Promise<void> {
+  if (!activeBulkImportJob || bulkImportRunning) return;
+  await runBulkImportJob(tabId, activeBulkImportJob);
+}
+
+async function retryFailedBulkImport(tabId: number): Promise<void> {
+  if (!activeBulkImportJob || bulkImportRunning) return;
+  const retryJob = resetFailedBulkImportItems(activeBulkImportJob);
+  await saveBulkImportJob(retryJob);
+  await runBulkImportJob(tabId, retryJob);
+}
+
+async function exportBulkImportedCsv(): Promise<void> {
+  if (!activeBulkImportJob || activeBulkImportJob.imported === 0) {
+    showToast("No imported sessions to export", "error");
+    return;
+  }
+
+  const exportBtn = document.getElementById("bulk-export-csv-btn") as HTMLButtonElement | null;
+  if (exportBtn) exportBtn.disabled = true;
+
+  try {
+    const sessions = await getBulkImportedSessions(activeBulkImportJob.id);
+    if (sessions.length === 0) {
+      showToast("No imported sessions to export", "error");
+      return;
+    }
+
+    const csvContent = writeBulkCsv(
+      sessions,
+      getIncludeAveragesChoice(),
+      undefined,
+      cachedUnitChoice,
+      cachedSurface
+    );
+    const filename = getSafeBulkFilename();
+
+    await new Promise<void>((resolve, reject) => {
+      chrome.downloads.download({
+        url: `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`,
+        filename,
+        saveAs: false,
+      }, () => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    showToast(`Exported successfully: ${filename}`, "success");
+  } catch (err) {
+    console.error("Bulk CSV export failed:", err);
+    showToast("Bulk CSV export failed", "error");
+  } finally {
+    if (exportBtn) exportBtn.disabled = false;
+    renderBulkImportJob(activeBulkImportJob);
+  }
+}
+
+function renderBulkImportControls(tabId: number, activities: ActivitySummary[]): HTMLElement {
+  const controls = document.createElement("div");
+  controls.id = "bulk-import-controls";
+  controls.className = "bulk-import-controls";
+
+  const topRow = document.createElement("div");
+  topRow.className = "bulk-import-row";
+
+  const selectLabel = document.createElement("label");
+  selectLabel.className = "bulk-select-label";
+
+  const selectAll = document.createElement("input");
+  selectAll.id = "bulk-select-all";
+  selectAll.type = "checkbox";
+  selectAll.addEventListener("change", () => {
+    const boxes = Array.from(document.querySelectorAll<HTMLInputElement>(".activity-select"))
+      .filter((input) => !input.disabled);
+    for (const box of boxes) {
+      box.checked = selectAll.checked;
+    }
+    updateBulkSelectedCount();
+  });
+
+  const selectedCount = document.createElement("span");
+  selectedCount.id = "bulk-selected-count";
+  selectedCount.textContent = "0 selected";
+  selectLabel.append(selectAll, selectedCount);
+
+  const importSelectedBtn = document.createElement("button");
+  importSelectedBtn.id = "bulk-import-selected-btn";
+  importSelectedBtn.className = "bulk-action-btn";
+  importSelectedBtn.textContent = "Import selected";
+  importSelectedBtn.disabled = true;
+  importSelectedBtn.addEventListener("click", () => {
+    void startNewBulkImport(tabId, getSelectedPortalActivities());
+  });
+
+  const importAllBtn = document.createElement("button");
+  importAllBtn.id = "bulk-import-all-btn";
+  importAllBtn.className = "bulk-action-btn";
+  importAllBtn.textContent = "Import all";
+  importAllBtn.disabled = activities.length === 0;
+  importAllBtn.addEventListener("click", () => {
+    void startNewBulkImport(tabId, activities);
+  });
+
+  topRow.append(selectLabel, importSelectedBtn, importAllBtn);
+
+  const bottomRow = document.createElement("div");
+  bottomRow.className = "bulk-import-row";
+
+  const pauseBtn = document.createElement("button");
+  pauseBtn.id = "bulk-import-pause-btn";
+  pauseBtn.className = "bulk-action-btn";
+  pauseBtn.textContent = "Pause";
+  pauseBtn.disabled = true;
+  pauseBtn.addEventListener("click", () => {
+    bulkImportPauseRequested = true;
+  });
+
+  const resumeBtn = document.createElement("button");
+  resumeBtn.id = "bulk-import-resume-btn";
+  resumeBtn.className = "bulk-action-btn";
+  resumeBtn.textContent = "Resume";
+  resumeBtn.disabled = true;
+  resumeBtn.addEventListener("click", () => {
+    void resumeBulkImport(tabId);
+  });
+
+  const retryBtn = document.createElement("button");
+  retryBtn.id = "bulk-import-retry-btn";
+  retryBtn.className = "bulk-action-btn";
+  retryBtn.textContent = "Retry failed";
+  retryBtn.disabled = true;
+  retryBtn.addEventListener("click", () => {
+    void retryFailedBulkImport(tabId);
+  });
+
+  const exportBtn = document.createElement("button");
+  exportBtn.id = "bulk-export-csv-btn";
+  exportBtn.className = "bulk-action-btn";
+  exportBtn.textContent = "Export CSV";
+  exportBtn.disabled = true;
+  exportBtn.addEventListener("click", () => {
+    void exportBulkImportedCsv();
+  });
+
+  bottomRow.append(pauseBtn, resumeBtn, retryBtn, exportBtn);
+
+  const progress = document.createElement("div");
+  progress.id = "bulk-import-progress";
+  progress.className = "bulk-import-progress";
+  progress.style.display = "none";
+
+  controls.append(topRow, bottomRow, progress);
+  return controls;
 }
 
 function renderPortalActivityBrowser(
@@ -294,17 +749,31 @@ function renderPortalActivityBrowser(
   const list = document.getElementById("portal-activity-list");
   if (!browser || !list) return;
 
+  cachedPortalActivities = activities;
+
   browser.style.display = "block";
+  document.getElementById("bulk-import-controls")?.remove();
+
   if (activities.length === 0) {
     list.innerHTML = `<div class="activity-list-empty">No Course Play or Map My Bag sessions found</div>`;
+    renderBulkImportJob(null);
     return;
   }
 
+  list.before(renderBulkImportControls(tabId, activities));
   list.innerHTML = "";
   const fragment = document.createDocumentFragment();
   for (const activity of activities) {
     const row = document.createElement("div");
     row.className = "activity-row";
+    row.dataset.activityId = activity.id;
+
+    const selectBox = document.createElement("input");
+    selectBox.className = "activity-select";
+    selectBox.type = "checkbox";
+    selectBox.value = activity.id;
+    selectBox.setAttribute("aria-label", `Select ${formatActivityDate(activity.date)}`);
+    selectBox.addEventListener("change", updateBulkSelectedCount);
 
     const dateEl = document.createElement("span");
     dateEl.className = "activity-date";
@@ -333,11 +802,13 @@ function renderPortalActivityBrowser(
       importPortalActivityFromTab(tabId, activity.id, importBtn);
     });
 
-    row.append(dateEl, mainEl, importBtn);
+    row.append(selectBox, dateEl, mainEl, importBtn);
     fragment.appendChild(row);
   }
 
   list.appendChild(fragment);
+  updateBulkSelectedCount();
+  void hydrateBulkImportJobControls();
 }
 
 /**
@@ -386,14 +857,15 @@ async function checkActiveTabForActivity(): Promise<void> {
     const message = err instanceof Error && err.message
       ? err.message
       : "Unable to fetch activities";
+    const formattedMessage = formatPortalFetchError(message);
     detected.style.display = "none";
     noActivity.style.display = "none";
     if (browser) {
       browser.style.display = "block";
       const list = document.getElementById("portal-activity-list");
-      if (list) list.innerHTML = `<div class="activity-list-empty">${escapeHtml(message)}</div>`;
+      if (list) list.innerHTML = `<div class="activity-list-empty">${escapeHtml(formattedMessage)}</div>`;
     }
-    showToast(message, "error");
+    showToast(formattedMessage, "error");
   }
 }
 
@@ -675,6 +1147,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             chrome.storage.local.remove(STORAGE_KEYS.IMPORT_STATUS);
           }
         }
+      }
+      if (namespace === "local" && changes[STORAGE_KEYS.BULK_IMPORT_STATUS]) {
+        const newJob = changes[STORAGE_KEYS.BULK_IMPORT_STATUS].newValue as BulkImportJob | undefined;
+        renderBulkImportJob(newJob ?? null);
       }
     });
 

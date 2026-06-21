@@ -521,7 +521,7 @@
 
     .activity-row {
       display: grid;
-      grid-template-columns: 5rem minmax(0, 1fr) auto;
+      grid-template-columns: 1rem 5rem minmax(0, 1fr) 4.75rem;
       gap: 8px;
       padding: 6px 8px;
       font-size: 13px;
@@ -531,6 +531,12 @@
 
     .activity-row:first-child {
       border-top: none;
+    }
+
+    .activity-select {
+      width: 14px;
+      height: 14px;
+      margin: 0;
     }
 
     .activity-date {
@@ -566,6 +572,7 @@
       padding: 4px 10px;
       font-size: 12px;
       white-space: nowrap;
+      width: 4.75rem;
       color: var(--color-text-on-accent);
       background-color: var(--color-accent);
       border: none;
@@ -601,6 +608,70 @@
       text-align: center;
       font-size: 13px;
       color: var(--color-text-muted);
+    }
+
+    .bulk-import-controls {
+      display: grid;
+      gap: 8px;
+      margin: 8px 0;
+      padding: 8px;
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      background: var(--color-bg-subtle);
+    }
+
+    .bulk-import-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+      gap: 6px;
+      align-items: center;
+    }
+
+    .bulk-select-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      font-size: 12px;
+      color: var(--color-text-body);
+      white-space: nowrap;
+    }
+
+    .bulk-select-label input {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+    }
+
+    .bulk-action-btn {
+      min-height: 28px;
+      padding: 4px 6px;
+      font-size: 12px;
+      color: var(--color-text-body);
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bulk-action-btn:hover:not(:disabled) {
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+    }
+
+    .bulk-action-btn:disabled {
+      color: var(--color-disabled);
+      cursor: not-allowed;
+    }
+
+    .bulk-import-progress {
+      min-height: 18px;
+      font-size: 12px;
+      color: var(--color-text-muted);
+      line-height: 1.4;
     }
   </style>
   <script src="./popup.js"></script>
