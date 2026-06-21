@@ -42,7 +42,8 @@
     HITTING_SURFACE: "hittingSurface",
     INCLUDE_AVERAGES: "includeAverages",
     SESSION_HISTORY: "sessionHistory",
-    IMPORT_STATUS: "importStatus"
+    IMPORT_STATUS: "importStatus",
+    BULK_IMPORT_STATUS: "bulkImportStatus"
   };
 
   // src/shared/unit_normalization.ts
@@ -727,8 +728,360 @@
     ...IMPORT_SESSION_FALLBACK_QUERIES
   ];
 
-  // src/shared/tsv_writer.ts
+  // src/shared/bulk_import.ts
+  function createJobId(now) {
+    return `bulk-${now.toString(36)}`;
+  }
+  function getActivityDetail(activity) {
+    if (activity.courseName?.trim()) return activity.courseName.trim();
+    return activity.strokeCount === null ? "" : `${activity.strokeCount} shots`;
+  }
+  function countStatus(items, status) {
+    return items.filter((item) => item.status === status).length;
+  }
+  function recalculateJob(job, now) {
+    return {
+      ...job,
+      updatedAt: now,
+      total: job.items.length,
+      imported: countStatus(job.items, "imported"),
+      failed: countStatus(job.items, "failed")
+    };
+  }
+  function createBulkImportJob(activities, now = Date.now()) {
+    const seenIds = /* @__PURE__ */ new Set();
+    const items = [];
+    for (const activity of activities) {
+      if (seenIds.has(activity.id)) continue;
+      seenIds.add(activity.id);
+      items.push({
+        activityId: activity.id,
+        date: activity.date,
+        type: activity.type,
+        detail: getActivityDetail(activity),
+        status: "pending"
+      });
+    }
+    return {
+      id: createJobId(now),
+      createdAt: now,
+      updatedAt: now,
+      state: "idle",
+      total: items.length,
+      imported: 0,
+      failed: 0,
+      items
+    };
+  }
+  function startBulkImportJob(job, now = Date.now()) {
+    return recalculateJob({
+      ...job,
+      state: "running",
+      lastError: void 0
+    }, now);
+  }
+  function pauseBulkImportJob(job, now = Date.now()) {
+    return recalculateJob({
+      ...job,
+      state: "paused",
+      currentActivityId: void 0,
+      items: job.items.map(
+        (item) => item.status === "importing" ? { ...item, status: "pending", updatedAt: now } : item
+      )
+    }, now);
+  }
+  function completeBulkImportJob(job, now = Date.now()) {
+    return recalculateJob({
+      ...job,
+      state: "complete",
+      currentActivityId: void 0
+    }, now);
+  }
+  function recoverInterruptedBulkImportJob(job, now = Date.now()) {
+    if (job.state !== "running" && !job.items.some((item) => item.status === "importing")) {
+      return job;
+    }
+    return pauseBulkImportJob(job, now);
+  }
+  function resetFailedBulkImportItems(job, now = Date.now()) {
+    return recalculateJob({
+      ...job,
+      state: "idle",
+      lastError: void 0,
+      items: job.items.map(
+        (item) => item.status === "failed" ? { ...item, status: "pending", error: void 0, updatedAt: now } : item
+      )
+    }, now);
+  }
+  function getNextBulkImportItem(job) {
+    return job.items.find((item) => item.status === "pending") ?? null;
+  }
+  function updateBulkImportItem(job, activityId, patch, now = Date.now()) {
+    const items = job.items.map(
+      (item) => item.activityId === activityId ? { ...item, ...patch, updatedAt: now } : item
+    );
+    const nextJob = recalculateJob({
+      ...job,
+      items,
+      currentActivityId: patch.status === "importing" ? activityId : job.currentActivityId
+    }, now);
+    if (patch.status && patch.status !== "importing" && nextJob.currentActivityId === activityId) {
+      return { ...nextJob, currentActivityId: void 0 };
+    }
+    return nextJob;
+  }
+  function failBulkImportItem(job, activityId, error, now = Date.now()) {
+    return {
+      ...updateBulkImportItem(job, activityId, {
+        status: "failed",
+        error
+      }, now),
+      lastError: error
+    };
+  }
+  function getBulkImportCompletedCount(job) {
+    return job.imported + job.failed;
+  }
+  function getBulkImportProgressLabel(job) {
+    const completed = getBulkImportCompletedCount(job);
+    if (job.total === 0) return "No sessions selected";
+    const parts = [`${completed} / ${job.total}`];
+    if (job.imported > 0) parts.push(`${job.imported} imported`);
+    if (job.failed > 0) parts.push(`${job.failed} failed`);
+    return parts.join(" | ");
+  }
+
+  // src/shared/bulk_import_store.ts
+  var DB_NAME = "trackpull-bulk-import";
+  var DB_VERSION = 1;
+  var SESSION_STORE = "sessions";
+  var JOB_INDEX = "jobId";
+  function openBulkImportDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(SESSION_STORE)) {
+          const store = db.createObjectStore(SESSION_STORE, { keyPath: "key" });
+          store.createIndex(JOB_INDEX, JOB_INDEX, { unique: false });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("Could not open bulk import store"));
+      request.onblocked = () => reject(new Error("Bulk import store is blocked by another tab"));
+    });
+  }
+  function requestToPromise(request) {
+    return new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("Bulk import store request failed"));
+    });
+  }
+  async function getBulkImportedSessions(jobId) {
+    const db = await openBulkImportDb();
+    try {
+      const tx = db.transaction(SESSION_STORE, "readonly");
+      const index = tx.objectStore(SESSION_STORE).index(JOB_INDEX);
+      const sessions = await requestToPromise(index.getAll(jobId));
+      return sessions.sort((a, b) => a.capturedAt - b.capturedAt).map((record) => record.snapshot);
+    } finally {
+      db.close();
+    }
+  }
+  async function clearBulkImportedSessions(jobId) {
+    const db = await openBulkImportDb();
+    try {
+      const tx = db.transaction(SESSION_STORE, "readwrite");
+      const index = tx.objectStore(SESSION_STORE).index(JOB_INDEX);
+      const transactionDone = new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error ?? new Error("Could not clear bulk import store"));
+        tx.onabort = () => reject(tx.error ?? new Error("Could not clear bulk import store"));
+      });
+      const records = await requestToPromise(index.getAllKeys(jobId));
+      for (const key of records) {
+        tx.objectStore(SESSION_STORE).delete(key);
+      }
+      await transactionDone;
+    } finally {
+      db.close();
+    }
+  }
+
+  // src/shared/csv_writer.ts
   var METRIC_COLUMN_ORDER = [
+    // Speed & Efficiency
+    "ClubSpeed",
+    "BallSpeed",
+    "SmashFactor",
+    // Club Delivery
+    "AttackAngle",
+    "ClubPath",
+    "FaceAngle",
+    "FaceToPath",
+    "SwingDirection",
+    "DynamicLoft",
+    // Launch & Spin
+    "LaunchAngle",
+    "LaunchDirection",
+    "SpinRate",
+    "SpinAxis",
+    "SpinLoft",
+    // Distance
+    "Carry",
+    "Total",
+    // Dispersion
+    "Side",
+    "SideTotal",
+    "CarrySide",
+    "TotalSide",
+    "Curve",
+    // Ball Flight
+    "Height",
+    "MaxHeight",
+    "LandingAngle",
+    "HangTime",
+    // Impact
+    "LowPointDistance",
+    "ImpactHeight",
+    "ImpactOffset",
+    // Other
+    "Tempo"
+  ];
+  function getDisplayName(metric) {
+    return METRIC_DISPLAY_NAMES[metric] ?? metric;
+  }
+  function getColumnName(metric, unitChoice) {
+    const displayName = getDisplayName(metric);
+    const unitLabel = getMetricUnitLabel(metric, unitChoice);
+    return unitLabel ? `${displayName} (${unitLabel})` : displayName;
+  }
+  function orderMetricsByPriority(allMetrics, priorityOrder) {
+    const result = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const metric of priorityOrder) {
+      if (allMetrics.includes(metric) && !seen.has(metric)) {
+        result.push(metric);
+        seen.add(metric);
+      }
+    }
+    for (const metric of allMetrics) {
+      if (!seen.has(metric)) {
+        result.push(metric);
+      }
+    }
+    return result;
+  }
+  function hasTags(session) {
+    return session.club_groups.some(
+      (club) => club.shots.some((shot) => shot.tag !== void 0 && shot.tag !== "")
+    );
+  }
+  function hasAnyTags(sessions) {
+    return sessions.some(hasTags);
+  }
+  function escapeCsvValue(value) {
+    if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  }
+  function createCsvLines(headerRow, rows, hittingSurface) {
+    const lines = [];
+    if (hittingSurface !== void 0) {
+      lines.push(`Hitting Surface: ${hittingSurface}`);
+    }
+    lines.push(headerRow.join(","));
+    for (const row of rows) {
+      lines.push(
+        headerRow.map((col) => escapeCsvValue(row[col] ?? "")).join(",")
+      );
+    }
+    return lines.join("\n");
+  }
+  function writeBulkCsv(sessions, includeAverages = true, metricOrder, unitChoice = DEFAULT_UNIT_CHOICE, hittingSurface) {
+    const allMetricNames = Array.from(
+      new Set(sessions.flatMap((session) => session.metric_names))
+    );
+    const orderedMetrics = orderMetricsByPriority(
+      allMetricNames,
+      metricOrder ?? METRIC_COLUMN_ORDER
+    );
+    const headerRow = ["Session Date", "Report ID", "Activity Type", "Club"];
+    const includeTagColumn = hasAnyTags(sessions);
+    if (includeTagColumn) {
+      headerRow.push("Tag");
+    }
+    headerRow.push("Shot #", "Type");
+    for (const metric of orderedMetrics) {
+      headerRow.push(getColumnName(metric, unitChoice));
+    }
+    const rows = [];
+    for (const session of sessions) {
+      const unitSystem = getApiSourceUnitSystem(session.metadata_params);
+      const activityType = session.metadata_params.activity_type ?? session.metadata_params.activity_kind ?? "";
+      for (const club of session.club_groups) {
+        for (const shot of club.shots) {
+          const row = {
+            "Session Date": session.date,
+            "Report ID": session.report_id,
+            "Activity Type": activityType,
+            Club: club.club_name,
+            "Shot #": String(shot.shot_number + 1),
+            Type: "Shot"
+          };
+          if (includeTagColumn) {
+            row.Tag = shot.tag ?? "";
+          }
+          for (const metric of orderedMetrics) {
+            const colName = getColumnName(metric, unitChoice);
+            const rawValue = shot.metrics[metric] ?? "";
+            row[colName] = typeof rawValue === "string" || typeof rawValue === "number" ? String(normalizeMetricValue(rawValue, metric, unitSystem, unitChoice)) : "";
+          }
+          rows.push(row);
+        }
+        if (includeAverages) {
+          const tagGroups = /* @__PURE__ */ new Map();
+          for (const shot of club.shots) {
+            const tag = shot.tag ?? "";
+            if (!tagGroups.has(tag)) tagGroups.set(tag, []);
+            tagGroups.get(tag).push(shot);
+          }
+          for (const [tag, shots] of tagGroups) {
+            if (shots.length < 2) continue;
+            const avgRow = {
+              "Session Date": session.date,
+              "Report ID": session.report_id,
+              "Activity Type": activityType,
+              Club: club.club_name,
+              "Shot #": "",
+              Type: "Average"
+            };
+            if (includeTagColumn) {
+              avgRow.Tag = tag;
+            }
+            for (const metric of orderedMetrics) {
+              const colName = getColumnName(metric, unitChoice);
+              const values = shots.map((s) => s.metrics[metric]).filter((v) => v !== void 0 && v !== "").map((v) => parseFloat(String(v)));
+              const numericValues = values.filter((v) => !isNaN(v));
+              if (numericValues.length > 0) {
+                const avg = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+                const rounded = metric === "SmashFactor" || metric === "Tempo" ? Math.round(avg * 100) / 100 : Math.round(avg * 10) / 10;
+                avgRow[colName] = String(normalizeMetricValue(rounded, metric, unitSystem, unitChoice));
+              } else {
+                avgRow[colName] = "";
+              }
+            }
+            rows.push(avgRow);
+          }
+        }
+      }
+    }
+    return createCsvLines(headerRow, rows, hittingSurface);
+  }
+
+  // src/shared/tsv_writer.ts
+  var METRIC_COLUMN_ORDER2 = [
     // Speed & Efficiency
     "ClubSpeed",
     "BallSpeed",
@@ -770,15 +1123,15 @@
   function escapeTsvField(value) {
     return value.replace(/\t/g, " ").replace(/[\n\r]/g, " ");
   }
-  function getDisplayName(metric) {
+  function getDisplayName2(metric) {
     return METRIC_DISPLAY_NAMES[metric] ?? metric;
   }
-  function getColumnName(metric, unitChoice) {
-    const displayName = getDisplayName(metric);
+  function getColumnName2(metric, unitChoice) {
+    const displayName = getDisplayName2(metric);
     const unitLabel = getMetricUnitLabel(metric, unitChoice);
     return unitLabel ? `${displayName} (${unitLabel})` : displayName;
   }
-  function orderMetricsByPriority(allMetrics, priorityOrder) {
+  function orderMetricsByPriority2(allMetrics, priorityOrder) {
     const result = [];
     const seen = /* @__PURE__ */ new Set();
     for (const metric of priorityOrder) {
@@ -794,24 +1147,24 @@
     }
     return result;
   }
-  function hasTags(session) {
+  function hasTags2(session) {
     return session.club_groups.some(
       (club) => club.shots.some((shot) => shot.tag !== void 0 && shot.tag !== "")
     );
   }
   function writeTsv(session, unitChoice = DEFAULT_UNIT_CHOICE, hittingSurface) {
-    const orderedMetrics = orderMetricsByPriority(
+    const orderedMetrics = orderMetricsByPriority2(
       session.metric_names,
-      METRIC_COLUMN_ORDER
+      METRIC_COLUMN_ORDER2
     );
-    const includeTag = hasTags(session);
+    const includeTag = hasTags2(session);
     const headerFields = ["Date", "Club"];
     if (includeTag) {
       headerFields.push("Tag");
     }
     headerFields.push("Shot #");
     for (const metric of orderedMetrics) {
-      headerFields.push(getColumnName(metric, unitChoice));
+      headerFields.push(getColumnName2(metric, unitChoice));
     }
     const unitSystem = getApiSourceUnitSystem(session.metadata_params);
     const rows = [];
@@ -1139,6 +1492,10 @@ Skip obvious mishits when picking the highlights. Keep it brief and encouraging.
   var cachedUnitChoice = DEFAULT_UNIT_CHOICE;
   var cachedSurface = "Mat";
   var cachedCustomPrompts = [];
+  var cachedPortalActivities = [];
+  var activeBulkImportJob = null;
+  var bulkImportRunning = false;
+  var bulkImportPauseRequested = false;
   var AI_URLS = {
     "ChatGPT": "https://chatgpt.com",
     "Claude": "https://claude.ai",
@@ -1150,7 +1507,14 @@ Skip obvious mishits when picking the highlights. Keep it brief and encouraging.
     const normalized = message.toLowerCase();
     return normalized.includes("unauthorized") || normalized.includes("not authorized") || normalized.includes("unauthenticated") || normalized.includes("not logged in");
   }
+  function isPortalBridgeUnavailableMessage(message) {
+    const normalized = message.toLowerCase();
+    return normalized.includes("could not establish connection") || normalized.includes("receiving end does not exist");
+  }
   function formatPortalFetchError(message) {
+    if (isPortalBridgeUnavailableMessage(message)) {
+      return "Refresh the Trackman portal tab, then reopen TrackPull";
+    }
     return isPortalAuthMessage(message) ? "Session expired \u2014 log into portal.trackmangolf.com" : message;
   }
   async function fetchPortalGraphQL(tabId, candidate, variables) {
@@ -1292,25 +1656,388 @@ Skip obvious mishits when picking the highlights. Keep it brief and encouraging.
       });
     } catch (err) {
       const message = err instanceof Error && err.message ? err.message : "Unable to fetch activity";
-      showToast(message, "error");
+      showToast(formatPortalFetchError(message), "error");
       button.disabled = false;
       button.textContent = "Import";
     }
+  }
+  function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  function loadStoredBulkImportJob() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get([STORAGE_KEYS.BULK_IMPORT_STATUS], (result) => {
+        resolve(result[STORAGE_KEYS.BULK_IMPORT_STATUS] ?? null);
+      });
+    });
+  }
+  async function saveBulkImportJob(job) {
+    activeBulkImportJob = job;
+    await chrome.storage.local.set({ [STORAGE_KEYS.BULK_IMPORT_STATUS]: job });
+    renderBulkImportJob(job);
+  }
+  function getBulkImportItem(job, activityId) {
+    return job?.items.find((item) => item.activityId === activityId) ?? null;
+  }
+  function getActivityRow(activityId) {
+    const rows = Array.from(document.querySelectorAll(".activity-row"));
+    return rows.find((row) => row.dataset.activityId === activityId) ?? null;
+  }
+  function getSelectedPortalActivities() {
+    const selectedIds = new Set(
+      Array.from(document.querySelectorAll(".activity-select")).filter((input) => input.checked && !input.disabled).map((input) => input.value)
+    );
+    return cachedPortalActivities.filter((activity) => selectedIds.has(activity.id));
+  }
+  function getIncludeAveragesChoice() {
+    const checkbox = document.getElementById("include-averages-checkbox");
+    return checkbox?.checked ?? true;
+  }
+  function getSafeBulkFilename() {
+    const date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    return `TrackPull_BulkImport_${date}.csv`;
+  }
+  function updateBulkSelectedCount() {
+    const selectedCountEl = document.getElementById("bulk-selected-count");
+    const importSelectedBtn = document.getElementById("bulk-import-selected-btn");
+    const selectAll = document.getElementById("bulk-select-all");
+    const selectableBoxes = Array.from(document.querySelectorAll(".activity-select")).filter((input) => !input.disabled);
+    const selectedCount = selectableBoxes.filter((input) => input.checked).length;
+    if (selectedCountEl) {
+      selectedCountEl.textContent = `${selectedCount} selected`;
+    }
+    if (importSelectedBtn) {
+      importSelectedBtn.disabled = selectedCount === 0 || bulkImportRunning;
+    }
+    if (selectAll) {
+      selectAll.checked = selectableBoxes.length > 0 && selectedCount === selectableBoxes.length;
+      selectAll.indeterminate = selectedCount > 0 && selectedCount < selectableBoxes.length;
+    }
+  }
+  function renderBulkImportJob(job = activeBulkImportJob) {
+    activeBulkImportJob = job;
+    const progressEl = document.getElementById("bulk-import-progress");
+    const pauseBtn = document.getElementById("bulk-import-pause-btn");
+    const resumeBtn = document.getElementById("bulk-import-resume-btn");
+    const retryBtn = document.getElementById("bulk-import-retry-btn");
+    const exportBtn = document.getElementById("bulk-export-csv-btn");
+    const importAllBtn = document.getElementById("bulk-import-all-btn");
+    if (progressEl) {
+      if (job) {
+        progressEl.textContent = job.lastError ? `${getBulkImportProgressLabel(job)} | ${job.lastError}` : getBulkImportProgressLabel(job);
+        progressEl.style.display = "block";
+      } else {
+        progressEl.textContent = "";
+        progressEl.style.display = "none";
+      }
+    }
+    if (pauseBtn) pauseBtn.disabled = !job || job.state !== "running" || !bulkImportRunning;
+    if (resumeBtn) resumeBtn.disabled = !job || job.state !== "paused" || bulkImportRunning;
+    if (retryBtn) retryBtn.disabled = !job || job.failed === 0 || bulkImportRunning;
+    if (exportBtn) exportBtn.disabled = !job || job.imported === 0;
+    if (importAllBtn) importAllBtn.disabled = cachedPortalActivities.length === 0 || bulkImportRunning;
+    for (const activity of cachedPortalActivities) {
+      const row = getActivityRow(activity.id);
+      if (!row) continue;
+      const button = row.querySelector(".activity-import-btn");
+      const checkbox = row.querySelector(".activity-select");
+      const item = getBulkImportItem(job, activity.id);
+      if (!button || !checkbox) continue;
+      if (!item) {
+        button.disabled = bulkImportRunning;
+        button.textContent = "Import";
+        checkbox.disabled = bulkImportRunning;
+        continue;
+      }
+      if (item.status === "imported") {
+        button.disabled = true;
+        button.textContent = "Imported";
+        checkbox.checked = false;
+        checkbox.disabled = true;
+      } else if (item.status === "importing") {
+        button.disabled = true;
+        button.textContent = "Importing...";
+        checkbox.disabled = true;
+      } else if (item.status === "failed") {
+        button.disabled = bulkImportRunning;
+        button.textContent = "Failed";
+        checkbox.disabled = bulkImportRunning;
+      } else {
+        button.disabled = bulkImportRunning;
+        button.textContent = "Queued";
+        checkbox.disabled = bulkImportRunning;
+      }
+    }
+    updateBulkSelectedCount();
+  }
+  async function hydrateBulkImportJobControls() {
+    const storedJob = await loadStoredBulkImportJob();
+    if (!storedJob) {
+      renderBulkImportJob(null);
+      return;
+    }
+    const recoveredJob = recoverInterruptedBulkImportJob(storedJob);
+    activeBulkImportJob = recoveredJob;
+    renderBulkImportJob(recoveredJob);
+    if (recoveredJob !== storedJob) {
+      await saveBulkImportJob(recoveredJob);
+    }
+  }
+  function saveBulkImportedSession(jobId, activityId, graphqlPayloads) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        type: "SAVE_BULK_IMPORTED_SESSION",
+        jobId,
+        activityId,
+        graphqlPayloads
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ success: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(response ?? { success: false, error: "No response from service worker" });
+      });
+    });
+  }
+  async function runBulkImportJob(tabId, startingJob) {
+    if (bulkImportRunning) return;
+    bulkImportRunning = true;
+    bulkImportPauseRequested = false;
+    let job = startBulkImportJob(startingJob);
+    await saveBulkImportJob(job);
+    try {
+      while (true) {
+        if (bulkImportPauseRequested) {
+          job = pauseBulkImportJob(job);
+          await saveBulkImportJob(job);
+          showToast("Bulk import paused", "success");
+          break;
+        }
+        const nextItem = getNextBulkImportItem(job);
+        if (!nextItem) {
+          job = completeBulkImportJob(job);
+          await saveBulkImportJob(job);
+          showToast(`Bulk import complete: ${job.imported} imported, ${job.failed} failed`, job.failed ? "error" : "success");
+          break;
+        }
+        job = updateBulkImportItem(job, nextItem.activityId, {
+          status: "importing",
+          error: void 0
+        });
+        await saveBulkImportJob(job);
+        try {
+          const graphqlPayloads = await fetchPortalActivityCandidates(tabId, nextItem.activityId);
+          const result = await saveBulkImportedSession(job.id, nextItem.activityId, graphqlPayloads);
+          if (result.success && result.reportId) {
+            job = updateBulkImportItem(job, nextItem.activityId, {
+              status: "imported",
+              reportId: result.reportId,
+              shotCount: result.shotCount,
+              error: void 0
+            });
+          } else {
+            const message = result.error ?? "Import failed";
+            job = failBulkImportItem(job, nextItem.activityId, message);
+            if (isPortalAuthMessage(message)) {
+              job = { ...pauseBulkImportJob(job), lastError: message };
+              await saveBulkImportJob(job);
+              showToast(message, "error");
+              break;
+            }
+          }
+        } catch (err) {
+          const message = err instanceof Error && err.message ? err.message : "Unable to fetch activity";
+          job = failBulkImportItem(job, nextItem.activityId, message);
+          if (isPortalAuthMessage(message)) {
+            job = { ...pauseBulkImportJob(job), lastError: message };
+            await saveBulkImportJob(job);
+            showToast(message, "error");
+            break;
+          }
+        }
+        await saveBulkImportJob(job);
+        await delay(250);
+      }
+    } finally {
+      bulkImportRunning = false;
+      renderBulkImportJob(job);
+    }
+  }
+  async function startNewBulkImport(tabId, activities) {
+    if (activities.length === 0) {
+      showToast("Select at least one session", "error");
+      return;
+    }
+    if (bulkImportRunning) return;
+    const previousJob = activeBulkImportJob;
+    const job = createBulkImportJob(activities);
+    if (previousJob) {
+      await clearBulkImportedSessions(previousJob.id).catch((err) => {
+        console.warn("Could not clear previous bulk import archive:", err);
+      });
+    }
+    await clearBulkImportedSessions(job.id).catch(() => void 0);
+    await runBulkImportJob(tabId, job);
+  }
+  async function resumeBulkImport(tabId) {
+    if (!activeBulkImportJob || bulkImportRunning) return;
+    await runBulkImportJob(tabId, activeBulkImportJob);
+  }
+  async function retryFailedBulkImport(tabId) {
+    if (!activeBulkImportJob || bulkImportRunning) return;
+    const retryJob = resetFailedBulkImportItems(activeBulkImportJob);
+    await saveBulkImportJob(retryJob);
+    await runBulkImportJob(tabId, retryJob);
+  }
+  async function exportBulkImportedCsv() {
+    if (!activeBulkImportJob || activeBulkImportJob.imported === 0) {
+      showToast("No imported sessions to export", "error");
+      return;
+    }
+    const exportBtn = document.getElementById("bulk-export-csv-btn");
+    if (exportBtn) exportBtn.disabled = true;
+    try {
+      const sessions = await getBulkImportedSessions(activeBulkImportJob.id);
+      if (sessions.length === 0) {
+        showToast("No imported sessions to export", "error");
+        return;
+      }
+      const csvContent = writeBulkCsv(
+        sessions,
+        getIncludeAveragesChoice(),
+        void 0,
+        cachedUnitChoice,
+        cachedSurface
+      );
+      const filename = getSafeBulkFilename();
+      await new Promise((resolve, reject) => {
+        chrome.downloads.download({
+          url: `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`,
+          filename,
+          saveAs: false
+        }, () => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve();
+          }
+        });
+      });
+      showToast(`Exported successfully: ${filename}`, "success");
+    } catch (err) {
+      console.error("Bulk CSV export failed:", err);
+      showToast("Bulk CSV export failed", "error");
+    } finally {
+      if (exportBtn) exportBtn.disabled = false;
+      renderBulkImportJob(activeBulkImportJob);
+    }
+  }
+  function renderBulkImportControls(tabId, activities) {
+    const controls = document.createElement("div");
+    controls.id = "bulk-import-controls";
+    controls.className = "bulk-import-controls";
+    const topRow = document.createElement("div");
+    topRow.className = "bulk-import-row";
+    const selectLabel = document.createElement("label");
+    selectLabel.className = "bulk-select-label";
+    const selectAll = document.createElement("input");
+    selectAll.id = "bulk-select-all";
+    selectAll.type = "checkbox";
+    selectAll.addEventListener("change", () => {
+      const boxes = Array.from(document.querySelectorAll(".activity-select")).filter((input) => !input.disabled);
+      for (const box of boxes) {
+        box.checked = selectAll.checked;
+      }
+      updateBulkSelectedCount();
+    });
+    const selectedCount = document.createElement("span");
+    selectedCount.id = "bulk-selected-count";
+    selectedCount.textContent = "0 selected";
+    selectLabel.append(selectAll, selectedCount);
+    const importSelectedBtn = document.createElement("button");
+    importSelectedBtn.id = "bulk-import-selected-btn";
+    importSelectedBtn.className = "bulk-action-btn";
+    importSelectedBtn.textContent = "Import selected";
+    importSelectedBtn.disabled = true;
+    importSelectedBtn.addEventListener("click", () => {
+      void startNewBulkImport(tabId, getSelectedPortalActivities());
+    });
+    const importAllBtn = document.createElement("button");
+    importAllBtn.id = "bulk-import-all-btn";
+    importAllBtn.className = "bulk-action-btn";
+    importAllBtn.textContent = "Import all";
+    importAllBtn.disabled = activities.length === 0;
+    importAllBtn.addEventListener("click", () => {
+      void startNewBulkImport(tabId, activities);
+    });
+    topRow.append(selectLabel, importSelectedBtn, importAllBtn);
+    const bottomRow = document.createElement("div");
+    bottomRow.className = "bulk-import-row";
+    const pauseBtn = document.createElement("button");
+    pauseBtn.id = "bulk-import-pause-btn";
+    pauseBtn.className = "bulk-action-btn";
+    pauseBtn.textContent = "Pause";
+    pauseBtn.disabled = true;
+    pauseBtn.addEventListener("click", () => {
+      bulkImportPauseRequested = true;
+    });
+    const resumeBtn = document.createElement("button");
+    resumeBtn.id = "bulk-import-resume-btn";
+    resumeBtn.className = "bulk-action-btn";
+    resumeBtn.textContent = "Resume";
+    resumeBtn.disabled = true;
+    resumeBtn.addEventListener("click", () => {
+      void resumeBulkImport(tabId);
+    });
+    const retryBtn = document.createElement("button");
+    retryBtn.id = "bulk-import-retry-btn";
+    retryBtn.className = "bulk-action-btn";
+    retryBtn.textContent = "Retry failed";
+    retryBtn.disabled = true;
+    retryBtn.addEventListener("click", () => {
+      void retryFailedBulkImport(tabId);
+    });
+    const exportBtn = document.createElement("button");
+    exportBtn.id = "bulk-export-csv-btn";
+    exportBtn.className = "bulk-action-btn";
+    exportBtn.textContent = "Export CSV";
+    exportBtn.disabled = true;
+    exportBtn.addEventListener("click", () => {
+      void exportBulkImportedCsv();
+    });
+    bottomRow.append(pauseBtn, resumeBtn, retryBtn, exportBtn);
+    const progress = document.createElement("div");
+    progress.id = "bulk-import-progress";
+    progress.className = "bulk-import-progress";
+    progress.style.display = "none";
+    controls.append(topRow, bottomRow, progress);
+    return controls;
   }
   function renderPortalActivityBrowser(activities, tabId) {
     const browser = document.getElementById("portal-activity-browser");
     const list = document.getElementById("portal-activity-list");
     if (!browser || !list) return;
+    cachedPortalActivities = activities;
     browser.style.display = "block";
+    document.getElementById("bulk-import-controls")?.remove();
     if (activities.length === 0) {
       list.innerHTML = `<div class="activity-list-empty">No Course Play or Map My Bag sessions found</div>`;
+      renderBulkImportJob(null);
       return;
     }
+    list.before(renderBulkImportControls(tabId, activities));
     list.innerHTML = "";
     const fragment = document.createDocumentFragment();
     for (const activity of activities) {
       const row = document.createElement("div");
       row.className = "activity-row";
+      row.dataset.activityId = activity.id;
+      const selectBox = document.createElement("input");
+      selectBox.className = "activity-select";
+      selectBox.type = "checkbox";
+      selectBox.value = activity.id;
+      selectBox.setAttribute("aria-label", `Select ${formatActivityDate(activity.date)}`);
+      selectBox.addEventListener("change", updateBulkSelectedCount);
       const dateEl = document.createElement("span");
       dateEl.className = "activity-date";
       dateEl.textContent = formatActivityDate(activity.date);
@@ -1332,10 +2059,12 @@ Skip obvious mishits when picking the highlights. Keep it brief and encouraging.
       importBtn.addEventListener("click", () => {
         importPortalActivityFromTab(tabId, activity.id, importBtn);
       });
-      row.append(dateEl, mainEl, importBtn);
+      row.append(selectBox, dateEl, mainEl, importBtn);
       fragment.appendChild(row);
     }
     list.appendChild(fragment);
+    updateBulkSelectedCount();
+    void hydrateBulkImportJobControls();
   }
   async function checkActiveTabForActivity() {
     const detected = document.getElementById("portal-activity-detected");
@@ -1374,14 +2103,15 @@ Skip obvious mishits when picking the highlights. Keep it brief and encouraging.
       }
     } catch (err) {
       const message = err instanceof Error && err.message ? err.message : "Unable to fetch activities";
+      const formattedMessage = formatPortalFetchError(message);
       detected.style.display = "none";
       noActivity.style.display = "none";
       if (browser) {
         browser.style.display = "block";
         const list = document.getElementById("portal-activity-list");
-        if (list) list.innerHTML = `<div class="activity-list-empty">${escapeHtml(message)}</div>`;
+        if (list) list.innerHTML = `<div class="activity-list-empty">${escapeHtml(formattedMessage)}</div>`;
       }
-      showToast(message, "error");
+      showToast(formattedMessage, "error");
     }
   }
   function renderStatCard() {
@@ -1597,6 +2327,10 @@ Skip obvious mishits when picking the highlights. Keep it brief and encouraging.
               chrome.storage.local.remove(STORAGE_KEYS.IMPORT_STATUS);
             }
           }
+        }
+        if (namespace === "local" && changes[STORAGE_KEYS.BULK_IMPORT_STATUS]) {
+          const newJob = changes[STORAGE_KEYS.BULK_IMPORT_STATUS].newValue;
+          renderBulkImportJob(newJob ?? null);
         }
       });
       const exportBtn = document.getElementById("export-btn");

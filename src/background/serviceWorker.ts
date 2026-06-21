@@ -10,6 +10,7 @@ import { saveSessionToHistory, getHistoryErrorMessage } from "../shared/history"
 import { parsePortalActivity } from "../shared/portal_parser";
 import type { GraphQLActivity } from "../shared/portal_parser";
 import type { ImportStatus } from "../shared/import_types";
+import { putBulkImportedSession } from "../shared/bulk_import_store";
 
 interface ImportedSessionGraphQLData {
   data?: { node?: GraphQLActivity };
@@ -36,6 +37,13 @@ interface SaveImportedSessionRequest {
   activityId: string;
 }
 
+interface SaveBulkImportedSessionRequest {
+  type: "SAVE_BULK_IMPORTED_SESSION";
+  jobId: string;
+  graphqlPayloads: ImportedSessionGraphQLData[];
+  activityId: string;
+}
+
 function getDownloadErrorMessage(originalError: string): string {
   if (originalError.includes("invalid")) {
     return "Invalid download format";
@@ -52,7 +60,8 @@ function getDownloadErrorMessage(originalError: string): string {
 type RequestMessage =
   | SaveDataRequest
   | ExportCsvRequest
-  | SaveImportedSessionRequest;
+  | SaveImportedSessionRequest
+  | SaveBulkImportedSessionRequest;
 
 function parseImportedSession(
   payloads: ImportedSessionGraphQLData[]
@@ -176,6 +185,47 @@ chrome.runtime.onMessage.addListener((message: RequestMessage, sender, sendRespo
       }
     })();
     return false;
+  }
+
+  if (message.type === "SAVE_BULK_IMPORTED_SESSION") {
+    const { jobId, activityId, graphqlPayloads } = message;
+
+    (async () => {
+      try {
+        const firstError = graphqlPayloads.find((payload) => payload.errors && payload.errors.length > 0)?.errors?.[0];
+        const hasPayloadWithoutErrors = graphqlPayloads.some((payload) => !payload.errors || payload.errors.length === 0);
+
+        if (firstError && !hasPayloadWithoutErrors) {
+          sendResponse({ success: false, error: firstError.message });
+          return;
+        }
+
+        const session = parseImportedSession(graphqlPayloads);
+        if (!session) {
+          sendResponse({ success: false, error: "No shot data found for this activity" });
+          return;
+        }
+
+        await chrome.storage.local.set({ [STORAGE_KEYS.TRACKMAN_DATA]: session });
+        await saveSessionToHistory(session);
+        await putBulkImportedSession(jobId, activityId, session);
+
+        const shotCount = session.club_groups.reduce(
+          (total, club) => total + club.shots.length,
+          0
+        );
+        sendResponse({
+          success: true,
+          reportId: session.report_id,
+          shotCount,
+        });
+      } catch (err) {
+        console.error("TrackPull: Bulk import item failed:", err);
+        sendResponse({ success: false, error: "Import failed — try again" });
+      }
+    })();
+
+    return true;
   }
 });
 

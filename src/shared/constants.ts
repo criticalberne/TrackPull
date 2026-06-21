@@ -50,4 +50,5 @@ export const STORAGE_KEYS = {
   INCLUDE_AVERAGES: "includeAverages",
   SESSION_HISTORY: "sessionHistory",
   IMPORT_STATUS: "importStatus",
+  BULK_IMPORT_STATUS: "bulkImportStatus",
 } as const;
